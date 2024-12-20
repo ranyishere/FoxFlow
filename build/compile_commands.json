@@ -1,0 +1,14 @@
+[
+{
+  "directory": "/home/rany/Work/research/FoxFlow/build/generated",
+  "command": "/usr/bin/c++ -DDGGML_ENABLE_HOST_SERIAL -DVTU11_ENABLE_ZLIB -I/home/rany/Work/research/FoxFlow/include/DGGML/dependencies/YAGL/include -I/home/rany/Work/research/FoxFlow/include/DGGML/thirdparty/simdjson -I/home/rany/Work/research/FoxFlow/include/DGGML/src -I/home/rany/Work/research/FoxFlow/include/DGGML/src/Grids -I/home/rany/Work/research/FoxFlow/include/DGGML/src/Utlities -I/home/rany/Work/research/FoxFlow/include/DGGML/src/Grammar -I/home/rany/Work/research/FoxFlow/include/DGGML/src/CellComplexes -I/home/rany/Work/research/FoxFlow/include/DGGML/src/CellComplexes/Utils -I/home/rany/Work/research/FoxFlow/include/DGGML/src/Solvers -I/home/rany/Work/research/FoxFlow/include/DGGML/thirdparty/vtu11/. -isystem /home/rany/Work/research/dggml/sundial_67/sundials-6.7.0/include -isystem /home/rany/Work/research/dggml/sundial_67/sundials-6.7.0/build/include -isystem /home/rany/Work/research/dggml/sundial_67/sundials-6.7.0/src/sundials -std=gnu++17 -o CMakeFiles/main.dir/main.cpp.o -c /home/rany/Work/research/FoxFlow/generated/main.cpp",
+  "file": "/home/rany/Work/research/FoxFlow/generated/main.cpp",
+  "output": "generated/CMakeFiles/main.dir/main.cpp.o"
+},
+{
+  "directory": "/home/rany/Work/research/FoxFlow/build/generated",
+  "command": "/usr/bin/c++ -DDGGML_ENABLE_HOST_SERIAL -DVTU11_ENABLE_ZLIB -I/home/rany/Work/research/FoxFlow/include/DGGML/dependencies/YAGL/include -I/home/rany/Work/research/FoxFlow/include/DGGML/thirdparty/simdjson -I/home/rany/Work/research/FoxFlow/include/DGGML/src -I/home/rany/Work/research/FoxFlow/include/DGGML/src/Grids -I/home/rany/Work/research/FoxFlow/include/DGGML/src/Utlities -I/home/rany/Work/research/FoxFlow/include/DGGML/src/Grammar -I/home/rany/Work/research/FoxFlow/include/DGGML/src/CellComplexes -I/home/rany/Work/research/FoxFlow/include/DGGML/src/CellComplexes/Utils -I/home/rany/Work/research/FoxFlow/include/DGGML/src/Solvers -I/home/rany/Work/research/FoxFlow/include/DGGML/thirdparty/vtu11/. -isystem /home/rany/Work/research/dggml/sundial_67/sundials-6.7.0/include -isystem /home/rany/Work/research/dggml/sundial_67/sundials-6.7.0/build/include -isystem /home/rany/Work/research/dggml/sundial_67/sundials-6.7.0/src/sundials -std=gnu++17 -o CMakeFiles/main.dir/__/include/DGGML/thirdparty/simdjson/simdjson.cpp.o -c /home/rany/Work/research/FoxFlow/include/DGGML/thirdparty/simdjson/simdjson.cpp",
+  "file": "/home/rany/Work/research/FoxFlow/include/DGGML/thirdparty/simdjson/simdjson.cpp",
+  "output": "generated/CMakeFiles/main.dir/__/include/DGGML/thirdparty/simdjson/simdjson.cpp.o"
+}
+]

@@ -1,0 +1,148 @@
+(# Cortical Microtubule Array #)
+
+(#
+ Statically Typed Language. 
+ Intuition:
+ Static is akin to making the user provide
+ information/make choices that matter.
+ This is akin to using expertise of the scientist.
+
+  Intuition: You are compiling to a fockspace.
+
+  Do not allow unbounded recursion
+#)
+
+(# Define initial conditions #)
+
+(# 
+    Q: What if you want to add 
+    multiple particles at 
+    different initial states? 
+#)
+
+(#
+    Type, terms, equality of types, and equality of terms
+#)
+
+(# 
+    A: Create a grammar/rule that 
+    starts at zero and gets you to the state you want 
+
+    (Type) (name) (Signature)
+#)
+
+types {
+
+    (# Creating new types via product type constructor #)
+    type node <<(float, list <<(float, float)>> )>>;
+
+    (# These are more like terms #)
+    node growing;
+    node intermediate;
+    node retraction;
+    node zipper;
+    node junction;
+
+    (# These are more like terms #)
+    list<<float>> x;
+    list<<float>> u;
+    list<<float>> L;
+
+    (# These are more like terms #)
+    float beta; (# Minimum Distance from Collision point#);
+    float I; (# Intersesction Point #)
+
+}
+
+(* maybe allow units?*)
+parameters initial_params {
+
+    float L_div = 1.2;
+    float L_min = 0.125;
+    float y_g = 1.0;
+    float v_plus = 1.0;
+    float v_minus = 0.25;
+
+    float gamma 1.0;
+    float var_ep = 2.0*L_div;
+    float theta_crit = (2*pi)/9;
+    float c = 1.0;
+    float k = 10;
+
+    float ret_growth = 0.01;
+    float growth_ret = 0.01;
+}
+
+functions {
+
+    float function rho_grow <<x>> = (x)(v_plus);
+    float function rho_retract <<x>> = (x)(v_minus);
+    float function rho_zipper <<x>> = x;
+    float function rho_junction <<x>> = x;
+
+    float function sigmoid <<(x, k)>> = 1/(1 + exp(-k*x));
+    integer function heaviside <<(x, a)>> = 1 if x >= a else 0;
+    integer function indication <<(prop)>> = 
+    
+
+}
+
+(# These are just subtitutions so they modify states i.e. state -> state #)
+(# Can rules share variables? #)
+(# In the solving rule type, you need to specify the derivative operator. #)
+rules {
+    rule positive_mt_growth (node1 -- node2) << (x_1, u_1), (x_2, u_2) >> 
+        -> (node1 -- node2) << (x_1, u_1), (x_2 + dx_2, u_2) >>
+        solving dx_2/dt = rho_grow(Y_g);
+
+    rule positive_mt_overgrowth (node1 -- node2) << (x_1, u_1), (x_2, u_2)>> 
+        -> (node2 - node3) <<(),()>>
+        with
+
+    rule negative_mt_retraction
+
+    rule negative_mt_undergrowth
+
+    rule mt_collision_0
+    rule mt_collision_1
+    rule mt_collision_2
+
+    rule state_change
+
+};
+
+(# 
+    These take a state and return another type and state 
+    This is where you get to see emergent properties?
+#)
+
+observable {
+    observe angle<<>>;
+}
+
+grammar (continuous-time) cma () {
+    positive_mt_overgrowth;
+    my_rule2;
+}
+
+
+(* State is just a bunch of types *)
+state initial_state {
+    (# Create state use set definition? #)
+    (# growing_node node1 <<(10, 20)>>; #)
+    (# growing_node node2 <<(10, 20)>>; #)
+    (# growing_node node3 <<(10, 20)>>; #)
+    growing_node <<(x, y)>> for (x in [1..10]) and (x != 1) and (y != 3);
+}
+
+(# 
+    Simulations are propositions. You need to specifiy what properties
+    you care about. This can be done by making your simulation a dependent type.
+    (For all statement)
+
+    There are two types of type checking.
+    Dynamic type checking and static type checking
+
+    Simulations are a type that you want to reason about.
+#)
+simulate test_simulate cma <<(initial_state, initial_params)>>;

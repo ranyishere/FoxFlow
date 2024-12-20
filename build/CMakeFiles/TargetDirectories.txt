@@ -1,0 +1,15 @@
+/home/rany/Work/research/FoxFlow/build/CMakeFiles/edit_cache.dir
+/home/rany/Work/research/FoxFlow/build/CMakeFiles/rebuild_cache.dir
+/home/rany/Work/research/FoxFlow/build/include/DGGML/dependencies/YAGL/CMakeFiles/edit_cache.dir
+/home/rany/Work/research/FoxFlow/build/include/DGGML/dependencies/YAGL/CMakeFiles/rebuild_cache.dir
+/home/rany/Work/research/FoxFlow/build/include/DGGML/thirdparty/vtu11/CMakeFiles/edit_cache.dir
+/home/rany/Work/research/FoxFlow/build/include/DGGML/thirdparty/vtu11/CMakeFiles/rebuild_cache.dir
+/home/rany/Work/research/FoxFlow/build/include/DGGML/src/CMakeFiles/edit_cache.dir
+/home/rany/Work/research/FoxFlow/build/include/DGGML/src/CMakeFiles/rebuild_cache.dir
+/home/rany/Work/research/FoxFlow/build/include/DGGML/tools/CMakeFiles/edit_cache.dir
+/home/rany/Work/research/FoxFlow/build/include/DGGML/tools/CMakeFiles/rebuild_cache.dir
+/home/rany/Work/research/FoxFlow/build/include/DGGML/tools/vtuReader/CMakeFiles/edit_cache.dir
+/home/rany/Work/research/FoxFlow/build/include/DGGML/tools/vtuReader/CMakeFiles/rebuild_cache.dir
+/home/rany/Work/research/FoxFlow/build/generated/CMakeFiles/main.dir
+/home/rany/Work/research/FoxFlow/build/generated/CMakeFiles/edit_cache.dir
+/home/rany/Work/research/FoxFlow/build/generated/CMakeFiles/rebuild_cache.dir

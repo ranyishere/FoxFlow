@@ -1,0 +1,13 @@
+
+
+grammar (discret_time) DP(start(N) -> {cluster(i, theta_k, pi_k) | 1 <= k < inf}) {
+    start(N) ->  cluster'(0,0,0,1,0)
+
+    cluster'(k, theta_k, beta_k, xi_k, pi_k) -> cluster(k, theta_k, pi_k),
+        cluster'(k_1, theta_k_1, beta_k_1, xi_k_1, pi_k_1)
+
+        with beta_k_1 ~ Beta(.|1, alpha) = (Gamma(1 + alpha)/Gamma(alpha))(Beta_k_1)^(alpha-1)
+        with G_0(theta_k)
+        where pi_k_1 = beta_k_1 * xi_k
+        where xi_1 = (1 - beta_k_1) * xi_k
+}

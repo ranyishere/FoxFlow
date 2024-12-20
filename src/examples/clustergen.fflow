@@ -1,0 +1,5 @@
+
+grammar (discrete-time) clustergen (nodeset(x) -> {node(x_i)}) {
+    rule1: nodeset(x) -> node(x), {child(x) | 1 <= i <= n} with q(n), n >= 0.
+    rule2: child(y) -> nodeset(x) with phi(x|y).
+}
