@@ -1,0 +1,7 @@
+types Plant {
+
+    UnitNode :: Node = {
+        unit_vec::FixedList<<dim, Float>>;
+    };
+
+};

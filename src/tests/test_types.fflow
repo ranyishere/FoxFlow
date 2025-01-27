@@ -1,0 +1,9 @@
+types Plant {
+    Node :: Type;
+    dim :: Integer = 3;
+    UnitNode :: Node = {
+        unit_vec::FixedList<<dim, Float>>;
+    };
+    zipper :: UnitNode;
+    I :: Float;
+};

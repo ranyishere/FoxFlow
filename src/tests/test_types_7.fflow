@@ -1,0 +1,8 @@
+types Plant {
+
+    water :: Type;
+    UnitNode :: Node = {
+        unit_vec::FixedList<<dim, Float>>;
+    };
+
+};

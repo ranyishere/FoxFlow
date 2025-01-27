@@ -1,0 +1,3 @@
+types Plant {
+    oof :: Node = 5;
+};
