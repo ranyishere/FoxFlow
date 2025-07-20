@@ -1,0 +1,12 @@
+
+rules particle_rules {
+
+    change_to_particle := (p1 : ParticleNodeCreator) <<counter>>
+    -> (p1 : ParticleNodeCreator)
+    (p2 : Particle) << new_counter, << x, y >> >> with (Heaviside(counter > 0)) where {
+            new_counter : Integer = counter-1
+            x : Integer = counter+1
+            y : Integer = counter+1
+        }
+
+}

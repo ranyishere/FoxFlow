@@ -1,0 +1,72 @@
+
+types Particles {
+
+    ParticleNodeCreator <<Integer, FixedList<<2, Float>> >>
+
+    # FixedList : Integer -> Type -> FixedListInstance
+    ParticleNode << FixedList<<2, Float>> >>
+}
+
+parameters initial_params {
+
+    empty_param : Parameters := {
+    }
+
+    total_time : float := 100
+}
+
+# Helpers functions
+functions particle_functions {
+}
+
+rules particle_rules {
+
+    init_create_particle := empty -> (p1 : ParticleNodeCreator) << N-1, (x, y) >> with (Heaviside(N >= 0)) where {
+        N := 10
+        x := N+1
+        y := N+1
+    }
+
+}
+
+# All observables take in a state
+observables diff_obs {
+
+    # each moment in time capture the state
+    current_state : state -> state := state
+
+}
+
+grammars total_grammars {
+
+    diffusion_grammar : ContinuousGrammar <<Parameter>> := {
+        particle_rules.create_particle
+    }
+
+}
+
+
+# Are all grammars subgrammar?
+# no
+# things that are not visible in subgrammars to the bigger grammar
+# 2007 papers understand subgrammar more
+
+# Via -> For calling other grammars
+
+states total_states {
+
+    initial_state := {
+    }
+
+}
+
+# ApproximateSimulation : Grammar -> InitialState -> Observable -> Parameter -> Time -> [Float];
+simulations simple_trials {
+
+   test_simulate := ApproximateSimulation << 
+                        diffusion_grammar <<initial_params.empty_param>>,
+                        diff_obs, initial_state,
+                        initial_params.time 
+                    >>
+
+}

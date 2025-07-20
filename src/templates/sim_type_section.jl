@@ -1,3 +1,4 @@
+using Mustache
 
 types_tmp = mt"""
 #ifndef DGGML_PLANT_TYPES_HPP
@@ -63,7 +64,22 @@ namespace Plant
 #endif
 """
 
-function generate_types(data)
+function generate_type()
+    items = Dict(
+             "vec" => ["a\n", "b\n", "c\n"]
+            )
+    
+    # res = Mustache.render(section, items)
+    # println("$res")
+    # res
+    tpl = mt"oof {{#:vec}}{{.}}{{{\n}}}{{/:vec}} oof" # just first one
+    res = Mustache.render(tpl, items)
+    println("$res")
+end
+
+function generate_types_section(data)
+    generate_type()
     Mustache.render(types_tmp, data)
 end
 
+generate_type()

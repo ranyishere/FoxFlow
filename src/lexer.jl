@@ -5,7 +5,6 @@ function isalpha(input::Char)::Bool
     isletter(input)
 end
 
-
 function tokenize(source::String, line_no::Integer)
     """
     Tokenize input
@@ -98,7 +97,17 @@ function tokenize(source::String, line_no::Integer)
                 elseif value == "simulation"
                     push!(tokens, SimulationToken(PositionToken(value, line_no, i-1)))
             end
+
+            elseif value in ["Float", "Integer"]
+                if value == "Float"
+                    push!(tokens, FloatToken(PositionToken(value, line_no, i-1)))
+                else
+                    push!(tokens, IntegerToken(PositionToken(value, line_no, i-1)))
+            end
+
         else
+
+
             push!(tokens, IdentifierToken(PositionToken(value, line_no, i-1)))
         end
 
@@ -108,7 +117,8 @@ function tokenize(source::String, line_no::Integer)
                 i += 1
             end
             value = source[start:i-1]
-            push!(tokens, LiteralToken(PositionToken(value, line_no, i)))
+            push!(tokens, IntegerToken(PositionToken(value, line_no, i)))
+            # push!(tokens, LiteralToken(PositionToken(value, line_no, i)))
 
         # TODO: What about +,-,/, and * symbols?
         elseif c == '-'
@@ -122,7 +132,7 @@ function tokenize(source::String, line_no::Integer)
                 # push!(tokens, ErrorToken(PositionToken("Unexpected character: $c", line_no, i)))
                 push!(
                   tokens,
-                  OperatorToken(
+                  MinusToken(
                          PositionToken("-", line_no, i)
                      )
                   )
@@ -134,28 +144,47 @@ function tokenize(source::String, line_no::Integer)
                 if i + 1 <= length(source) && source[i + 1] == '<'
                     push!(tokens, LeftAngleBracketToken(PositionToken("<<", line_no, i)))
                     i += 2
+                elseif i + 1 <= length(source) && source[i + 1] == '='
+                    push!(tokens, LeftAngleBracketToken(PositionToken("<<", line_no, i)))
+                    i += 2
+
                 else
-                    push!(tokens, OperatorToken(PositionToken(string(c, '<'), line_no, i)))
+                    push!(tokens, OperatorToken(PositionToken("<=", line_no, i)))
                     i += 1
                 end
-
             elseif c == '>'
                 if i + 1 <= length(source) && source[i + 1] == '>'
                     push!(tokens, RightAngleBracketToken(PositionToken(">>", line_no, i)))
                     i += 2
+                elseif i + 1 <= length(source) && source[i + 1] == '='
+                    push!(tokens, OperatorToken(PositionToken(">=", line_no, i)))
+                    i += 2
                 else
-                    push!(tokens, OperatorToken(PositionToken(string(c, '>'), line_no, i)))
+                    check = string(c, '>')
+                    push!(tokens, OperatorToken(PositionToken(string(c), line_no, i)))
                     i += 1
                 end
 
             elseif i + 1 <= length(source) && source[i + 1] == '='
                 push!(tokens, OperatorToken(PositionToken(string(c, '='), line_no, i)))
                 i += 2
-
+            elseif c == '='
+                push!(tokens, EqualToken(PositionToken("=", line_no, i)))
+                i += 2
+            elseif c == '/'
+                push!(tokens, SlashToken(PositionToken("/", line_no, i)))
+                i += 1
+            elseif c == '*'
+                push!(tokens, AsteriskToken(PositionToken("*", line_no, i)))
+                i += 1
+            elseif c == '+'
+                push!(tokens, PlusToken(PositionToken("+", line_no, i)))
+                i += 1
             else
                 push!(tokens, OperatorToken(PositionToken(string(c), line_no, i)))
                 i += 1
             end
+
         elseif c in ['(', ')', '{', '}', ',', ';']
 
             if c == '('
@@ -175,11 +204,21 @@ function tokenize(source::String, line_no::Integer)
             push!(tokens, CommentToken(PositionToken("#", line_no, i)))
             i += 1
 
+        elseif c == '.'
+            push!(tokens, DotToken(PositionToken(".", line_no, i)))
+            i += 1
+
         elseif c == ':'
 
             if (source[i+1] == ':') && (i + 1 <= length(source))
                 push!(tokens, DoubleColonToken(PositionToken("::", line_no, i)))
                 i += 2
+            elseif (source[i+1] == '=') && (i + 1 <= length(source))
+                push!(tokens, DefineToken(PositionToken(":=", line_no, i)))
+                i += 2
+            else
+                push!(tokens, SingleColonToken(PositionToken(":", line_no, i)))
+                i += 1
             end
 
         else

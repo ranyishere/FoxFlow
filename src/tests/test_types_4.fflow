@@ -1,3 +1,6 @@
-types Plant {
-    oof :: Node = 5;
-};
+types Particles {
+
+    ParticleNodeCreator <<Integer, FixedList<<2, Float>> >> : Type
+    ParticleNode << FixedList<<2, Float>> >> : Type
+
+}

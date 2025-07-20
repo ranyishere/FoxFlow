@@ -1,148 +1,353 @@
-(# Cortical Microtubule Array #)
+# #
+#    Cortical Microtubule Array 
+#    Declarative Programming Language
+##
 
-(#
- Statically Typed Language. 
- Intuition:
- Static is akin to making the user provide
- information/make choices that matter.
- This is akin to using expertise of the scientist.
+# Fun: EXPONENTIAL log, sin, cos, arccos, arcsin, squareroot, exponentials, tan, division
+#      ODE Solving.
 
-  Intuition: You are compiling to a fockspace.
+# Statically Typed Language. 
+# Intuition:
+# Static is akin to making the user provide
+# information/make choices that matter.
+# This is akin to using expertise of the scientist.
 
-  Do not allow unbounded recursion
-#)
+# Intuition: You are compiling to a fockspace.
+# Do not allow unbounded recursion
 
-(# Define initial conditions #)
+# Define initial conditions #)
 
-(# 
-    Q: What if you want to add 
-    multiple particles at 
-    different initial states? 
-#)
+# 
+# Q: What if you want to add 
+# multiple particles at 
+# different initial states? 
 
-(#
-    Type, terms, equality of types, and equality of terms
-#)
+# Type, terms, equality of types, and equality of terms
+# A: Create a grammar/rule that 
+# starts at zero and gets you to the state you want 
+# (Type) (name) (Signature)
 
-(# 
-    A: Create a grammar/rule that 
-    starts at zero and gets you to the state you want 
+# Array, List
 
-    (Type) (name) (Signature)
-#)
+# TODO: Reference Annals of applied math and AI 2006#)
 
-types {
+# Inexact pattern matching.
+# Compile to vector spaces then compile to 
+# Bias is difficulty in bounding the error.
+#
+#
+# NOTE: No Currying
+# You cannot share variables between rules only parameters
+#
+# the parameters of the grammar only affect how much appears on the left hand side and right hand side.
+# Look into VIA
 
-    (# Creating new types via product type constructor #)
-    type node <<(float, list <<(float, float)>> )>>;
+# NOTE: Inheritance is by tuple?
+# NOTE: Support directed links.
+# NOTE: Pattern matching
+# 	ellipsis Notation At The End.
+# 	type strength.
 
-    (# These are more like terms #)
-    node growing;
-    node intermediate;
-    node retraction;
-    node zipper;
-    node junction;
+types Plant {
 
-    (# These are more like terms #)
-    list<<float>> x;
-    list<<float>> u;
-    list<<float>> L;
+    # Creating new types via product type constructor
 
-    (# These are more like terms #)
-    float beta; (# Minimum Distance from Collision point#);
-    float I; (# Intersesction Point #)
+    # x and u
+    # x and u are vectors?
+    Node : Type <<
+        unit_vec : (FixedList<<dim, Float>>)
+    >>
+
+    # Dimensions
+    dim : Integer := 3
+
+    UnitNode :: Node := Type<<
+        unit_vec : (FixedList<<dim, Float>>)
+    >>
+
+    # It is a UnitNode and a Velocity Node
+    VelUnitNode :: UnitNode := <<
+        velocity : (FixedList <<dim, Float>>)
+    >>
+
+    boundary :: VelUnitNode
+    nucleator :: VelUnitNode
+
+    # To do an or, you would just create another generic type
+
+    # These are more like terms
+    negative :: VelUnitNode
+    intermediate :: VelUnitNode
+    positive :: VelUnitNode
+    junction :: VelUnitNode
+    holding :: VelUnitNode
+    capture :: VelUnitNode
+    zipper  :: VelUnitNode
+
+    growing :: VelUnitNode
+    retraction :: VelUnitNode
+
+    # Subtypes?
+
+    # These are more like terms
+    beta : Float # Minimum Distance from Collision point
+    I : Float # Intersesction Point
 
 }
 
-(* maybe allow units?*)
+# Maybe allow units
 parameters initial_params {
 
-    float L_div = 1.2;
-    float L_min = 0.125;
-    float y_g = 1.0;
-    float v_plus = 1.0;
-    float v_minus = 0.25;
+    L_div : float := 1.2
+    L_min : float := 0.125
+    y_g   : float := 1.0
+    v_plus : float := 1.0
+    v_minus : float := 0.25
 
-    float gamma 1.0;
-    float var_ep = 2.0*L_div;
-    float theta_crit = (2*pi)/9;
-    float c = 1.0;
-    float k = 10;
+    gamma : float := 1.0
+    var_ep : float := 2.0*L_div
+    theta_crit : float := (2*pi)/9
+    c : float  := 1.0
+    k : float := 10
 
-    float ret_growth = 0.01;
-    float growth_ret = 0.01;
-}
-
-functions {
-
-    float function rho_grow <<x>> = (x)(v_plus);
-    float function rho_retract <<x>> = (x)(v_minus);
-    float function rho_zipper <<x>> = x;
-    float function rho_junction <<x>> = x;
-
-    float function sigmoid <<(x, k)>> = 1/(1 + exp(-k*x));
-    integer function heaviside <<(x, a)>> = 1 if x >= a else 0;
-    integer function indication <<(prop)>> = 
-    
+    ret_growth : float := 0.01
+    growth_ret : float := 0.01
 
 }
 
-(# These are just subtitutions so they modify states i.e. state -> state #)
-(# Can rules share variables? #)
-(# In the solving rule type, you need to specify the derivative operator. #)
+functions cma_functions {
+
+    rho_grow <<x>> : float -> float := x * v_plus
+    rho_retract <<x>> : float -> float := x * v_minus
+    rho_zipper <<x>> : float -> float := x
+    rho_junction <<x>> : float -> float := x
+
+    sigmoid <<x, k>> : float -> float -> float := 1/(1 + exp(-k*x))
+
+    heaviside <<x, a>> : float -> float -> float := 1 if x >= a else 0
+    # integer function indication <<prop>> = 
+}
+
+# These are just subtitutions so they modify states i.e. state -> state
+# Can rules share variables?
+# In the solving rule type, you need to specify the derivative operator
+
 rules {
-    rule positive_mt_growth (node1 -- node2) << (x_1, u_1), (x_2, u_2) >> 
-        -> (node1 -- node2) << (x_1, u_1), (x_2 + dx_2, u_2) >>
-        solving dx_2/dt = rho_grow(Y_g);
 
-    rule positive_mt_overgrowth (node1 -- node2) << (x_1, u_1), (x_2, u_2)>> 
-        -> (node2 - node3) <<(),()>>
-        with
+    # Microtubule Growth
+    mt_growth := (node1:intermediate -- node2:positive)
+                                << (node1.x, node1.u),
+                                    (node2.x, node2.u) >> ->
+                            (node1:intermediate -- node3:intermediate -- node2:positive)
+                                << (node1.x, node1.u), 
+                                   (node3.x, node3.u),
+                                   (node2.x, node2.u) >>
+                            with (
+                                # Propensity calculation here
+                                growth_factor * heaviside(node_dist, divide_length)
+                            ) where  {
+                                # Node Distance
+                                node_dist : float := dist(node1.x, node2.x)
 
-    rule negative_mt_retraction
+                                node3.x.1 = node2.x.1 - (node2.x.1 - node1.x.1)/100
 
-    rule negative_mt_undergrowth
+                                node3.x.2 = node2.x.2 - (node2.x.2 - node1.x.2)/100
+                                node3.x.3 = node2.x.3 - (node2.x.3 - node1.x.3)/100
 
-    rule mt_collision_0
-    rule mt_collision_1
-    rule mt_collision_2
+                                node3.u = node1.u
+                            }
 
-    rule state_change
+    mt_growth_movement := (node1:intermediate -- node2:positive)
+                                << (node1.x, node1.u),
+                                    (node2.x, node2.u) >> ->
+                                (node1:intermediate -- node2:positive)
+                                << (node1.x, node1.u), 
+                                   (node2.x + dx, node2.u) >> solving (
+                                        {
+                                            boundary : ODEBoundary
+                                            init : InitialCondition <<>>
+                                            # NOTE: Make sure dt appears on the rhs. t
 
-};
+                                            # (dt) -> (t)
+                                            dx : ODE <<squiggle, boundary, init>> := v_plus * node2.u * squiggle
+                                        }
+                                    )
 
-(# 
-    These take a state and return another type and state 
-    This is where you get to see emergent properties?
-#)
+    # Removed the node1.x and it is just position
+    mt_ode_retraction := (node1:negative -- node2:intermediate -- node3:intermediate)
+                                << (node1_pos, node1_unitvec),
+                                    (node2_pos, node2_unitvec), (node3.x, node3.u) >> ->
+                                    (node1:intermediate -- node3:intermediate) << (node1.x, node1.u),
+                                   (node3.x, node3.u) >> with (rho_retract * heaviside(node_dist, length_lim) ) where {
+                                        node_dist = dist(node2.x, node1.x)
+                                    }
 
-observable {
-    observe angle<<>>;
+    mt_ode_retraction_movement := (node1 : negative -- node2 : intermediate) 
+                                << (node1.x, node1.u), (node2.x, node2.u) >> 
+                                -> (node1 : negative -- node2 : intermediate)
+                                << (node1.x + dx, node1.u), (node2.x, node2.u) >> solving (
+                                        {
+                                            # An ODE dx/dt
+                                            # Note that it handles u
+                                            # ODE is with respect to t
+                                            boundary : ODEBoundary
+                                            init : ODEInitialCondition <<>>
+                                            dt : ODEDifferential
+                                            dx : ODE <<dt, boundary, init>> := v_plus * node1.u * length_lim * dt
+                                        }
+                                    )
+
+    # Boundary Rules
+    clasp_boundary := (
+                (node1:intermediate -- node2:positive), (node3:boundary, node4:intermediate)
+            ) << ((node1.x, node1.u), (node2.x, node2.u) ), ((node3.x, node3.u)) >> -> (
+                (node1:intermediate -- node2:negative), (node3:boundary, node4:intermediate)
+            ) << ((node1.x, node1.u), (node2.x, node2.u) ), ((node3.x, node3.u)) >>
+            with ( bound_dist ) where {
+                bound_dist : float := heaviside(min_dist(node2.x, node3.x, node4.x), mt_col_dis)
+                node2.u = -node2.u
+            }
+
+    standard_boundary := (
+                (node1 : intermediate -- node2 : positive), (node3 : boundary, node4 : boundary)
+            ) << ((node1.x, node1.u), (node2.x, node2.u) ), ((node3.x, node3.u), (node4.x, node4.u)) >> -> (
+                (node1:intermediate -- node2:negative), (node3:boundary, node4:boundary)
+            ) << ((node1.x, node1.u), (node2.x, node2.u) ), ((node3.x, node3.u), (node4.x, node4.u)) >>
+            with ( bound_dist ) where {
+
+                bound_dist : float := heaviside(min_dist(node2.x, node3.x, node4.x), mt_col_dis)
+                node2.u = -node2.u
+
+            }
+
+    # Catastrophe Rule
+    standard_boundary_catastrophe := (
+        (node1 : intermediate -- node2 : positive), (node3 : boundary -- node4 : boundary)
+    ) <<   ((node1.x, node1.u), (node2.x, node2.u)),  ((node3.x, node3.u), (node4.x, node4.u)) >> 
+        -> (
+        (node1:intermediate -- node2:negative), (node3:boundary -- node4:boundary)
+    ) << ((node1.x, node1.u), (node2.x, node2up.u)), ((node3.x, node3.u), (node4.x, node4.u))>> 
+        with ( standard_boundary_catastrophe_rate ) where {
+
+        distance : float := distToLineSegment(node3.x, node4.x, node2.x)
+        standard_boundary_catastrophe_rate : float := catastrophe_rate if (distance <= mt_col_dis) else 0
+
+        # This an assignment/update
+        node2up.u = -node2up.u
+    }
+
+    clasp_boundary_catastrophe := (
+            (node1:intermediate -- node2:positive), (node3:boundary -- node4:intermediate)
+        ) <<((node1.x, node1.u) , (node)) >> -> (
+            (node1:intermediate -- node2:negative), (node3:boundary -- node4:intermediate)
+        ) << >> with (clasp_boundary_catastrophe_rate) where {
+
+            distance : Float = distToLineSegment(node3.x, node4.x, node2.x)
+            clasp_boundary_catastrophe_rate : float = clasp_boundary_catastrophe_rate if (distance <= mt_col_dis) else 0
+            node2up.u = -node2up.u
+
+    }
+
+    # Zipping Rules
+    # Positve
+    # negative
+    # intermediate
+    # Creation Rules
+    # Recovery Rules
+
+# These take a state and return another type and state 
+# This is where you get to see emergent properties?
+# Observable accesses all the types in the state. You need to declare
+# what type you want to access.
+
+# List takes in a type and a position and returns whatever is in that position
+# List : type -> pos -> instance:type
+
+# Keep track of this at each time step
+observables plant_observable {
+
+    # Node gets all of type node
+    observable angle<<state>> : state -> float := arccosine(
+                            state.positive
+    )
+
+    # Keeps track of state at each time step
+    observable particle_counts <<state>> : state -> list<<node>> := state
+
 }
 
-grammar (continuous-time) cma () {
-    positive_mt_overgrowth;
-    my_rule2;
+# Add parameters for grammar declaration
+#
+grammars  Plant {
+
+    grammar cma <<parameters>> : ContinuousTime {
+        positive_mt_overgrowth
+        my_rule2
+	my_rule3
+    }
+
+    grammar corn_cma <<parameters>> : ContinuousTime {
+        positive_mt_overgrowth
+        my_rule2
+	my_rule3
+    }
+
 }
 
+# Add rules, delete rules
+# meta-grammar meta_1 {
+    # cma ->
+# }
 
-(* State is just a bunch of types *)
+# State is just a bunch of types
+# NOTE: Only one rule gets fired at each time step
 state initial_state {
-    (# Create state use set definition? #)
-    (# growing_node node1 <<(10, 20)>>; #)
-    (# growing_node node2 <<(10, 20)>>; #)
-    (# growing_node node3 <<(10, 20)>>; #)
-    growing_node <<(x, y)>> for (x in [1..10]) and (x != 1) and (y != 3);
+    # Create state use set definition?
+    # growing_node node1 <<(10, 20)>>
+    # growing_node node2 <<(10, 20)>>
+    # growing_node node3 <<(10, 20)>>
+    # growing_node <<(x, y)>> for (x in [1..10]) and (x != 1) and (y != 3)
+    # Runs once
+    initial_counter := (empty) -> (initialCounter : NuclearCreator)<<N-1, 0, 0 >>\
+		with ( heaviside(N >= 10) ) where { N := 10}
+
+    # Creates a row of X
+    counter_loop_x := (initialCounter : NuclearCreator) <<n, x, y>>\
+        -> (counter:NucleatorCreator, newNode : NulceatorX) <<(n-1, x, y), (x,y)>> with ( heaviside(n > 0) ) where {
+        x = x+1
+    }
+
+    # Top needs to run first.
+    # Then below needs to run.
+    # How do you show dependency needs here between rules?
+
+    # Duplicate each row down
+    counter_loop_y := rowNode:NucleatorX <<(n, x, y)>>\ 
+                    -> (replaceNode:Nucleator, rowNodeX:NucleatorX)\
+                    <<(x, y), (n, x, yprime) >> with ( heaviside(yprime < 10) ) {
+        yprime := y +1
+    }
+
+    delete_counter := (counter:NuclearCreator)<<(n, x, y)>> -> (empty) with heaviside (n <= 0)
+    delete_counter_y := (counter:NucleatorX)<<(n, x, yprime)>> -> (empty) with heaviside (yprime >= 10)
+
 }
 
-(# 
-    Simulations are propositions. You need to specifiy what properties
-    you care about. This can be done by making your simulation a dependent type.
-    (For all statement)
+    # Simulations are propositions. You need to specifiy what properties
+    # you care about. This can be done by making your simulation a dependent type.
+    # (For all statement)
+    #
+    # There are two types of type checking.
+    # Dynamic type checking and static type checking
 
-    There are two types of type checking.
-    Dynamic type checking and static type checking
+    # Simulations are a type that you want to reason about.
 
-    Simulations are a type that you want to reason about.
-#)
-simulate test_simulate cma <<(initial_state, initial_params)>>;
+# Simulate: state -> trajectories
+# Proposition as an input to simulation? Simulation is a type.
+simulations test_simulations {
+
+    # ApproximateSimulation :: Grammar -> InitialState -> Observables -> Parameter -> Time -> [Float];
+    test_simulate := ApproximateSimulation <<(Plant.cma, initial_state, plant_observable, initial_params, 10)>>
+    test_simulate_2 := ApproximateSimulation <<(Plant.corn_cma, initial_state, plant_observable, initial_params, 10)>>
+
+}

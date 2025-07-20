@@ -96,6 +96,7 @@ namespace CMA {
             std::vector<std::size_t> total_nodes;
             std::vector<std::size_t> type_counts[5];
             std::vector<double> time_count;
+
             std::vector<double> correlation_avg_global;
             std::vector<double> correlation_avg_local;
             std::vector<double> correlation_avg_short;

@@ -1,194 +1,210 @@
-
 """
 Defines Tokens
 """
 
-# TODO: Add --
 
 abstract type Token end
 
-struct KeywordToken <: Token
+struct PositionToken <: Token
     value::String
+    line_no::Integer
+    col_no::Integer
+end
+
+struct KeywordToken <: Token
+    position::PositionToken
 end
 
 struct GrammarToken <: Token
-    value::String
+    position::PositionToken
 end
 
 struct GrammarTimeToken <: Token
-    value::String
+    position::PositionToken
 end
 
 struct WithToken <: Token
-    value::String
+    position::PositionToken
 end
-
 struct SolvingToken <: Token
-    value::String
+    position::PositionToken
 end
 
 struct WhereToken <: Token
-    value::String
+    position::PositionToken
 end
 
 struct IdentifierToken <: Token
-    value::String
+    position::PositionToken
+end
+
+struct FunctionToken <: Token
+    position::PositionToken
 end
 
 struct OperatorToken <: Token
-    value::String
+    position::PositionToken
+end
+
+struct PlusToken <: Token
+    position::PositionToken
+end
+
+struct MinusToken <: Token
+    position::PositionToken
+end
+
+struct AsteriskToken <: Token
+    position::PositionToken
+end
+
+struct SlashToken <: Token
+    position::PositionToken
 end
 
 struct RightArrowToken <: Token
-    value::String
+    position::PositionToken
+end
+
+struct EdgeToken <: Token
+    position::PositionToken
 end
 
 struct PunctuationToken <: Token
-    value::String
+    position::PositionToken
 end
 
 struct LeftParenthesisToken <: Token
-    value::String
+    position::PositionToken
+end
+
+struct LeftAngleBracketToken <: Token
+    position::PositionToken
+end
+
+struct RightAngleBracketToken <: Token
+    position::PositionToken
 end
 
 struct RightParenthesisToken <: Token
-    value::String
+    position::PositionToken
 end
 
 struct LeftBracketToken <: Token
-    value::String
+    position::PositionToken
 end
 
 struct RightBracketToken <: Token
-    value::String
+    position::PositionToken
 end
 
 struct LiteralToken <: Token
-    value::String
+    position::PositionToken
 end
 
 struct ErrorToken <: Token
-    message::String
+    position::PositionToken
 end
 
 struct InitialConditionToken <: Token
-    value::String
+    position::PositionToken
 end
 
-function isalpha(input::Char)::Bool
-    isletter(input)
+struct CommentToken <: Token
+    position::PositionToken
 end
 
-function tokenize(source::String)
-    """
-    Tokenize input
-    """
-
-    tokens = Token[]
-    i = 1
-
-    while i <= length(source)
-        c = source[i]
-
-        # Ignore whitespace
-        if isspace(c)
-            i += 1
-            continue
-
-        # New starting point when a character is found
-        elseif isalpha(c)
-            start = i
-
-        # Keep on counting 
-	    while i <= length(source) && (isalpha(source[i]) || isdigit(source[i]) || source[i] == '_')
-                i += 1
-            end
-
-            value = source[start:i-1]
-            if value in [
-			 "grammar", "discretetime", "continuoustime",
-			 "with", "solving", "where", "initial_conditions",
-			 ]
-                if string(value) == "grammar"
-                    push!(tokens, GrammarToken(value))
-                elseif string(value) == "discretetime" || string(value) == "continuoustime"
-                    push!(tokens, GrammarTimeToken(value))
-                elseif string(value) == "with"
-                    push!(tokens, WithToken(value))
-                elseif string(value) == "solving"
-                    push!(tokens, SolvingToken(value))
-                elseif string(value) == "where"
-                    push!(tokens, WhereToken(value))
-                elseif string(value) == "initial_conditions"
-                    push!(tokens, InitialConditionToken(value))
-                else
-                    push!(tokens, KeywordToken(value))
-                end
-            else
-                push!(tokens, IdentifierToken(value))
-            end
-
-        elseif isdigit(c)
-            start = i
-            while i <= length(source) && (isdigit(source[i]) || source[i] == '.')
-                i += 1
-            end
-            value = source[start:i-1]
-            push!(tokens, LiteralToken(value))
-        elseif c == '-'
-            if i + 1 <= length(source) && source[i + 1] == '>'
-                push!(tokens, RightArrowToken("->"))
-                i += 2
-            else
-                push!(tokens, ErrorToken("Unexpected character: $c"))
-                i += 1
-            end
-        elseif c in ['!', '=', '<', '>']
-            if i + 1 <= length(source) && source[i + 1] == '='
-                push!(tokens, OperatorToken(string(c, '=')))
-                i += 2
-            else
-                push!(tokens, OperatorToken(string(c)))
-                i += 1
-            end
-        elseif c in ['(', ')', '{', '}', ',', ';']
-
-            if c == '('
-                push!(tokens, LeftParenthesisToken(string(c)))
-            elseif c == ')'
-                push!(tokens, RightParenthesisToken(string(c)))
-            elseif c == '{'
-                push!(tokens, LeftBracketToken(string(c)))
-            elseif c == '}'
-                push!(tokens, RightBracketToken(string(c)))
-            else
-                push!(tokens, PunctuationToken(string(c)))
-            end
-
-            i += 1
-        else
-            push!(tokens, ErrorToken("Unexpected character: $c"))
-            i += 1
-        end
-    end
-    return tokens
+struct TypeSectionToken <: Token
+    position::PositionToken
 end
 
-# source_code = """
-# grammar discretetime symbol1 (symbol2 -> symbola  with function(symbol4) where symbol5 == symbol6;
-# """
+struct TypeToken <: Token
+    position::PositionToken
+end
 
-# source_code2 = """
-	# grammar discretetime test_grammar(){
-	# }
-# """
+struct DoubleColonToken <: Token
+    position::PositionToken
+end
 
-# source_code3 = """
-   # nodeset(x) -> node(x), {child(x) | 1 <= i <= n} with q(n) where n >= 0;
-# """
+struct SingleColonToken <: Token
+    position::PositionToken
+end
 
-# tokens = tokenize(source_code2)
+struct AssignToken <: Token
+    position::PositionToken
+end
 
-# for token in tokens
-    # println(token)
-# end
+struct DefineToken <: Token
+    position::PositionToken
+end
+
+struct ParameterSectionToken <: Token
+    position::PositionToken
+end
+
+struct ParameterToken <: Token
+    position::PositionToken
+end
+
+struct FunctionSectionToken <: Token
+    position::PositionToken
+end
+
+struct FunctionToken <: Token
+    position::PositionToken
+end
+
+struct RuleSectionToken <: Token
+    position::PositionToken
+end
+
+struct RuleToken <: Token
+    position::PositionToken
+end
+
+struct ObservableSectionToken <: Token
+    position::PositionToken
+end
+
+struct ObservableToken <: Token
+    position::PositionToken
+end
+
+struct StateSectionToken <: Token
+    position::PositionToken
+end
+
+struct StateToken <: Token
+    position::PositionToken
+end
+
+struct SimulationSectionToken <: Token
+    position::PositionToken
+end
+
+struct SimulationToken <: Token
+    position::PositionToken
+end
+
+struct DotToken <: Token
+    position::PositionToken
+end
+
+struct FloatToken <: Token
+    position::PositionToken
+end
+
+struct IntegerToken <: Token
+    position::PositionToken
+end
+
+struct CommaToken <: Token
+    position::PositionToken
+end
+
+struct EqualToken <: Token
+    position::PositionToken
+end
+
+struct EndLineToken <: Token
+end

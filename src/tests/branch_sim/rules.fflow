@@ -1,0 +1,26 @@
+
+rules particle_rules {
+
+start_to_node := (start : StartType) << start_x, start_y >> 
+        -> (p2 : ParticleNodeCreator) << x, y, counter >> with (heaviside(10, 1)) where {
+            counter : Integer = 9
+            x : Float = start_x + 1
+            y : Float = start_y + 1
+    }
+
+create_particle := (p1 : ParticleNodeCreator) << x, y, counter >> 
+        -> (p1 : ParticleNodeCreator) (p3 : ParticleNode) << x, y, new_counter, << p_x, p_y >> >> with (heaviside(counter, 1)) where {
+            new_counter : Integer = counter - 1
+
+            p_x : Float = x + 0.1
+            p_y : Float = y + 0.1
+
+    }
+
+create_branch := (p1 : ParticleNode) << x_1, y_1 >>
+	-> (p1: ParticleNodeLink) -- (p2: ParticleNodeLink) << x_1, y_1, <<x_2, x_2>> >>
+	with (k_extend) where {
+		k_extend : Float := 1.30
+	}
+
+}

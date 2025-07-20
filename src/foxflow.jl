@@ -1,32 +1,50 @@
 include("./parser.jl")
-include("./tokens.jl")
+include("./lexer.jl")
 include("./semantics.jl")
 include("./ir_generation.jl")
 
+
 function save_files(code)
+    """
+    Saving File
+    """
+
     cur_wd = pwd()
-    # println("cur_wd: ", cur_wd)
+    println("before cur_wd: $cur_wd")
+    cd("/home/rany/Work/research/FoxFlow/src")
+    cur_wd = pwd()
+    println("after cur_wd: $cur_wd")
 
     header_files = []
+
     for (key, value) in code
+
+        println("Saving: $key")
+
         if (key == "settings")
-            write("../generated/$key.json", value)
+            open("../generated/$key.json", "w") do f
+                write(f, value)
+                flush(f) # Ensures the content is written to disk
+            end
         elseif (key == "main")
-            write("../generated/$key.cpp", value)
+            open("../generated/$key.cpp", "w") do f
+                write(f, value)
+                flush(f)
+            end
         else
-            write("../generated/$key.h", value)
+            open("../generated/$key.h", "w") do f
+                write(f, value)
+                flush(f)
+            end
         end
-        # write("../generated/main_simulator.cpp", code["main"])
     end
+
 end
 
 function compiles()
     """
     Compiles the simulation
     """
-
-    # println("pwd: ", pwd())
-    # cd(pwd())
 
     # TODO: Only run build if things have changed drastically?
     build_folder = dirname(pwd())*"/build/"
@@ -53,19 +71,25 @@ end
 function foxflow_run(source_code)
 
     # println("source_code: ", source_code)
-    tokens = tokenize(source_code)
+    tokens = tokenize(source_code, 0)
+    println("running thingamabob")
     println("tokens: ", tokens)
-
     symbol_table = Dict()
     symbol_table["null"] = nothing
     grammars = parse!(tokens, symbol_table)
 
+    println("Showing grammars")
     # println("grammars: ", grammars)
     generated_code = generate_im(grammars, symbol_table)
+
+    println("Done generating code")
     # TODO: Give return code 0 or 1 depending on how the run is.
     save_files(generated_code)
+    println("done Saving file")
     compiles()
+    println("Done compiling")
     execute_sim()
+    println("done executing sim")
 end
 
 if length(ARGS) != 0
@@ -73,3 +97,4 @@ if length(ARGS) != 0
 else
     println("Nothing was sent")
 end
+

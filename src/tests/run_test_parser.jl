@@ -23,15 +23,13 @@ end
 
 function test_parser_runner()
 
-    lines_tokens = tokenize_file_parser("test_types_7.fflow")
+    lines_tokens = tokenize_file_parser("test_types_2.fflow")
     symbol_table = Dict()
 
     cur_ast = parse_types_section!(
                                    lines_tokens,
                                    symbol_table
                                   )
-    dot_graph = generate_type_section_dot(cur_ast)
-    save_file("test_ast.dot", dot_graph)
 end
 
 test_parser_runner()

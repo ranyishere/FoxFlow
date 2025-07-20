@@ -11,103 +11,11 @@ to then construct the correct semantics.
 # TODO: Incorporate/allow users to specify max time of simulation.
 
 # Add types, Real, 
-
-# <grammar> ::= "grammar" <time-type> <symbol-name> "(" <grammar-signature>) "{" <initial-conditions> <rules> "}"
-# <time-type> ::= "(discretetime)" | "(continuoustime)"
 #
-# <initial-conditions> ::= "initial_conditions" "{" <initial-condition-list> "}"
-# <initial-condition-list> ::= <initial-condition> | <initial-condition> <initial-condition-list>
-# <initial-condition> ::= <symbol-name> "=" <literal> ";"
-#
-# <rules> ::= <rules> | <rule> | <solve-rule>
-#
-# <grammar-signature> ::= <parameterized-types-left> "->" <parameterized-types-right>
-#
-# <rule> ::= <parameterized-types-left> "->" <parameterized-types-right> "with" <with-clause> ";"
-# <solve-rule> ::= <parameterized-type-left> "->" <parameterized-type-right> "solving" <solve-clause> ";"
-#
-# <parameterized-types-left> ::= <parameterized-types> "," | <parameterized-type>
-# <parameterized-types-right> ::= <parameterized-types> "," | <parameterized-type>
-#
-# <parameterized-types> ::= <parameterized-types> "," | <parameterized-type>
-# <parameterized-type> ::= <symbol-name> "(" <parameters> ")" | "{" <parameterized-types> "|" <predicate> "}"
-#
-# <with-clause> ::= <function-type> "where" <predicate> ";" | <function-type> ";"
-# <solve-clause> ::= <function-type> "where" <equations> ";" | <function-type> ";"
-#
-# <symbol-name> ::= [Aa-Zz] | [0-9] | _ | <symbol-name>
-#
-# <predicate> ::= <symbol-name> "!=" <symbol-name> 
-#                 | <symbol-name> "<" <symbol-name> 
-#                 | <symbol-name> ">" <symbol-name> 
-#                 | <symbol-name> "==" <symbol-name>
-#
-# <function-type> ::= <symbol-name> "(" <symbol-name> ")"
-#
-# <literal> ::= [0-9] | [Aa-Zz] | <literal>
 
 
 include("./tokens.jl")
-
-
-abstract type Node end
-
-struct TimeTypeNode <: Node
-    token::Token
-end
-
-struct IdentifierNode <: Node
-    token::Token
-end
-
-struct SymbolNode <: Node
-    name::IdentifierNode
-    parameters::Array{Node}
-end
-
-struct ParameterNode <: Node
-    token::Array{Token}
-end
-
-struct GrammarSignatureNode <: Node
-    token::Array{Token}
-end
-
-abstract type ModifyClauseNode <: Node
-end
-
-struct SolveClauseNode <: ModifyClauseNode
-    name::Array{Token}
-    clause::Array{Token}
-end
-
-struct WithClauseNode <: ModifyClauseNode
-    name::Array{Token}
-    clause::Array{Token}
-end
-
-struct RuleNode <: Node
-    lhs::Array{Token}
-    rhs::Array{Token}
-    modify_clause::ModifyClauseNode
-end
-
-struct InitialConditionNode <: Node
-    name::Token
-    value::Token
-end
-
-struct InitialConditionListNode <: Node
-    value::Array{InitialConditionNode}
-end
-
-struct GrammarNode <: Node
-    time::TimeTypeNode
-    name::IdentifierNode
-    signature::GrammarSignatureNode
-    initial_conditions::InitialConditionListNode
-    rules::Array{RuleNode}
-end
+include("./ast_nodes.jl")
 
 
 function parse_grammar_signature!(tokens, symbol_table)
@@ -404,7 +312,8 @@ function parse!(tokens, symbol_table)
 
             cur_grammar = GrammarNode(TimeTypeNode(time_node), IdentifierNode(name_node),
                                       GrammarSignatureNode(signature_node), 
-                                      InitialConditionListNode(initial_conditions), rules)
+                                      InitialConditionListNode(initial_conditions),
+                                      rules)
 
             push!(grammars, cur_grammar)
         end
@@ -414,39 +323,263 @@ function parse!(tokens, symbol_table)
     grammars
 end
 
-
-function main()
-
-    # TODO: Declare variable types
-    source_code = """
-        grammar discretetime symbol1 () {};
-    """
-
-    source_code_0 = """
-        grammar discretetime symbol1 (Node(x) -> Node(y)) {
-            Node(x) -> Node(y) with f(0);
-        };
-    """
-
-    source_code_1 = """
-        grammar discretetime symbol1 (Node(x) -> Node(y)) {
-            Node(x) -> Node(y) with f(a) where a < 10;
-            Node(a) -> Node(b) with g(b) where b < 10;
-        };
-    """
-
-    source_code_2 = """
-        grammar discretetime PredatorPrey () {
-            rabbit -> null with alpha where alpha = 0.3;
-            fox -> null with beta = 0.3;
-            rabbit -> 2 * rabbit with gamma = 1.0;
-            fox -> 2 * fox with f(fox, rabbit);
-        };
-    """
-
-    tokens = tokenize(source_code_1)
-    symbol_table = Dict()
-    grammars = parse!(tokens, symbol_table)
-
+function parse_type()
+    if isa(cur_token, IdentifierToken)
+        type_name_inst = cur_token
+    end
 end
-# main()
+
+# if !isa(cur_token, 
+function parse_type_class!(tokens, symbol_table)
+
+    cur_token = popfirst!(tokens)
+    class_name = nothing
+    class_parameter = Token[]
+
+    if isa(cur_token, IdentifierToken)
+        class_name = IdentifierNode(cur_token)
+        # Should be class name
+    else
+        println("Expected class name")
+    end
+
+    cur_token = popfirst!(tokens)
+
+    if isa(cur_token, PunctuationToken)
+        if (cur_token.value == ';')
+        end
+
+    # Class parameter
+    elseif isa(cur_token, LeftAngleBracketToken)
+
+        while !isa(cur_token, RightAngleBracketToken)
+
+            cur_token = popfirst!(tokens)
+
+            if isa(cur_token, IdentifierToken)
+                # its a type.
+            elseif isa(cur_token, PunctuationToken)
+
+                tok_val = cur_token.value
+
+                if cur_token.value != ','
+                    println("Error expected , got $tok_val")
+                elseif isa(cur_token, IdentifierToken)
+
+                    tmp_class_param = IdentifierNode(IdentifierToken)
+                    push!(class_parameter, tmp_class_param)
+
+                else
+                    continue
+                end
+
+            end
+        end
+    end
+
+   TypeNode(class_name, class_parameter)
+end
+
+function parse_type!(tokens, symbol_table)
+
+    # types = TypeNode[]
+    type_name_inst = nothing
+    parameter = Node[]
+    # value = TypeNode[]
+
+    cur_token = popfirst!(tokens)
+
+    # Check for instance name
+    if isa(cur_token, IdentifierToken)
+        type_name_inst = IdentifierNode(cur_token)
+    else
+        println("Error expected Identifier Token")
+    end
+
+    # Check for Parameter
+    
+    lookahead = tokens[1]
+    if isa(lookahead, LeftAngleBracketToken)
+        cur_token = popfirst!(tokens)
+
+        brack = 1
+        while brack > 0 && length(tokens) > 0
+            cur_token = popfirst!(tokens)
+            if isa(cur_token, IdentiferToken)
+                push!(
+                      parameter,
+                      IdentiferNode(cur_token)
+                     )
+            elseif isa(cur_token, RightAngleBracketToken)
+                brack -= 1
+            end
+        end
+
+        if brack > 0
+            println("Error missing parameter closing bracket")
+        end
+    end
+
+    # Check for type
+    type = nothing
+    type_name = nothing
+    type_parameter = Node[]
+
+    lookahead = tokens[1]
+    if isa(lookahead, DoubleColonToken)
+        popfirst!(tokens)
+
+        cur_token = popfirst!(tokens)
+
+        if isa(cur_token, IdentifierToken)
+            type_name = IdentifierNode(cur_token)
+        else
+            println("Expected type name")
+        end
+
+        lookahead = tokens[1]
+
+        # cur_token = popfirst!(tokens)
+
+        # Type class parameter
+        println("lookahead angle brack: $lookahead")
+        if isa(lookahead, LeftAngleBracketToken)
+
+            cur_token = popfirst!(tokens)
+            brack = 1
+            while brack > 0 && length(tokens) > 0
+
+                cur_token = popfirst!(tokens)
+                if isa(cur_token, IdentifierToken)
+                    push!(
+                          type_parameter,
+                          IdentifierNode(cur_token)
+                         )
+                elseif isa(cur_token, RightAngleBracketToken)
+                    brack -= 1
+                end
+
+            end
+
+            if brack > 0
+                println("Error missing closing right angle bracket")
+            end
+
+        end
+
+    else
+        println("Error expected type signature")
+    end
+
+    # Check for value assignment
+    value = nothing
+    # cur_token = popfirst!(tokens)
+    lookahead = tokens[1]
+    if isa(lookahead, OperatorToken)
+
+        # println("cur_token.position.value: ", cur_token.position.value)
+        cur_token = popfirst!(tokens)
+        if (cur_token.position.value == "=")
+
+            cur_token = popfirst!(tokens)
+
+            if !isa(cur_token, LeftBracketToken)
+
+                value = cur_token
+
+            # NOTE:  It's assigning a list of types
+            elseif isa(cur_token, LeftBracketToken)
+                value = parse_list_types!(tokens, symbol_table)
+
+            end
+
+        else
+            println("Error expected assignment =")
+        end
+
+    end
+
+    lookahead = tokens[1]
+    if isa(lookahead, PunctuationToken)
+        cur_token = popfirst!(tokens)
+        if (cur_token.position.value != ";")
+            println("Error Expected end of type creation")
+        end
+    else
+        println("Error Expected end of type creation else given: $lookahead")
+    println("Tokens: $tokens")
+    end
+    
+    type_class = TypeClassNode(type_name,
+                               ParameterNode(type_parameter))
+
+    TypeInstanceNode(type_name_inst,
+                     ParameterNode(parameter),
+                     type_class,
+                     value)
+end
+
+function parse_list_types!(tokens, symbol_table)
+    bracket_count = 1
+    type_instances = TypeInstanceNode[]
+    while bracket_count > 0
+        lookahead = tokens[1]
+        # cur_token = popfirst!(tokens)
+        if isa(lookahead, RightBracketToken)
+            popped = popfirst!(tokens)
+            bracket_count -= 1;
+        elseif isa(lookahead, LeftBracketToken)
+            popfirst!(tokens)
+            # type_instance = parse_list_type!(tokens, symbol_table)
+            # push!(type_instances, type_instance)
+            bracket_count += 1;
+        else
+            type_instance = parse_type!(tokens, symbol_table)
+            push!(type_instances, type_instance)
+
+        end
+    end
+
+    cur_token = popfirst!(tokens)
+    if (cur_token.position.value != ";")
+        println("expected semicolon")
+    end
+
+    type_instances
+end
+
+function parse_types_section!(tokens, symbol_table)
+
+    section_name = nothing
+    type_instances = TypeInstanceNode[]
+    while length(tokens) > 0
+
+        cur_token = popfirst!(tokens)
+
+        # types keyword token
+        if isa(cur_token, TypeSectionToken)
+
+            cur_token = popfirst!(tokens)
+
+            # Identifier
+            if isa(cur_token, IdentifierToken)
+                section_name = IdentifierNode(cur_token)
+            else
+                println("Error expected section name got $cur_token")
+            end
+
+            cur_token = popfirst!(tokens)
+
+            if isa(cur_token, LeftBracketToken)
+                type_instances = parse_list_types!(tokens, symbol_table)
+            else
+                println("Error expected curly brackets.")
+            end
+
+        end ## if end
+
+        ##
+    end # while end
+
+    TypeSectionNode(section_name, type_instances)
+end

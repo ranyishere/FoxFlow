@@ -1,4 +1,4 @@
 types Plant {
-    Node :: Type;
-    oof :: Node;
-};
+    Node : Type
+    oof : Node
+}

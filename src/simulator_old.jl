@@ -19,6 +19,4 @@ function simulate(grammars, symbol_table, max_time=100)
 
     while time < max_time
     end
-
-
 end

@@ -33,7 +33,7 @@ namespace CMA {
                               Parameters &settings) {
         //stochastic growing rule
         GT mt_growth_lhs;
-        mt_growth_lhs.addNode({1, {Plant::Intermediate{}}});
+        mt_growth_lhs.addNode({1, {Plant::Intermediate{}} });
         mt_growth_lhs.addNode({2, {Plant::Positive{}}});
         mt_growth_lhs.addEdge(1, 2);
 

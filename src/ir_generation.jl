@@ -6,7 +6,6 @@ include("./templates/sim_params.jl")
 include("./templates/sim_rules.jl")
 include("./templates/sim_settings.jl")
 include("./templates/sim_types.jl")
-
 include("./templates/sim_utils.jl")
 
 
@@ -24,7 +23,7 @@ function generate_im(grammars, symbol_table)
     # println("main: ", main_file_data)
     model_file_data = generate_model(data);
     parameters_file_data = generate_parameters(data);
-    types_file_data = generate_types(data);
+    types_file_data = generate_types_section(data);
     rules_file_data = generate_rules(data);
     settings_file_data = generate_settings(data);
     utils_file_data = generate_utils(data);
