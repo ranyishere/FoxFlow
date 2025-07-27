@@ -57,7 +57,6 @@ template<typename GraphType, typename CplexType, typename ParamType, typename Ge
                         };
 
             graph.addNode(oof_node);
-
             };
 template<typename GraphType, typename CplexType, typename ParamType, typename GenType>
 void add_boundary(
@@ -140,8 +139,6 @@ geoplex2D.init(
                         settings.CELL_DY,
                         settings.MAXIMAL_REACTION_RADIUS
                 );
-	particle_rules::start_to_node(gamma, this->system_graph, settings);
-	particle_rules::create_particle(gamma, this->system_graph, settings);
 
 		this->add_default_type(this->system_graph,
                     geoplex2D,

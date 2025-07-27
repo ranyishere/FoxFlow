@@ -11,18 +11,18 @@ namespace Particles {
 
        };
 	struct ParticleNodeCreator : Type {
-		float fflow_7a8c2f[2];
-		int fflow_50d347;
+		float fflow_8df356[2];
+		int fflow_1c7d3f;
 		void* operator[](std::size_t index) const {
-			if (index == 0) return (void*)&fflow_7a8c2f;
-			if (index == 1) return (void*)&fflow_50d347;
+			if (index == 0) return (void*)&fflow_8df356;
+			if (index == 1) return (void*)&fflow_1c7d3f;
 			throw std::out_of_range("Index out of bounds");
 		};
 
 };	struct ParticleNode : Type {
-		float fflow_a751f4[2];
+		float fflow_3717b6[2];
 		void* operator[](std::size_t index) const {
-			if (index == 0) return (void*)&fflow_a751f4;
+			if (index == 0) return (void*)&fflow_3717b6;
 			throw std::out_of_range("Index out of bounds");
 		};
 

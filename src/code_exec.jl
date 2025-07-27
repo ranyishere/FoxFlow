@@ -1,4 +1,0 @@
-
-"""
-Executes Generated Simulation
-"""

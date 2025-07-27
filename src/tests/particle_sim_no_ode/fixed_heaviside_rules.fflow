@@ -1,0 +1,23 @@
+
+
+rules particle_rules {
+
+start_to_node := (start : StartType) << start_x, start_y >> 
+        -> (p2 : ParticleNodeCreator) << x, y, counter >> with (heaviside(10, 1)) where {
+            counter : Integer = 10
+            x : Float = start_x + 1
+            y : Float = start_y + 1
+    }
+
+create_particle := (p1 : ParticleNodeCreator) << x, y, counter >> 
+        -> (p2 : ParticleNodeCreator) (p3 : ParticleNode) << x, y, new_counter, << p_x, p_y >> >> with (heaviside(10, 1)) where {
+            new_counter : Integer = counter - 1
+            next_fire : Integer = counter - 1
+
+            p_x : Float = counter
+            p_y : Float = counter
+
+    }
+
+
+}
