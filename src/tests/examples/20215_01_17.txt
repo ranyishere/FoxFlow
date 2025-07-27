@@ -1,0 +1,26 @@
+
+pattern matching architecture just for left hand
+
+
+
+interested in using plenum -> 
+
+(
+    Dividing cells in a dynamical system.
+)
+
+We already have:
+    * The Ease of use
+    * meta grammars
+
+Nice to have:
+    * Change of Scale
+    * pde solving
+
+
+
+Consider Subset of DGG?
+
+Loading Data?
+   * Piggy back on that instead, using other people's stuff.
+   * GraphQL

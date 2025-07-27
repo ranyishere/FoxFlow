@@ -39,7 +39,13 @@ namespace CMA {
 }
 namespace Plant {
     template<typename GraphType, typename CplexType, typename ParamType, typename GenType>
+
     void microtubule_uniform_scatter(GraphType &graph, CplexType &cplex, ParamType &settings, GenType &gen) {
+        /**
+         * Creates initial start conditions
+         *
+         **/
+
         using node_type = typename GraphType::node_type;
         using key_type = typename node_type::key_type;
         double epsilon_min = settings.DIV_LENGTH;//settings.MT_MIN_SEGMENT_INIT;
@@ -48,14 +54,16 @@ namespace Plant {
         std::mt19937 random_engine(random_device());
         auto &grid = cplex.getCoarseGrid();
 
+	// Cell Complex
         DGGML::CartesianGrid2D &reaction_grid = cplex.reaction_grid;
 
         //TODO: make it so the end points are aligned with the cell corners, but have custom spacing
         // between the points
         //create the boundary
         //bottom, left to right
-        key_type prev_key; //only the first step doesn't have a prev
-        key_type first_key; //needed to complete the loop around the boundary
+        key_type prev_key; // only the first step doesn't have a prev
+        key_type first_key; // needed to complete the loop around the boundary
+        // Creating Boundary
         for (auto i = 0; i < reaction_grid._nx; i++) {
             auto cardinal = reaction_grid.cardinalCellIndex(i, 0);
             double px, py;
@@ -68,8 +76,10 @@ namespace Plant {
             else first_key = curr_key;
             prev_key = curr_key;
         }
-        //note: the previous gets carried over!
-        //right side interior, bottom to top
+
+        // Note: the previous gets carried over!
+        // right side interior, bottom to top
+        // Creates boundary
         for (auto j = 1; j < reaction_grid._ny - 1; j++) {
             auto cardinal = reaction_grid.cardinalCellIndex(reaction_grid._nx - 1, j);
             double px, py;
@@ -81,8 +91,9 @@ namespace Plant {
             graph.addEdge(prev_key, curr_key);
             prev_key = curr_key;
         }
-        //note: the previous gets carried over!
-        //top, right to left
+
+        // Note: the previous gets carried over!
+        // top, right to left
         for (auto i = reaction_grid._nx - 1; i >= 0; i--) {
             auto cardinal = reaction_grid.cardinalCellIndex(i, reaction_grid._ny - 1);
             double px, py;
@@ -96,6 +107,7 @@ namespace Plant {
         }
         //note: the previous gets carried over!
         //left side interior, bottom to top
+        // Creating boundary
         for (auto j = reaction_grid._ny - 2; j > 0; j--) {
             auto cardinal = reaction_grid.cardinalCellIndex(0, j);
             double px, py;
@@ -110,6 +122,7 @@ namespace Plant {
         //complete the loop with the first
         graph.addEdge(prev_key, first_key);
 
+        // Create nucleator
         if(settings.ENABLE_CREATION) {
             //create the nucleators
             for (auto i = 1; i < reaction_grid._nx - 1; i++) {
@@ -125,15 +138,23 @@ namespace Plant {
             }
         }
         //first create a grid that needs to fit MTs of two segments without initial overlap
-        double max_nx =
-                std::floor((cplex.max_x - cplex.min_x) / (4.0 * settings.DIV_LENGTH));//settings.MT_MAX_SEGMENT_INIT));
-        double max_ny =
-                std::floor((cplex.max_y - cplex.min_y) / (4.0 * settings.DIV_LENGTH));//settings.MT_MAX_SEGMENT_INIT));
+        double max_nx = std::floor((cplex.max_x - cplex.min_x) / (4.0 * settings.DIV_LENGTH));//settings.MT_MAX_SEGMENT_INIT));
+        double max_ny = std::floor((cplex.max_y - cplex.min_y) / (4.0 * settings.DIV_LENGTH));//settings.MT_MAX_SEGMENT_INIT));
+											      //
+											      //
+	std::cout << "cplex.min_x " << cplex.min_x << "\n";
+	std::cout << "cplex.min_y " << cplex.min_y << "\n";
+	std::cout << "cplex.max_x " << cplex.max_x << "\n";
+	std::cout << "cplex.max_y " << cplex.max_y << "\n";
+	std::cout << "max_nx " << max_nx << "\n";
+	std::cout << "max_ny " << max_ny << "\n";
+
 
         DGGML::CartesianGrid2D uniform_grid;
         uniform_grid.init(cplex.min_x, cplex.min_y,
                           cplex.max_x, cplex.max_y,
                           max_nx, max_ny);
+
         std::size_t max_mts = uniform_grid.totalNumCells();
         //std::cout << "Max mts " << max_mts << "\n"; std::cin.get();
         if (settings.NUM_MT > max_mts) {
@@ -211,7 +232,8 @@ namespace Plant {
             node_type node_c = {gen.get_key(),//i*segments+1,
                                 {Plant::Intermediate{0.0, 0.0, 0.0,
                                                      u1[0], u1[1], u1[2]},
-                                 x_c, y_c, z_c}};
+                                 x_c, y_c, z_c}
+				    };
 
             node_type node_r = {gen.get_key(),//i*segments+2,
                                 {Plant::Positive{0.0, 0.0, 0.0,

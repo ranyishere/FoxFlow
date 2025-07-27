@@ -1,0 +1,16 @@
+types Plant {
+
+    # Type is built in
+    # Integer is built in
+    Node : Type
+
+    dim : Integer := 3
+
+    # Fixed Lists are built in
+    UnitNode : Node := {
+        unit_vec : FixedList<<dim, Float>>
+    }
+
+    zipper : UnitNode
+    I : Float
+};

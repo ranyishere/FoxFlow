@@ -16,6 +16,7 @@ int main(int argc, char* argv[])
     std::cout << "Running Microtuble Dynamic Graph Grammar Simulator\n";
 
     std::string filename = argv[1];
+
     // The user defines the parser, loads, and parses configuration file.
     simdjson::ondemand::parser parser;
     simdjson::padded_string json = simdjson::padded_string::load(filename);
@@ -28,6 +29,7 @@ int main(int argc, char* argv[])
 
     //return 0;
     cma_simulation.setModel(experiment1);
+
     cma_simulation.simulate();
     auto stop = std::chrono::high_resolution_clock::now();
     auto duration =

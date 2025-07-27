@@ -1,0 +1,6 @@
+types Particles {
+
+    ParticleNodeCreator <<Integer, FixedList<<2, Float>> >> : Type
+    ParticleNode << FixedList<<2, Float>> >> : Type
+
+}

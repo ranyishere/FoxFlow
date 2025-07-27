@@ -1,0 +1,21 @@
+parameters Parameters {
+
+    NUM_STEPS : Integer := 100
+    DELTA : Float := 0.4
+
+    MAXIMAL_REACTION_RADIUS : Float = 0.1
+    MIN_DELTA_STEPS : Integer = 5
+
+    DELTA_DELTA_T : Float = DELTA / MIN_DELTA_STEPS
+
+    DELTA_T_MIN : Float = DELTA_DELTA_T
+
+    CELL_NX : Float = 10
+    CELL_NY : Float = 10
+
+    CELL_DX : Float = 1.66
+    CELL_DY : Float = 1.66
+    
+    total_time : Float := 100
+
+}

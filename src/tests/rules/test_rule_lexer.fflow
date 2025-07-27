@@ -1,0 +1,12 @@
+
+# rule positive_mt_overgrowth (node1 -- node2) << (x_1, u_1), (x_2, u_2)>> 
+        # -> (node2 - node3) <<(),()>>
+        # with
+
+stochastic_mt_growth :: with_rule = 
+	(node1::intermediate -- node2::positive) <<(x1::float, u1::float), (x2::float, u2::float)>>
+	    -> (node1::intermediate -- node3::intermediate 
+       		-- node2::positive) <<(x1::float, u1::float),
+				      (x3::float, u3::float),
+				      (x2::float, u2::float)>>
+    with heaviside(||x2 - x1||) * growth_rate_factor;

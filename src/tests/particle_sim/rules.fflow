@@ -1,0 +1,18 @@
+rules particle_rules {
+
+start_to_node := (start : StartType) << start_x, start_y >> 
+        -> (p2 : ParticleNodeCreator) << x, y, counter >> with (heaviside(10, 1)) where {
+            counter : Integer = 9
+            x : Float = start_x + 1
+            y : Float = start_y + 1
+    }
+
+move_node := (p2 : ParticleNodeCreator) << x, y, counter >>  
+    -> (p2 : ParticleNodeCreator) << dx, dy, counter >> solving (dx := D(x,t), dy := D(y,t)) {
+
+        dx : ODE = 3*x
+        dy : ODE = 2*y
+
+    }
+
+}

@@ -1,0 +1,10 @@
+
+digraph {
+    node [shape=rect];
+"Type Section: IdentifierNode(IdentifierToken(PositionToken('Plant', 1, 11)))" -> "IdentifierNode(IdentifierToken(PositionToken('water', 3, 9)))"
+"IdentifierNode(IdentifierToken(PositionToken('water', 3, 9)))" -> "Parameter: ParameterNode(Node[]) 1"
+"IdentifierNode(IdentifierToken(PositionToken('water', 3, 9)))" -> "Type: TypeClassNode(IdentifierNode(IdentifierToken(PositionToken('Type', 3, 17))), ParameterNode(Node[])) 1 "
+"IdentifierNode(IdentifierToken(PositionToken('water', 3, 9)))" -> "nothing 1 ""Type Section: IdentifierNode(IdentifierToken(PositionToken('Plant', 1, 11)))" -> "IdentifierNode(IdentifierToken(PositionToken('UnitNode', 4, 12)))"
+"IdentifierNode(IdentifierToken(PositionToken('UnitNode', 4, 12)))" -> "Parameter: ParameterNode(Node[]) 2"
+"IdentifierNode(IdentifierToken(PositionToken('UnitNode', 4, 12)))" -> "Type: TypeClassNode(IdentifierNode(IdentifierToken(PositionToken('Node', 4, 20))), ParameterNode(Node[])) 2 "
+ "IdentifierNode(IdentifierToken(PositionToken('UnitNode', 4, 12)))" -> "IdentifierNode(IdentifierToken(PositionToken('unit_vec', 5, 16))) 3"}

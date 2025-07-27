@@ -8,6 +8,7 @@ namespace CMA {
     using GT = Plant::graph_type;
 
     bool boundary_check_2D(Parameters &settings, double x, double y, double padding = 0.0) {
+
         auto min_x = 0.0 + padding, min_y = 0.0 + padding;
         auto max_x = settings.CELL_NX * settings.CELL_DX - padding;
         auto max_y = settings.CELL_NY * settings.CELL_DY - padding;
@@ -47,12 +48,14 @@ namespace CMA {
         DGGML::WithRule<GT> stochastic_mt_growth("stochastic_mt_growth", mt_growth_lhs, mt_growth_rhs,
                                                  [&](auto &lhs, auto &m) {
                                                      //return 0.0*2.0;
+
                                                      auto &node_i_data = lhs.findNode(m[1])->second.getData();
                                                      auto &node_j_data = lhs.findNode(m[2])->second.getData();
+
                                                      auto len = DGGML::calculate_distance(node_i_data.position,
                                                                                           node_j_data.position);
                                                      double propensity =
-                                                             settings.WITH_GROWTH_RATE_FACTOR * DGGML::heaviside(len, settings.DIV_LENGTH);
+                                                         settings.WITH_GROWTH_RATE_FACTOR * DGGML::heaviside(len, settings.DIV_LENGTH);
                                                      //double propensity = DGGML::sigmoid((len/settings.DIV_LENGTH) - 1.0, settings.SIGMOID_K);
                                                      return propensity;
                                                  }, [&](auto &lhs, auto &rhs, auto &m1, auto &m2) {
@@ -174,7 +177,7 @@ namespace CMA {
     {
         //stochastic retraction rule
         GT mt_retraction_lhs1;
-        mt_retraction_lhs1.addNode({1, {Plant::Negative{}}});
+        mt_retraction_lhs1.addNode({1, { Plant::Negative{} } } );
         mt_retraction_lhs1.addNode({2, {Plant::Intermediate{}}});
         mt_retraction_lhs1.addNode({3, {Plant::Intermediate{}}});
         mt_retraction_lhs1.addEdge(1, 2);
@@ -189,6 +192,8 @@ namespace CMA {
                                                      [&](auto &lhs, auto &m) {
                                                          auto &node_i_data = lhs.findNode(m[1])->second.getData();
                                                          auto &node_j_data = lhs.findNode(m[2])->second.getData();
+                             // this is pure, it does not modify
+                             // the general
                                                          auto len = DGGML::calculate_distance(node_i_data.position,
                                                                                               node_j_data.position);
                                                          double propensity = settings.WITH_RETRACTION_RATE_FACTOR * DGGML::heaviside(
