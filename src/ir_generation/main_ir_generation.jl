@@ -7,11 +7,12 @@ include("ir_parameter_section.jl")
 include("ir_types_section.jl")
 include("ir_models_section.jl")
 
-import .IRRuleGeneration: ir_rule!
+import .IRRuleGeneration: ir_rules_section!
 import .IRBuildUtils: emit, build, IRBuilder
 import ..AstNodes: IntegerNode, FloatNode, IdentifierNode, BinaryOpNode, GroupNode, CallNode
 import ..Tokens: IntegerToken, FloatToken, PositionToken, LiteralToken
 import .IRUtils: get_value, convert_type_name, write_file
+using OrderedCollections
 
 # include("ir_types_section.jl")
 # FIXME: Spaces should not be relevant.
@@ -20,7 +21,7 @@ import .IRUtils: get_value, convert_type_name, write_file
 
 using UUIDs
 
-symbol_tables = Dict()
+symbol_tables = OrderedDict()
 rules_table = Dict()
 propensity_table = Dict()
 
@@ -291,47 +292,6 @@ function link_parameter_to_node(param, node_loc, params_var)
     end
 end
 
-function ir_rules_section!(ast)
-    """
-    Generate intermediate rules
-    for the section.
-    """
-
-    rule_section_name = get_value(ast.name)
-    global rule_namespace = rule_section_name
-
-    rule_section_header = [
-        "#ifndef DGGML_RULES_HPP",
-        "#define DGGML_RULES_HPP",
-        "#include \"types.h\"",
-        "#include \"parameters.h\"",
-        "namespace $rule_section_name {",
-        "using GT = $type_namespace::graph_type;"
-    ]
-
-    rules_ir = IRBuilder([])
-
-    map(
-        (hdr) -> begin
-            emit(rules_ir, hdr)
-        end,
-        rule_section_header
-    )
-
-
-    map(
-        (rule) -> begin
-            ir_rule!(rules_ir, rule,
-                     type_namespace,
-                     symbol_tables,
-                     propensity_table)
-        end, ast.rules_list
-       )
-
-    emit(rules_ir, "}\n#endif")
-    build(rules_ir)
-end
-
 function ir_boundary!(ir_builder)
 model_boundary = 
     "
@@ -458,8 +418,8 @@ end
 #
 
 # TODO: Get branching to work.
-
 # TODO: Need to handle settings.json
+# # FIXME: Rules are not firing anymore...
 function generate_ir()
     """
     Generate IR
@@ -468,6 +428,7 @@ function generate_ir()
     name_space = "Particles"
 
     test_folder = "particle_sim_branching"
+    # test_folder = "particle_sim_no_ode"
 
     base = "../tests/generated_tests/generated_2/"
 
@@ -491,8 +452,14 @@ function generate_ir()
 
     tokens_rules = tokenize_file(test_base*"$test_folder/rules.fflow")
     ast_rules = parse_file!(tokens_rules)[1]
+
     println("Generating Rules")
-    write_file(base*"rules.h", ir_rules_section!(ast_rules))
+
+    ir_rules_section = ir_rules_section!(ast_rules,
+                                         rules_table, symbol_tables,
+                                         propensity_table, type_namespace)
+
+    write_file(base*"rules.h", ir_rules_section)
 
     println("Generating Main")
     main_ir = ir_main(name_space)
