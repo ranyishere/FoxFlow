@@ -98,9 +98,11 @@ function tokenize(source::String, line_no::Integer)
                     push!(tokens, SimulationToken(PositionToken(value, line_no, i-1)))
             end
 
-            elseif value in ["Float", "Integer"]
+            elseif value in ["Float", "Integer", "ODE"]
                 if value == "Float"
                     push!(tokens, FloatToken(PositionToken(value, line_no, i-1)))
+                elseif value == "ODE"
+                    push!(tokens, ODEToken(PositionToken(value, line_no, i-1)))
                 else
                     push!(tokens, IntegerToken(PositionToken(value, line_no, i-1)))
             end

@@ -8,16 +8,17 @@ module IRRuleGeneration
     import ..IRUtils: get_value, convert_type_name
     import ..IRBuildUtils: emit, build, IRBuilder
     import ...AstNodes: RuleNode, IdentifierNode, TypeInstanceNode,
-            UndirectedTypeEdgeNode, BinaryOpNode, ExpressionNode, ParameterNode
+            UndirectedTypeEdgeNode, BinaryOpNode, ExpressionNode, ParameterNode,
+            WithClauseNode, SolveClauseNode
 
     export ir_rules_section!
 
     using OrderedCollections
 
-    function ir_rules_section!(ast,
-            rules_table, symbol_tables,
-            propensity_table,
-            type_namespace)
+    function ir_rules_section!(
+            ast, rules_table, symbol_tables,
+            propensity_table, type_namespace
+        )
         """
         Generate intermediate rules
         for the section.
@@ -61,13 +62,143 @@ module IRRuleGeneration
         build(rules_ir)
     end
 
+    function traverse_ode_expr(expression, ir_builder, var_loc_attr)
+        """
+        Generates ir for an ODE expression
+        by traversing the expression tree.
+        """
 
+        if !(expression isa BinaryOpNode)
+            emit(ir_builder, " $(get_value(expression)) ")
+            return
+        end
 
-    """
-    Generates the IR for a rule, including its header, nodes, and edges.
-    """
+        if expression.lhs isa BinaryOpNode
+            # If the left hand side is a binary operation
+            traverse_ode_expr(expression.lhs, ir_builder)
+        elseif expression.lhs isa IdentifierNode
+            # ix_ir = var_loc_ir[get_value(expression.lhs)]
+            ix_ir = "ix_"*get_value(expression.lhs)
+            ir = "NV_Ith_S(y, $ix_ir)"
+            emit(ir_builder, ir)
+        else
+            # If it is a single value, just print it
+            emit(ir_builder, get_value(expression.lhs))
+        end
+
+        op = expression.expression.position.value
+        emit(ir_builder, " $op ")
+
+        if expression.rhs isa BinaryOpNode
+            # If the left hand side is a binary operation
+            traverse_ode_expr(expression.rhs, ir_builder)
+        elseif expression.rhs isa IdentifierNode
+            ix_ir = "ix_"*get_value(expression.rhs)
+            ir = "NV_Ith_S(y, $ix_ir)"
+            emit(ir_builder, ir)
+        else
+            # If it is a single value, just print it
+            emit(ir_builder, get_value(expression.rhs))
+        end
+    end
+
+    function ir_solve_clause!(solve_clause, lhs_assgn_to_node, 
+            rhs_assgn_to_node, ir_builder)
+        """
+        Solve Clause Node
+        """
+
+        var_bind_ir = "[](auto &lhs, auto &m1, auto &varset) {"
+
+        emit(ir_builder, var_bind_ir)
+
+        # println("check: ", solve_clause.variables)
+        # exit(0)
+
+        var_attr_loc = Dict()
+
+        # Handle variable binding
+        map((bv_node) -> begin
+
+                # TODO: Generalize for multiple var odes
+                dep_vars = get_value(bv_node.value[1])
+
+                bv_name = get_value(bv_node.name)
+                # bv_pos = rhs_assgn_to_node[bv_name][1]
+                bv_pos = lhs_assgn_to_node[dep_vars][1]
+
+                attr_pos = lhs_assgn_to_node[dep_vars][4][3]
+
+                ir = nothing
+                if attr_pos > 2
+                    bv_attr = assgn_to_node[bv_name][4][2]
+                    attr_ir = "&lhs[m1[$bv_pos]].$bv_attr"
+                    ir = "varset.insert(&lhs[m1[$bv_pos]].$bv_attr);"
+                else
+                    attr_ir = "&lhs[m1[$bv_pos]].position[$(attr_pos-1)]"
+                    ir = "varset.insert(&lhs[m1[$bv_pos]].position[$(attr_pos-1)]);"
+                end
+
+                ir_ix_attr_loc = "varmap.at($attr_ir)"
+                var_attr_loc[dep_vars] = ir_ix_attr_loc
+
+                emit(ir_builder, ir)
+            end,
+            solve_clause.variables
+           )
+
+        emit(ir_builder, "},")
+
+        emit(ir_builder, "[&](auto &lhs, auto &m1, auto y, auto ydot, auto &varmap) {")
+
+        # Fetch all the dependent variables first
+        map(
+            dep_var -> begin
+                var_loc_ir = var_attr_loc[dep_var]
+                ir = "auto ix_$dep_var = $var_loc_ir;"
+                emit(ir_builder, ir)
+            end, collect(keys(var_attr_loc))
+           )
+
+        map( assgn_node -> begin
+
+                ode_name = get_value(assgn_node.name)
+                ode_value = assgn_node.value
+
+                bv_name = ode_name
+                bv_pos = rhs_assgn_to_node[bv_name][1]
+                attr_pos = rhs_assgn_to_node[bv_name][4][3]
+
+                ir_attr = nothing
+                if attr_pos > 2
+                    bv_attr = assgn_to_node[bv_name][4][2]
+                    ir_atttr = bv_attr
+                else
+                    ir_attr = "position[$(attr_pos-1)]"
+                end
+
+                ir = "NV_Ith_S(ydot, varmap[&lhs[m1[$bv_pos]].$ir_attr]) += "
+
+                expr_ir = IRBuilder([])
+
+                traverse_ode_expr(ode_value, expr_ir, var_attr_loc)
+
+                build_expr_ir = join(expr_ir.instructions)
+                ir = ir * build_expr_ir * ";"
+                emit(ir_builder, ir)
+
+            end, solve_clause.clause
+           )
+
+        emit(ir_builder, "}")
+        # check = build(ir_builder)
+    end
+
     function ir_rule!(ir_builder, rule_node,
-                type_namespace, symbol_tables, propensity_table)
+        type_namespace, symbol_tables, propensity_table)
+        """
+        Generates the IR for a rule, including its header, nodes, and edges.
+        """
 
         rule_name = get_value(rule_node.name)
 
@@ -86,10 +217,20 @@ module IRRuleGeneration
         rhs_name = "$(rule_name)_rhs"
         emit(ir_builder, "GT $rhs_name;")
         emit_add_nodes(ir_builder, rhs_name, rhs_node_type, type_namespace)
+
+        # Building propensity function
+        modify_clause = rule_node.modify_clause
         
+        rule_hdr = nothing
         # Generating the rule
-        with_rule_hdr = "DGGML::WithRule<GT> $rule_name(\"$rule_name\", $lhs_name, $rhs_name,"
-        emit(ir_builder, with_rule_hdr)
+        if modify_clause isa WithClauseNode
+            rule_hdr = "DGGML::WithRule<GT> $rule_name(\"$rule_name\", $lhs_name, $rhs_name,"
+        elseif modify_clause isa SolveClauseNode
+            rule_hdr = "DGGML::SolvingRule<GT> $rule_name(\"$rule_name\", $lhs_name, $lhs_name,"
+        else
+            error("Unknown modify clause type: $(typeof(modify_clause))")
+        end
+        emit(ir_builder, rule_hdr)
 
         lhs_names, lhs_types, lhs_order_of_nodes = build_node_pos_to_type(lhs_node_type)
         lhs_param_to_node, lhs_assgn_to_node = link_param_to_nodes(lhs_param,
@@ -105,37 +246,54 @@ module IRRuleGeneration
                                                 symbol_tables,
                                                 rhs_names)
 
-        # Building propensity function
-        with_clause = rule_node.modify_clause
 
-        # Parse with clause
-        where_ir_builder = IRBuilder([])
+        if modify_clause isa WithClauseNode
+            with_clause = modify_clause
+            # Parse with clause
+            where_ir_builder = IRBuilder([])
 
-        where_clause = with_clause.where_clause.clause
+            where_clause = with_clause.where_clause.clause
 
-        ir_where_clause!(where_clause,
-                where_ir_builder,
-                lhs_param_to_node, lhs_assgn_to_node,
-                rhs_param_to_node, rhs_assgn_to_node,
-                symbol_tables, type_namespace, propensity_table)
+            ir_where_clause!(where_clause,
+                    where_ir_builder,
+                    lhs_param_to_node, lhs_assgn_to_node,
+                    rhs_param_to_node, rhs_assgn_to_node,
+                    symbol_tables, type_namespace, propensity_table)
 
-        prop_ir_builder = IRBuilder([])
-        prop_hdr = "[&](auto &lhs, auto &m) {\n"
-        emit(prop_ir_builder, prop_hdr)
-        # exit(0)
-        #
-        ir_propensity!(with_clause, prop_ir_builder, propensity_table)
+            prop_ir_builder = IRBuilder([])
+            prop_hdr = "[&](auto &lhs, auto &m) {\n"
+            emit(prop_ir_builder, prop_hdr)
+            # exit(0)
+            #
+            ir_propensity!(with_clause, prop_ir_builder, propensity_table)
 
-        emit(ir_builder, build(prop_ir_builder))
-        emit(ir_builder, build(where_ir_builder))
+            emit(ir_builder, build(prop_ir_builder))
+            emit(ir_builder, build(where_ir_builder))
 
-        # Finish propensity
-        # Now you need to check that the parameter number
-        # matches with the attribute number in the c++ class.
-        # fetch the class name
+            # Finish propensity
+            # Now you need to check that the parameter number
+            # matches with the attribute number in the c++ class.
+            # fetch the class name
+        elseif modify_clause isa SolveClauseNode
+            solve_clause = modify_clause
+            num_vars = length(solve_clause.variables)
+            emit(ir_builder, "$num_vars,")
+            # println("lhs_param_to_node: ", lhs_param_to_node)
+            # println("symbols_tables: ", symbol_tables)
+            # exit(0)
+            solve_ir_builder = IRBuilder([])
+            ir_solve_clause!(solve_clause,
+                             lhs_assgn_to_node,
+                             rhs_assgn_to_node,
+                             solve_ir_builder)
+
+            emit(ir_builder, build(solve_ir_builder))
+        end
+
         emit(ir_builder, ");")
         emit(ir_builder, "gamma.addRule($rule_name);")
         emit(ir_builder, "};")
+
     end
 
 

@@ -26,8 +26,8 @@ create_particle := (p1 : ParticleNodeCreator) << x, y, counter >>
         p4_x : Float = x + 0.6
         p4_y : Float = y + 0.1
 
-        p5_x : Float = x - 0.4
-        p5_y : Float = y - 0.3
+        p5_x : Float = x + 1.0
+        p5_y : Float = y + 1.0
 
     }
 

@@ -1,4 +1,3 @@
-
 """
 This file defines the abstract syntax tree (AST) nodes for the FoxFlow language.
 """
@@ -58,15 +57,6 @@ module AstNodes
     abstract type ModifyClauseNode <: Node
     end
 
-    struct SolveClauseNode <: ModifyClauseNode
-        name::Token
-        clause::Array{Token}
-    end
-
-    struct WhereClauseNode <: ModifyClauseNode
-        clause::Array{Node}
-    end
-
     struct BinaryOpNode <: Node
         expression :: Union{
                             OperatorToken,
@@ -79,6 +69,30 @@ module AstNodes
         rhs :: Node
     end
 
+    struct BindingVariableNode <: Node
+        name::IdentifierNode
+        # What the derivative is in respect to.
+        value::Array{Any}
+    end
+
+    struct ODENode <: Node
+        name :: IdentifierNode
+        value :: Union{BinaryOpNode,
+                       IdentifierNode,
+                        IntegerNode,
+                        FloatNode
+                      }
+    end
+
+    struct SolveClauseNode <: ModifyClauseNode
+        variables::Array{BindingVariableNode}
+        clause::Array{ODENode}
+    end
+
+    struct WhereClauseNode <: ModifyClauseNode
+        clause::Array{Node}
+    end
+    
     struct WithClauseNode <: ModifyClauseNode
         # name::Token
         function_node:: Union{
@@ -95,7 +109,6 @@ module AstNodes
         parameter :: ParameterNode
     end
 
-
     struct TypeInstanceNode <: Node
         name  :: IdentifierNode
         parameter :: ParameterNode
@@ -107,6 +120,7 @@ module AstNodes
                        }
     end
 
+    
     abstract type EdgeNode <: Node
     end
 

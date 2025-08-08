@@ -427,8 +427,8 @@ function generate_ir()
 
     name_space = "Particles"
 
+    # test_folder = "particle_sim"
     test_folder = "particle_sim_branching"
-    # test_folder = "particle_sim_no_ode"
 
     base = "../tests/generated_tests/generated_2/"
 
@@ -454,7 +454,6 @@ function generate_ir()
     ast_rules = parse_file!(tokens_rules)[1]
 
     println("Generating Rules")
-
     ir_rules_section = ir_rules_section!(ast_rules,
                                          rules_table, symbol_tables,
                                          propensity_table, type_namespace)

@@ -195,6 +195,10 @@ module Tokens
         position::PositionToken
     end
 
+    struct ODEToken <: Token
+        position::PositionToken
+    end
+
     struct IntegerToken <: Token
         position::PositionToken
     end
