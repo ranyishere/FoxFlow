@@ -139,6 +139,8 @@ geoplex2D.init(
                         settings.CELL_DY,
                         settings.MAXIMAL_REACTION_RADIUS
                 );
+	particle_rules::start_to_node(gamma, this->system_graph, settings);
+	particle_rules::create_particle(gamma, this->system_graph, settings);
 
 		this->add_default_type(this->system_graph,
                     geoplex2D,

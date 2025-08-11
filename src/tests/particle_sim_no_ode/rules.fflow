@@ -9,9 +9,11 @@ start_to_node := (start : StartType) << start_x, start_y >>
 
 create_particle := (p1 : ParticleNodeCreator) << x, y, counter >> 
         -> (p1 : ParticleNodeCreator) (p2 : ParticleNode) -- (p3 : ParticleNode) -- (p4 : ParticleNode)
-        (p3 : ParticleNode) -- (p5 : ParticleNode) << new_x, new_y, new_counter, (p2_x, p2_y), (p3_x, p3_y), (p4_x, p4_y) >> with (heaviside(counter, 1)) where {
+        << (new_x, new_y, new_counter), (p2_x, p2_y), (p3_x, p3_y), (p4_x, p4_y) >> with (heaviside(counter, 1)) where {
 
         new_counter : Integer = counter - 1
+        new_x : Float = x - 0.9
+        new_y : Float = y - 0.9
 
         p2_x : Float = x + 0.3
         p2_y : Float = y + 0.3
@@ -22,8 +24,6 @@ create_particle := (p1 : ParticleNodeCreator) << x, y, counter >>
         p4_x : Float = x + 0.6
         p4_y : Float = y + 0.1
 
-        new_x : Float = x - 0.9
-        new_y : Float = y - 0.9
 
     }
 

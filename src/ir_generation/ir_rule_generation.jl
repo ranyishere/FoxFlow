@@ -3,19 +3,202 @@
         Module for generating Intermediate Representation (IR) for rules in a grammar.
 """
 
-
 module IRRuleGeneration
+
     import ..IRUtils: get_value, convert_type_name
-
     import ..IRBuildUtils: emit, build, IRBuilder
-    import ...AstNodes: RuleNode, IdentifierNode, TypeInstanceNode, UndirectedTypeEdgeNode, BinaryOpNode, ExpressionNode, ParameterNode
-    export ir_rule!
+    import ...AstNodes: RuleNode, IdentifierNode, TypeInstanceNode,
+            UndirectedTypeEdgeNode, BinaryOpNode, ExpressionNode, ParameterNode,
+            WithClauseNode, SolveClauseNode
 
-    """
-    Generates the IR for a rule, including its header, nodes, and edges.
-    """
+    export ir_rules_section!
+
+    using OrderedCollections
+
+    function ir_rules_section!(
+            ast, rules_table, symbol_tables,
+            propensity_table, type_namespace
+        )
+        """
+        Generate intermediate rules
+        for the section.
+        """
+
+        rule_section_name = get_value(ast.name)
+        global rule_namespace = rule_section_name
+
+        rule_section_header = [
+            "#ifndef DGGML_RULES_HPP",
+            "#define DGGML_RULES_HPP",
+            "#include \"types.h\"",
+            "#include \"parameters.h\"",
+            "namespace $rule_section_name {",
+            "using GT = $type_namespace::graph_type;"
+        ]
+
+        rules_ir = IRBuilder([])
+
+        map(
+            (hdr) -> begin
+                emit(rules_ir, hdr)
+            end,
+            rule_section_header
+        )
+
+
+        map(
+            (rule) -> begin
+                build_rules_table(rule,
+                                  rules_table,
+                                  type_namespace)
+                ir_rule!(rules_ir, rule,
+                         type_namespace,
+                         symbol_tables,
+                         propensity_table)
+            end, ast.rules_list
+           )
+
+        emit(rules_ir, "}\n#endif")
+        build(rules_ir)
+    end
+
+    function traverse_ode_expr(expression, ir_builder, var_loc_attr)
+        """
+        Generates ir for an ODE expression
+        by traversing the expression tree.
+        """
+
+        if !(expression isa BinaryOpNode)
+            emit(ir_builder, " $(get_value(expression)) ")
+            return
+        end
+
+        if expression.lhs isa BinaryOpNode
+            # If the left hand side is a binary operation
+            traverse_ode_expr(expression.lhs, ir_builder)
+        elseif expression.lhs isa IdentifierNode
+            # ix_ir = var_loc_ir[get_value(expression.lhs)]
+            ix_ir = "ix_"*get_value(expression.lhs)
+            ir = "NV_Ith_S(y, $ix_ir)"
+            emit(ir_builder, ir)
+        else
+            # If it is a single value, just print it
+            emit(ir_builder, get_value(expression.lhs))
+        end
+
+        op = expression.expression.position.value
+        emit(ir_builder, " $op ")
+
+        if expression.rhs isa BinaryOpNode
+            # If the left hand side is a binary operation
+            traverse_ode_expr(expression.rhs, ir_builder)
+        elseif expression.rhs isa IdentifierNode
+            ix_ir = "ix_"*get_value(expression.rhs)
+            ir = "NV_Ith_S(y, $ix_ir)"
+            emit(ir_builder, ir)
+        else
+            # If it is a single value, just print it
+            emit(ir_builder, get_value(expression.rhs))
+        end
+    end
+
+    function ir_solve_clause!(solve_clause, lhs_assgn_to_node, 
+            rhs_assgn_to_node, ir_builder)
+        """
+        Solve Clause Node
+        """
+
+        var_bind_ir = "[](auto &lhs, auto &m1, auto &varset) {"
+
+        emit(ir_builder, var_bind_ir)
+
+        # println("check: ", solve_clause.variables)
+        # exit(0)
+
+        var_attr_loc = Dict()
+
+        # Handle variable binding
+        map((bv_node) -> begin
+
+                # TODO: Generalize for multiple var odes
+                dep_vars = get_value(bv_node.value[1])
+
+                bv_name = get_value(bv_node.name)
+                # bv_pos = rhs_assgn_to_node[bv_name][1]
+                bv_pos = lhs_assgn_to_node[dep_vars][1]
+
+                attr_pos = lhs_assgn_to_node[dep_vars][4][3]
+
+                ir = nothing
+                if attr_pos > 2
+                    bv_attr = assgn_to_node[bv_name][4][2]
+                    attr_ir = "&lhs[m1[$bv_pos]].$bv_attr"
+                    ir = "varset.insert(&lhs[m1[$bv_pos]].$bv_attr);"
+                else
+                    attr_ir = "&lhs[m1[$bv_pos]].position[$(attr_pos-1)]"
+                    ir = "varset.insert(&lhs[m1[$bv_pos]].position[$(attr_pos-1)]);"
+                end
+
+                ir_ix_attr_loc = "varmap.at($attr_ir)"
+                var_attr_loc[dep_vars] = ir_ix_attr_loc
+
+                emit(ir_builder, ir)
+            end,
+            solve_clause.variables
+           )
+
+        emit(ir_builder, "},")
+
+        emit(ir_builder, "[&](auto &lhs, auto &m1, auto y, auto ydot, auto &varmap) {")
+
+        # Fetch all the dependent variables first
+        map(
+            dep_var -> begin
+                var_loc_ir = var_attr_loc[dep_var]
+                ir = "auto ix_$dep_var = $var_loc_ir;"
+                emit(ir_builder, ir)
+            end, collect(keys(var_attr_loc))
+           )
+
+        map( assgn_node -> begin
+
+                ode_name = get_value(assgn_node.name)
+                ode_value = assgn_node.value
+
+                bv_name = ode_name
+                bv_pos = rhs_assgn_to_node[bv_name][1]
+                attr_pos = rhs_assgn_to_node[bv_name][4][3]
+
+                ir_attr = nothing
+                if attr_pos > 2
+                    bv_attr = assgn_to_node[bv_name][4][2]
+                    ir_atttr = bv_attr
+                else
+                    ir_attr = "position[$(attr_pos-1)]"
+                end
+
+                ir = "NV_Ith_S(ydot, varmap[&lhs[m1[$bv_pos]].$ir_attr]) += "
+
+                expr_ir = IRBuilder([])
+
+                traverse_ode_expr(ode_value, expr_ir, var_attr_loc)
+
+                build_expr_ir = join(expr_ir.instructions)
+                ir = ir * build_expr_ir * ";"
+                emit(ir_builder, ir)
+
+            end, solve_clause.clause
+           )
+
+        emit(ir_builder, "}")
+        # check = build(ir_builder)
+    end
+
     function ir_rule!(ir_builder, rule_node,
-                type_namespace, symbol_tables, propensity_table)
+        type_namespace, symbol_tables, propensity_table)
+        """
+        Generates the IR for a rule, including its header, nodes, and edges.
+        """
 
         rule_name = get_value(rule_node.name)
 
@@ -34,49 +217,83 @@ module IRRuleGeneration
         rhs_name = "$(rule_name)_rhs"
         emit(ir_builder, "GT $rhs_name;")
         emit_add_nodes(ir_builder, rhs_name, rhs_node_type, type_namespace)
-        
-        # Generating the rule
-        with_rule_hdr = "DGGML::WithRule<GT> $rule_name(\"$rule_name\", $lhs_name, $rhs_name,
-                                 [&](auto &lhs, auto &m) {\n"
-        emit(ir_builder, with_rule_hdr)
-
-        lhs_node_ix_to_type = build_node_pos_to_type(lhs_node_type)
-        lhs_param_to_node = build_param_node_link(lhs_param, 
-                              lhs_node_ix_to_type,
-                              lhs_node_type, symbol_tables)
-
-        rhs_node_ix_to_type = build_node_pos_to_type(rhs_node_type)
-        rhs_param_to_node = build_param_node_link(rhs_param,
-                              rhs_node_ix_to_type,
-                              rhs_node_type, symbol_tables)
 
         # Building propensity function
-        with_clause = rule_node.modify_clause
+        modify_clause = rule_node.modify_clause
+        
+        rule_hdr = nothing
+        # Generating the rule
+        if modify_clause isa WithClauseNode
+            rule_hdr = "DGGML::WithRule<GT> $rule_name(\"$rule_name\", $lhs_name, $rhs_name,"
+        elseif modify_clause isa SolveClauseNode
+            rule_hdr = "DGGML::SolvingRule<GT> $rule_name(\"$rule_name\", $lhs_name, $lhs_name,"
+        else
+            error("Unknown modify clause type: $(typeof(modify_clause))")
+        end
+        emit(ir_builder, rule_hdr)
 
-        # Parse with clause
-        where_ir_builder = IRBuilder([])
+        lhs_names, lhs_types, lhs_order_of_nodes = build_node_pos_to_type(lhs_node_type)
+        lhs_param_to_node, lhs_assgn_to_node = link_param_to_nodes(lhs_param,
+                                                lhs_types,
+                                                symbol_tables,
+                                                lhs_names)
 
-        where_clause = with_clause.where_clause.clause
+        # rhs_node_ix_to_type, rhs_names, rhs_types = build_node_pos_to_type(rhs_node_type)
+        rhs_names, rhs_types, rhs_order_of_nodes = build_node_pos_to_type(rhs_node_type)
 
-        ir_where_clause!(where_clause,
-                where_ir_builder,
-                lhs_node_ix_to_type,lhs_param_to_node,
-                rhs_node_ix_to_type, rhs_param_to_node,
-                symbol_tables, type_namespace, propensity_table)
+        rhs_param_to_node, rhs_assgn_to_node = link_param_to_nodes(rhs_param,
+                                                rhs_types,
+                                                symbol_tables,
+                                                rhs_names)
 
-        prop_ir_builder = IRBuilder([])
-        ir_propensity!(with_clause, prop_ir_builder, propensity_table)
 
-        emit(ir_builder, build(prop_ir_builder))
-        emit(ir_builder, build(where_ir_builder))
+        if modify_clause isa WithClauseNode
+            with_clause = modify_clause
+            # Parse with clause
+            where_ir_builder = IRBuilder([])
 
-        # Finish propensity
-        # Now you need to check that the parameter number
-        # matches with the attribute number in the c++ class.
-        # fetch the class name
+            where_clause = with_clause.where_clause.clause
+
+            ir_where_clause!(where_clause,
+                    where_ir_builder,
+                    lhs_param_to_node, lhs_assgn_to_node,
+                    rhs_param_to_node, rhs_assgn_to_node,
+                    symbol_tables, type_namespace, propensity_table)
+
+            prop_ir_builder = IRBuilder([])
+            prop_hdr = "[&](auto &lhs, auto &m) {\n"
+            emit(prop_ir_builder, prop_hdr)
+            # exit(0)
+            #
+            ir_propensity!(with_clause, prop_ir_builder, propensity_table)
+
+            emit(ir_builder, build(prop_ir_builder))
+            emit(ir_builder, build(where_ir_builder))
+
+            # Finish propensity
+            # Now you need to check that the parameter number
+            # matches with the attribute number in the c++ class.
+            # fetch the class name
+        elseif modify_clause isa SolveClauseNode
+            solve_clause = modify_clause
+            num_vars = length(solve_clause.variables)
+            emit(ir_builder, "$num_vars,")
+            # println("lhs_param_to_node: ", lhs_param_to_node)
+            # println("symbols_tables: ", symbol_tables)
+            # exit(0)
+            solve_ir_builder = IRBuilder([])
+            ir_solve_clause!(solve_clause,
+                             lhs_assgn_to_node,
+                             rhs_assgn_to_node,
+                             solve_ir_builder)
+
+            emit(ir_builder, build(solve_ir_builder))
+        end
+
         emit(ir_builder, ");")
         emit(ir_builder, "gamma.addRule($rule_name);")
         emit(ir_builder, "};")
+
     end
 
 
@@ -183,11 +400,6 @@ module IRRuleGeneration
                                       rhs_count, rhs_node_registry, rhs_node_key,
                                       type_namespace)
             else
-                # @assert each_node_info[2] isa TypeInstanceNode "Expected TypeInstanceNode, got $(typeof(each_node_info[2]))"
-
-                println("$(typeof(each_node_info[2]))")
-                println(typeof(each_node_info[2]) isa Main.UndirectedTypeEdgeNode)
-
                 # Single Node
                 rhs_node_count = rhs_count
                 node_type = get_value(each_node_info[2].type.name)
@@ -219,6 +431,111 @@ module IRRuleGeneration
     end
 
     function build_node_pos_to_type(type_nodes)
+
+        function extract_edge_vertex_type(node)
+            if node isa UndirectedTypeEdgeNode
+                left_vertex = node.left_vertex
+                right_vertex = node.right_vertex
+                left_type_name = get_value(left_vertex.type.name)
+                right_type_name = get_value(right_vertex.type.name)
+                return (left_type_name,
+                        right_type_name)
+            else
+                return (get_value(node.type.name),)
+            end
+        end
+
+        function extract_edge_vertex_name(node)
+            if node isa UndirectedTypeEdgeNode
+                left_vertex = node.left_vertex
+                right_vertex = node.right_vertex
+                return (get_value(left_vertex.name), get_value(right_vertex.name))
+            else
+                return (get_value(node.name),)
+            end
+        end
+
+        function oof(node_names, node_types)
+            
+            node_type_map = OrderedDict{String, Any}()
+
+            order_of_nodes = []
+            count = 1
+            for (name_tuple, type_tuple) in zip(node_names, node_types)
+                for (name, ntype) in zip(name_tuple, type_tuple)
+                    if !haskey(node_type_map, name)
+                        push!(order_of_nodes, name)
+                        # node_type_map[name] = [ntype]
+                        node_type_map[name] = count
+                        count += 1
+                    else
+                        # push!(node_type_map[name], ntype)
+                    end
+                end
+            end
+            # Display result
+            # for (name, ntype) in node_type_map
+                # println("$name => $ntype")
+            # end
+            # node_type_map
+            # println("node_type_map: $node_type_map\n")
+            # order_of_nodes
+            node_type_map
+        end
+
+
+        node_states = Dict()
+
+        zipped_together = []
+
+        # If the node is an undirected edge and the next node is an undirected edge.
+        # Check if the left vertex is the same as the right vertex.
+
+        node_types = []
+        node_names = []
+
+        count = 0
+        types = map(
+                    (node) -> begin
+
+                    extracted_types = extract_edge_vertex_type(node)
+                    extracted_names = extract_edge_vertex_name(node)
+
+                    push!(node_types, extracted_types)
+                    push!(node_names, extracted_names)
+            end,
+            type_nodes
+        )
+
+        unique_vert = []
+        unique_types = []
+        for (ix, edge) in enumerate(node_names)
+            if length(edge) < 2
+                # If it is a single node, we can just push it
+                push!(unique_vert, edge[1])
+                push!(unique_types, node_types[ix][1])
+            else
+
+                if edge[1] != unique_vert[end]
+                    # If the left vertex is not the same as the last unique vertex
+                    push!(unique_vert, edge[1])
+                    push!(unique_types, node_types[ix][1])
+                end
+
+                if edge[2] != edge[1]
+                    push!(unique_vert, edge[2])
+                    push!(unique_types, node_types[ix][2])
+                end
+            end
+        end
+
+        order_of_nodes = oof(node_names, node_types)
+
+        # verts, node_names, node_types
+        unique_vert, unique_types, order_of_nodes
+    end
+
+    function build_node_pos_to_type_old(type_nodes)
         """
         From the node position, retrieve
         the type of the node.
@@ -228,6 +545,8 @@ module IRRuleGeneration
             "node_ix": node_type_name
         }
         """
+
+        # TODO: Count all nodes even duplicates? Right now 
 
         # FIXME: For some reason a triple edge node is returning not the correct
         # edge type
@@ -244,6 +563,7 @@ module IRRuleGeneration
             (info) -> begin
             # node_ix = pos_count
             node = info
+
 
             if node isa UndirectedTypeEdgeNode
                 # If it is an edge node, we need to
@@ -305,18 +625,9 @@ module IRRuleGeneration
                 # It's a solo node
                 node_type = get_value(node.type.name)
                 node_name = get_value(node.name)
-
-                if !(node_name in solo_name_registry)
-                    pos_to_type[pos_count] = node_type
-                    pos_count += 1
-                    push!(solo_name_registry, node_name)
-                else
-                    # If the name is already registered
-                    # we should not add it again.
-                    println("the node name is already registered: $node_name")
-                    exit(0)
-                    return
-                end
+                pos_count += 1
+                pos_to_type[pos_count] = node_type
+                push!(solo_name_registry, node_name)
 
             end
             
@@ -327,46 +638,283 @@ module IRRuleGeneration
         pos_to_type
     end
 
-    function build_param_node_link(param, nodes_attr, nodes, symbol_tables)
+    function link_param_to_nodes(param, node_types, symbol_tables, node_names)
+        """
+        Links each parameter to its corresponding node.
+        Returns a tuple of two dictionaries:
+        - params_var_count: Maps parameter names to their counts in nodes.
+        - params_var_loc: Maps parameter names to their node locations.
 
-            params_var = Dict()
+        Args:
+            param: The parameter node containing the parameters.
+            nodes_attr: The attributes of the nodes.
+            nodes: The nodes in the graph.
+            symbol_tables: The symbol tables for the nodes.
+
+        Returns:
+            A tuple containing two dictionaries.
+        """
+
+        # println("param: $param\n")
+        user_param_names = map(
+            (x) -> begin get_value(x) end,
+            param.token
+        )
+
+        ix = 0
+        node_attrs = []
+
+        for node_type in node_types
+
+            if !(node_type in collect(keys(symbol_tables)))
+                println("Node type $node_type not found in symbol tables.")
+                continue
+            end
+
+            total_node_attr = symbol_tables[node_type]
+
+            # Map this to user_param_names by position
+            tmp_attr = []
+            for ix_node_attr in 1:length(total_node_attr)
+                node_attr = total_node_attr[ix_node_attr]
+                attr_type = convert_type_name(node_attr[1])
+                attr_name = node_attr[2]
+
+                push!(tmp_attr, (attr_type, attr_name, ix_node_attr))
+            end
+
+            push!(node_attrs, tmp_attr)
+
+        end
+
+        flatten_node_attrs = map(
+                                 (x) -> begin
+                                    map(
+                                        (y) -> begin
+                                            y
+                                        end,
+                                        x
+                                    )
+                                 end, node_attrs
+                            )
+
+
+        flatten_node_attrs = collect(Iterators.flatten(flatten_node_attrs))
+
+
+        node_to_params = []
+        node_to_types = []
+        node_to_loc = []
+        unique_count = 0
+        seen = Dict()
+        # Map parameters to their node locations
+        for (ix, node_name) in enumerate(node_names)
+
+            cur_count = nothing
+            if !(node_name in collect(keys(seen)))
+                unique_count += 1
+                seen[node_name] = unique_count
+                cur_count = unique_count
+            else
+                cur_count = seen[node_name]
+            end
+            cur_attr = node_attrs[ix]
+            push!(node_to_params, fill(node_name, length(cur_attr)))
+            push!(node_to_types, fill(node_types[ix], length(cur_attr)))
+            push!(node_to_loc, fill(cur_count, length(cur_attr)))
+        end
+
+        node_to_params = collect(Iterators.flatten(node_to_params))
+        node_to_types = collect(Iterators.flatten(node_to_types))
+        node_to_loc = collect(Iterators.flatten(node_to_loc))
+
+        zipped = collect(zip(node_to_loc, node_to_params, node_to_types,
+                             flatten_node_attrs, user_param_names))
+
+        param_name_to_node = Dict()
+        for (node_loc, node_param, node_type, attr, user_param_name) in zipped
+            param_name_to_node[user_param_name] = (node_loc, node_param, node_type, attr)
+        end
+
+        zipped, param_name_to_node
+    end
+
+    """
+    Links each parameter to its corresponding node.
+    """
+    function build_param_node_link_old(param, nodes_attr, nodes, symbol_tables)
+        params_var_count = Dict()
+        params_var_loc = Dict()
+
+        param_count = 1
+
+        # (param_count, node_loc)
+        # node_param_count = Dict()
+        # param_stack = copy(param)
+        node_count = 1
+        global_param_count = 0
+
+        total_param_names = map( (x) -> begin get_value(x) end, param.token)
+        for each_param in total_param_names
+            params_var_count[each_param] = []
+            params_var_loc[each_param] = []
+        end
+
+        println("total_param_names: $total_param_names\n")
+        print("nodes_attr: $nodes_attr\n")
+        total_node_pos = collect(keys(nodes_attr))
+
+        println("total_node_pos ------->: $total_node_pos\n")
+        # NOTE: there are actually only 5 nodes here that are unique.
+        # but there is a reference to the same node multiple times
+
+        # Map node position
+        node_pos = 1
+        global_param_count_check = 1
+
+        # FIXME: Okay the issue is that the hashmap is unique and so its getting counted multiple times for node 5 but what would node 3?
+        print("total_param_names: $total_param_names\n")
+        while node_pos <= length(total_node_pos)
+
+            println("node_pos: $node_pos\n")
+
             param_count = 1
-
-            # (param_count, node_loc)
-            # node_param_count = Dict()
-            # param_stack = copy(param)
-            node_count = 1
-            global_param_count = 0
-
-            total_param_names = map( (x) -> begin get_value(x) end, param.token)
-            total_node_pos = collect(keys(nodes_attr))
-
-            println("total_node_pos --->: $total_node_pos")
-            println("nodes_attr ---->: $nodes_attr")
-            # Note there are actually only 5 nodes here that are unique.
-            # but there is a reference to the same node multiple times
-
-            # Map node position
-            node_pos = 1
-            global_param_count_check = 1
-            while node_pos <= length(total_node_pos)
-                param_count = 1
-                node_type = nodes_attr[node_pos]
-                node_params = symbol_tables[node_type]
-                while param_count <= length(node_params)
-                    user_param = total_param_names[global_param_count_check]
-                    params_var[user_param] = (param_count, node_pos)
-                    param_count += 1
-                    global_param_count_check += 1
-                end
+            node_type = nodes_attr[node_pos]
+            node_params = symbol_tables[node_type]
+            while param_count <= length(node_params)
+                user_param = total_param_names[global_param_count_check]
+                println("user_param ---->: $user_param\n")
+                # params_var[user_param] = (param_count, node_pos)
+                # params_var[user_param] = (param_count, node_pos)
+                push!(params_var_count[user_param], param_count)
+                push!(params_var_loc[user_param],  node_pos)
+                param_count += 1
+                global_param_count_check += 1
+            end
 
                 node_pos += 1
             end
 
             # Params count and
             # (param_count, node_loc)
+
+        params_var = (params_var_count, 
+                      params_var_loc)
         params_var
     end
+
+    function ir_where_left_clause!(lhs, type_namespace, symbol_tables,
+                                   propensity_table, ir_builder)
+
+        for (ix, param) in enumerate(lhs)
+
+            node_loc = param[1]
+            node_type = param[3]
+            attr_type = param[4][1]
+            attr_name = param[4][2]
+            user_param_name = param[end]
+
+            ir = "$attr_type $user_param_name = std::get<$type_namespace::$node_type>(lhs[m1[$node_loc]].data).$attr_name;\n"
+
+            println("ir: ", ir)
+            emit(ir_builder, ir)
+
+            ir_prop = "$attr_type $user_param_name = std::get<$type_namespace::$node_type>(lhs[m[$node_loc]].data).$attr_name;\n"
+            propensity_table[user_param_name] = ir_prop
+        end
+
+    end
+
+    function ir_where_right_clause!(
+                rhs, type_namespace, symbol_tables,
+                propensity_table, ir_builder
+            )
+
+        rhs_table = Dict()
+
+        for (ix, param) in enumerate(rhs)
+
+            node_loc = param[1]
+            node_type = param[3]
+            attr_type = param[4][1]
+            attr_name = param[4][2]
+            user_param_name = param[end]
+
+            node_name = "rhs_node_"*string(node_loc)
+
+            # NOTE: Do I need this??
+            if !(node_name in collect(keys(rhs_table)))
+                assign_ir = "$type_namespace::$node_type $node_name = std::get<$type_namespace::$node_type>(rhs[m2[$node_loc]].data);"
+                rhs_table[node_name] = assign_ir
+                emit(ir_builder, assign_ir)
+            end
+
+        end
+
+    rhs_table
+    end
+
+    function ir_where_clause!(where_clause, ir_builder,
+        lhs_param_to_node, lhs_assgn_to_node, rhs_param_to_node,
+        rhs_assgn_to_node, symbol_tables, type_namespace, propensity_table)
+
+        where_hdr = "[&](auto &lhs, auto &rhs, auto &m1, auto &m2) {"
+        emit(ir_builder, where_hdr)
+
+        ir_where_left_clause!(lhs_param_to_node, type_namespace,
+                              symbol_tables, propensity_table, ir_builder)
+
+        rhs_table = ir_where_right_clause!(rhs_param_to_node, type_namespace,
+                                   symbol_tables, propensity_table, ir_builder)
+
+        map(
+            (assign_node) -> begin
+
+                name = get_value(assign_node.name)
+
+                rhs_assgn_node = rhs_assgn_to_node[name]
+
+
+                # node_type = assign_node.type.name
+                # assn_type = convert_type_name(get_value(assign_node.type.name))
+                node_value = assign_node.value
+
+                local_namespace = type_namespace
+                assgn_expr = []
+                map( (expr) -> begin
+
+                        ir =  expr.position.value
+                        push!(assgn_expr, ir)
+
+                    end,
+                node_value)
+                joined_expr = join(assgn_expr)
+
+                assigned_param = rhs_assgn_node[4][3]
+                assigned_node = rhs_assgn_node[1]
+                rhs_attr = rhs_assgn_node[4][2]
+                node_type = rhs_assgn_node[3]
+
+                # assigned_param_name = assigned_param
+                ir = "\t\tstd::get<$type_namespace::$node_type>(rhs[m2[$assigned_node]].data).$rhs_attr = $joined_expr;"
+                if assigned_param == 1 || assigned_param == 2
+                    ir_node_pos = "\t\trhs[m2[$assigned_node]].position[$(assigned_param-1)] = $joined_expr;"
+                    emit(ir_builder, ir_node_pos)
+                end
+
+                emit(ir_builder, ir)
+
+
+            end, 
+            where_clause
+        )
+
+        emit(ir_builder, "}")
+        # check = build(ir_builder)
+        # println("Generated IR for where clause: $check\n")
+        # exit(0)
+    end
+
 
     # TODO: Handle expressions.
     """
@@ -392,14 +940,19 @@ module IRRuleGeneration
     the left hand side we are doing a
     bunch of gets.
     """
-    function ir_where_clause!(where_clause, ir_builder,
-                            lhs_node_ix_to_type, lhs_param_to_node,
-                            rhs_node_ix_to_type, rhs_param_to_node,
-                            symbol_tables, type_namespace, propensity_table)
+    function ir_where_clause_old!(where_clause, ir_builder,
+        lhs_node_ix_to_type, lhs_param_to_node,
+        rhs_node_ix_to_type, rhs_param_to_node,
+        symbol_tables, type_namespace, propensity_table)
 
-        
         where_hdr = "[&](auto &lhs, auto &rhs, auto &m1, auto &m2) {"
 
+        lhs_params_var_count = lhs_param_to_node[1] 
+        lhs_params_var_loc = lhs_param_to_node[2]
+
+        # TODO: Finish where clause, I need to exchange what (param_count, node_loc)
+        # with the dictionary now. Note also the entries are now keys... so I need to
+        # handle this.
         emit(ir_builder, where_hdr)
         map(
             (each_param) -> begin
@@ -407,32 +960,40 @@ module IRRuleGeneration
                 param_ix = each_param[1]
                 param_val = each_param[2]
 
-                user_param_name = collect(keys(lhs_param_to_node))[param_ix]
+                lhs_param_state_count = lhs_param_to_node[1]
+                lhs_param_state_loc = lhs_param_to_node[2]
 
-                param_count = param_val[1]
-                node_count = param_val[2]
-                # Now that we have the node_count
-                # we should be able to fetch
-                #
+                user_param_name = collect(keys(lhs_param_state_count))[param_ix]
 
-                # Grabbing node name
-                node_type = lhs_node_ix_to_type[node_count]
-                node_params = symbol_tables[node_type]
-                attr_name = node_params[param_count][2]
+                param_count = lhs_param_state_count[user_param_name]
+                node_count = lhs_param_state_loc[user_param_name]
 
-                attr_type = convert_type_name(node_params[param_count][1])
+                for ix in 1:length(param_count)
+                    # Now that we have the node_count
+                    # we should be able to fetch
+                    #
+                    # Grabbing node name
+                    node_type = lhs_node_ix_to_type[node_count[ix]]
+                    node_params = symbol_tables[node_type]
+                    attr_name = node_params[param_count[ix]][2]
+                    attr_type = convert_type_name(node_params[param_count[ix]][1])
 
-                ir = "$attr_type $user_param_name = std::get<$type_namespace::$node_type>(lhs[m1[$(node_count)]].data).$attr_name;\n"
+                    ir = "$attr_type $user_param_name = std::get<$type_namespace::$node_type>(lhs[m1[$(node_count[ix])]].data).$attr_name;\n"
 
-                ir_prop = "$attr_type $user_param_name = std::get<$type_namespace::$node_type>(lhs[m[$(node_count)]].data).$attr_name;\n"
+                    ir_prop = "$attr_type $user_param_name = std::get<$type_namespace::$node_type>(lhs[m[$(node_count[ix])]].data).$attr_name;\n"
 
-                propensity_table[user_param_name] = ir_prop
+                    propensity_table[user_param_name] = ir_prop
 
-                emit(ir_builder, ir)
+                    emit(ir_builder, ir)
 
+                end
+
+                
                 end,
-                enumerate(values(lhs_param_to_node))
+            enumerate(values(lhs_param_to_node[1]))
         )
+
+        # exit(0)
 
         # Mapping to assign 
         # Note it can also be mapping to the
@@ -440,37 +1001,40 @@ module IRRuleGeneration
         node_loc_to_name = []
         map( (each_node) -> begin
 
-                node_name = get_value(each_node.name)
+            node_name = get_value(each_node.name)
 
-                # NOTE:
-                # Check if it is in rhs_param_to_node if it isn't
-                # check if it is in the propensity function
-                # If it is not in the propensity function, maybe it's just a helper?
+            # NOTE:
+            # Check if it is in rhs_param_to_node if it isn't
+            # check if it is in the propensity function
+            # If it is not in the propensity function, maybe it's just a helper?
 
-                if !(node_name in collect(keys(rhs_param_to_node)))
-                    if (node_name in collect(keys(propensity_table)))
-                        propensity_table[node_name] = each_node
-                        # return
-                    end
-                    # TODO: Probably just a helper variable, we need to
-                    # That we have to put in memory.
-                    return
+            if !(node_name in collect(keys(rhs_param_to_node[1])))
+                if (node_name in collect(keys(propensity_table)))
+                    propensity_table[node_name] = each_node
+                    # return
                 end
+                # TODO: Probably just a helper variable, we need to
+                # That we have to put in memory.
+                return
+            end
 
-                assigned_data = rhs_param_to_node[node_name]
+            # assigned_data = rhs_param_to_node[node_name]
+            rhs_param_state_count = rhs_param_to_node[1]
+            rhs_param_state_loc = rhs_param_to_node[2]
 
-                assigned_param = assigned_data[1]
-                assigned_node = assigned_data[2]
+            println("rhs_param_state_count: $rhs_param_state_count\n")
+            println("rhs_param_state_loc: $rhs_param_state_loc\n")
+            exit(0)
 
-
+            for ix in 1:length(rhs_param_state_count)
+                assigned_param = rhs_param_state_count[ix]
+                assigned_node = rhs_param_state_loc[ix]
                 rhs_node_type = rhs_node_ix_to_type[assigned_node]
                 rhs_node_params = symbol_tables[rhs_node_type]
 
                 # Check if the assigned_param is the first two positions
                 # If it is, it represents the position of the node
                 # on the graph
-
-
                 rhs_attr = rhs_node_params[assigned_param][2]
 
                 node_name = "rhs_node_"*string(assigned_node)
@@ -488,13 +1052,14 @@ module IRRuleGeneration
 
                 local_namespace = type_namespace
                 assgn_expr = []
+
                 map( (expr) -> begin
 
                         ir =  expr.position.value
                         push!(assgn_expr, ir)
 
-                    end, node_value)
-
+                    end,
+                node_value)
 
                 joined_expr = join(assgn_expr)
                 
@@ -506,12 +1071,15 @@ module IRRuleGeneration
                 # Update node position if it is in the first two positions of the
                 # new node
                 #
-            if assigned_param == 1 || assigned_param == 2
-                ir_node_pos = "\t\trhs[m2[$assigned_node]].position[$(assigned_param-1)] = $joined_expr;"
-                emit(ir_builder, ir_node_pos)
-            end
+                if assigned_param == 1 || assigned_param == 2
+                    ir_node_pos = "\t\trhs[m2[$assigned_node]].position[$(assigned_param-1)] = $joined_expr;"
+                    emit(ir_builder, ir_node_pos)
+                end
 
                 emit(ir_builder, ir)
+
+                end
+
             end,
             where_clause
         )
@@ -519,7 +1087,10 @@ module IRRuleGeneration
         emit(ir_builder, "}")
     end
 
+
 function ir_propensity!(with_clause, ir_builder, propensity_table)
+
+
 
     # Check to see if the propensity
     # is using a variable. If it is using a propensity.
@@ -552,6 +1123,7 @@ function ir_propensity!(with_clause, ir_builder, propensity_table)
 
                 if arg.position.value in collect(keys(propensity_table))
                     ir = propensity_table[arg.position.value]
+                    println("emitting: ", ir)
                     emit(ir_builder, ir)
                 end
 
@@ -582,9 +1154,5 @@ function ir_propensity!(with_clause, ir_builder, propensity_table)
 
     emit(ir_builder, return_ir)
 end
-
-
-
-
 
 end

@@ -3,13 +3,14 @@ import ..Tokens:
     LeftParenthesisToken, RightParenthesisToken, LeftAngleBracketToken,
     RightAngleBracketToken, SingleColonToken, DefineToken, LeftBracketToken,
     RightBracketToken, PunctuationToken, TypeSectionToken, ParameterSectionToken,
-    RuleSectionToken, SlashToken, AsteriskToken, PlusToken, MinusToken, RightArrowToken, WithToken, WhereToken, SolvingToken, EqualToken, CommaToken, EdgeToken
+    RuleSectionToken, SlashToken, AsteriskToken, PlusToken, MinusToken, RightArrowToken, WithToken, WhereToken, SolvingToken, EqualToken, CommaToken, EdgeToken, ODEToken
 
 import ..AstNodes:
     Node, IdentifierNode, ParameterNode, TypeInstanceNode, TypeClassNode,
     TypeSectionNode, ParameterSectionNode, RuleSectionNode, RuleNode,
     WhereClauseNode, WithClauseNode, SolveClauseNode, CallNode,
-    GroupNode, BinaryOpNode, FunctionNode, FloatNode, IntegerNode, UndirectedTypeEdgeNode
+    GroupNode, BinaryOpNode, FunctionNode, FloatNode, IntegerNode, UndirectedTypeEdgeNode,
+    BindingVariableNode, ODENode
 
 const BUILT_IN_FUNC = [
     "heaviside", "sqrt", "normal_distr",
@@ -601,6 +602,170 @@ function parse_parameterized_type!(tokens)
     popfirst!(tokens)
 end
 
+function parse_solving_content(tokens)
+    """
+    Parse Solving Content
+    """
+
+    content = []
+
+    while !isempty(tokens) && !isa(lookahead(tokens), EndLineToken)
+    if isa(lookahead(tokens), EndLineToken)
+        popfirst!(tokens)
+    elseif isa(lookahead(tokens), LeftParenthesisToken) || isa(lookahead(tokens), RightParenthesisToken)
+        popfirst!(tokens)
+    else
+        push!(content, parse_expression!(tokens))
+    end
+    end
+
+    return content
+end
+
+function parse_binding_variable!(tokens)
+    """
+    Parse Binding Variable
+    """
+
+    # Should be identifier name
+    var_name = popfirst!(tokens)
+    if !isa(var_name, IdentifierToken)
+        throw("Expected IdentifierToken got $var_name")
+    end
+
+
+    # Should pop := define symbol
+    cur_token = popfirst!(tokens)
+    if !(cur_token isa DefineToken)
+        throw("Expected DefineToken got $cur_token")
+    end
+
+    D_token = popfirst!(tokens)
+    if D_token.position.value != "D"
+        throw("Expected Derivative Operator D(..) got $D_token")
+    end
+
+    left_paren = popfirst!(tokens)
+    if !isa(left_paren, LeftParenthesisToken)
+        throw("Expected LeftParenthesisToken got $left_paren")
+    end
+
+    ode_variables = []
+    while !(lookahead(tokens) isa RightParenthesisToken)
+
+        if lookahead(tokens) isa PunctuationToken
+            popfirst!(tokens)
+        else
+            ode_variable = parse_symbol_name!(tokens)
+            push!(ode_variables, ode_variable)
+        end
+
+    end
+
+    right_paren = popfirst!(tokens)
+    if !isa(right_paren, RightParenthesisToken)
+        throw("Expected RightParenthesisToken got $right_paren")
+    end
+
+    var_name = IdentifierNode(var_name)
+    BindingVariableNode(var_name, ode_variables)
+end
+
+function parse_solve_clause!(tokens)
+    """
+    Parses Solve Clause and returns an ODENode
+    """
+
+    var_name = popfirst!(tokens)
+
+    if !(var_name isa IdentifierToken)
+        throw("Expected Identifier token got $var_name")
+    end
+
+    var_name = IdentifierNode(var_name)
+
+    colon_token = popfirst!(tokens)
+    if !(colon_token isa SingleColonToken)
+        throw("Error expected single colon token")
+    end
+
+    # Should be an ode token (Type)
+    ode_token = popfirst!(tokens)
+    if !(ode_token isa ODEToken)
+        throw("Error expected an ODEtoken. Got: $ode_token.")
+    end
+
+    eq_token = popfirst!(tokens)
+    if !(eq_token isa EqualToken)
+        throw("Error expected EqualToken got $eq_token")
+    end
+
+    expression = parse_expression!(tokens)
+
+    ODENode(var_name, expression)
+end
+
+function parse_rule_solve!(tokens)
+    """
+    Parses the Binding Variables
+    """
+
+    # Pops left parenthesis
+    cur_token = popfirst!(tokens)
+    if !isa(cur_token, LeftParenthesisToken)
+        throw("Expected LeftParenthesisToken got $cur_token")
+    end
+
+    total_binding_variables = []
+    while !(lookahead(tokens) isa RightParenthesisToken)
+
+        if (isa(lookahead(tokens), EndLineToken) 
+            || isa(lookahead(tokens), PunctuationToken))
+            popfirst!(tokens)
+        else
+            push!(total_binding_variables, parse_binding_variable!(tokens))
+        end
+
+    end
+
+    # Pops right parenthesis
+    cur_token = popfirst!(tokens)
+    if !isa(cur_token, RightParenthesisToken)
+        throw("Expected RightParenthesisToken got $cur_token")
+    end
+
+    # Need to parse the  { ... } at the end
+
+    # { token
+    cur_token = popfirst!(tokens)
+    if !isa(cur_token, LeftBracketToken)
+        throw("Expected LeftBracketToken got $cur_token")
+    end
+
+    solve_clause = []
+    while !isempty(tokens) && !isa(lookahead(tokens), RightBracketToken)
+
+        if isa(lookahead(tokens), EndLineToken)
+            popfirst!(tokens)
+        elseif isa(lookahead(tokens), LeftParenthesisToken) || isa(lookahead(tokens), RightParenthesisToken)
+            popfirst!(tokens)
+        else
+            ode_node = parse_solve_clause!(tokens)
+            # push!(solve_clause, parse_expression!(tokens))
+            push!(solve_clause, ode_node)
+        end
+    end
+
+    cur_token = popfirst!(tokens)
+    if !isa(cur_token, RightBracketToken)
+        throw("Expected RightBracketToken got $cur_token")
+    end
+    SolveClauseNode(
+        total_binding_variables,
+        solve_clause
+    )
+end
+
 function parse_rule!(tokens)
     """
     Parse Rule
@@ -615,8 +780,6 @@ function parse_rule!(tokens)
 
     lhs = []
     while !isempty(tokens) && !isa(lookahead(tokens), LeftAngleBracketToken) && !isa(lookahead(tokens), RightArrowToken)
-
-        println("typeof: $(typeof(lookahead(tokens)))")
 
         if isa(lookahead(tokens), EndLineToken)
             popfirst!(tokens)
@@ -666,7 +829,6 @@ function parse_rule!(tokens)
         left_rule_parameter_node = parse_symbol_parameters!(tokens)
     end
 
-    # println("tokens left: $tokens")
     # cur_token = popfirst!(tokens)
 
     # Gets rid of new lines
@@ -732,30 +894,27 @@ function parse_rule!(tokens)
 
     # TODO: check parameters
     modify_clause = nothing
-    if !isempty(tokens) && (isa(lookahead(tokens), WithToken) || isa(lookahead(tokens), SolvingToken))
+    if (!isempty(tokens) 
+        && (isa(lookahead(tokens), WithToken) 
+            || isa(lookahead(tokens), SolvingToken))
+       )
 
         # Consume `with` or `solving`
         clause_token = popfirst!(tokens) 
         clause_content = []
-
         
-        # paren_count = 0
-        # while !isempty(tokens) && !isa(lookahead(tokens), EndLineToken)
-            # push!(clause_content, popfirst!(tokens))
-        # end
-
         if isa(clause_token, WithToken)
 
             with_clause = parse_with_clause!(tokens)
 
             modify_clause = with_clause
             # modify_clause = WithClauseNode(clause_token, clause_content)
-
         else
-            modify_clause = SolveClauseNode(clause_token, clause_content)
+
+            println("Parsing solving clause")
+            modify_clause = parse_rule_solve!(tokens)
         end
     end
-
 
     # Find where token
     return RuleNode(
