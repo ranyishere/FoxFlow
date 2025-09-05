@@ -3,19 +3,14 @@ import ..Tokens:
     LeftParenthesisToken, RightParenthesisToken, LeftAngleBracketToken,
     RightAngleBracketToken, SingleColonToken, DefineToken, LeftBracketToken,
     RightBracketToken, PunctuationToken, TypeSectionToken, ParameterSectionToken,
-    RuleSectionToken, SlashToken, AsteriskToken, PlusToken, MinusToken, RightArrowToken, WithToken, WhereToken, SolvingToken, EqualToken, CommaToken, EdgeToken, ODEToken
+    RuleSectionToken, SlashToken, AsteriskToken, PlusToken, MinusToken, RightArrowToken, WithToken, WhereToken, SolvingToken, EqualToken, CommaToken, EdgeToken, ODEToken, SampleToken, LtToken, GtToken, LtEqToken, GtEqToken, EqEqToken, NotEqToken, NotToken, AndAndToken, OrOrToken
 
 import ..AstNodes:
     Node, IdentifierNode, ParameterNode, TypeInstanceNode, TypeClassNode,
     TypeSectionNode, ParameterSectionNode, RuleSectionNode, RuleNode,
     WhereClauseNode, WithClauseNode, SolveClauseNode, CallNode,
     GroupNode, BinaryOpNode, FunctionNode, FloatNode, IntegerNode, UndirectedTypeEdgeNode,
-    BindingVariableNode, ODENode
-
-const BUILT_IN_FUNC = [
-    "heaviside", "sqrt", "normal_distr",
-    "uniform_distr", "cos", "sin", "inverse", "pow"
-]
+    BindingVariableNode, ODENode, UnaryOpNode, DefinitionNode
 
 const PRECEDENCE = Dict(
     "+" => 1,
@@ -34,7 +29,6 @@ function expect_token!(tokens, ::Type{T}) where T <: Token
     return token
 end
 
-
 # TODO: Support expression
 function tokenize_file(file_name)
 
@@ -46,17 +40,15 @@ function tokenize_file(file_name)
         while !eof(f)
 
             cur_line = readline(f)
-
+            cur_line = String(lstrip(cur_line))
             if cur_line != ""
                 if cur_line[1] == '#'
                     line_no += 1
-                    println("continuing")
                     continue
                 end
             end
 
             line_token = tokenize(cur_line, line_no+1)
-            # println("line_token :", line_token)
 
             line_no += 1
 
@@ -75,7 +67,6 @@ function tokenize_string(code)
     # println("check: ", check)
     check
 end
-
 
 # Helper function: Peek at the next token without consuming it
 function lookahead(tokens)
@@ -172,7 +163,7 @@ function parse_type_assignment!(tokens)
 
     if !isempty(tokens) && isa(lookahead(tokens), DefineToken)
 
-        popfirst!(tokens)  # Consume `:=`
+        popfirst!(tokens)  # Consume `=`
 
         if !isempty(tokens) && isa(lookahead(tokens), LeftBracketToken)
             popfirst!(tokens) # Consume `{`
@@ -232,11 +223,27 @@ function parse_type_update!(tokens)
 
     type_signature_list = parse_type_signature_list!(tokens)
 
+    # This is an intermediate value and not a type update
+    if isa(lookahead(tokens), DefineToken)
+        popfirst!(tokens)  # Consume `:=`
+
+        expression = []
+        while !isa(lookahead(tokens), EndLineToken)
+            literal = popfirst!(tokens)  # Assume it's a literal/expression
+            push!(expression,literal)
+        end
+
+        expression_nodes = parse_expression!(expression)
+
+        return DefinitionNode(symbol_name, type_signature_list, expression_nodes)
+    end
+
     if !isempty(tokens) && isa(lookahead(tokens), EqualToken)
 
         popfirst!(tokens)  # Consume `:=`
 
         if !isempty(tokens) && isa(lookahead(tokens), LeftBracketToken)
+
             popfirst!(tokens) # Consume `{`
             type_declarations = parse_type_declaration_list!(tokens)
 
@@ -246,6 +253,7 @@ function parse_type_update!(tokens)
 
             return TypeInstanceNode(symbol_name, symbol_parameters, type_signature_list, type_declarations)
         else
+
             #TODO: Support expression
             expression = []
             while !isa(lookahead(tokens), EndLineToken) && !isa(lookahead(tokens), RightBracketToken)
@@ -253,7 +261,10 @@ function parse_type_update!(tokens)
                 push!(expression,literal)
             end
 
-            return TypeInstanceNode(symbol_name, symbol_parameters, type_signature_list, expression)
+            # TODO: Actually implement this intead
+            expression_nodes = parse_expression!(expression)
+            return TypeInstanceNode(symbol_name, symbol_parameters, type_signature_list, expression_nodes)
+            # return TypeInstanceNode(symbol_name, symbol_parameters, type_signature_list, expression)
 
         end
     end
@@ -326,7 +337,13 @@ function parse_factor!(tokens)
     Parse Factor
     """
 
+    # Remove EndLineTokens
+    while isa(lookahead(tokens), EndLineToken)
+        popfirst!(tokens)
+    end
+
     if lookahead(tokens) isa LeftParenthesisToken
+
         popfirst!(tokens)
         expr = parse_expression!(tokens)
 
@@ -337,23 +354,24 @@ function parse_factor!(tokens)
         else
             return expr
         end
-
         # expect_token!(tokens, RightParenthesisToken)
 
-
     elseif lookahead(tokens) isa IdentifierToken
+
+
         id_token = popfirst!(tokens)
         if !isempty(tokens) && lookahead(tokens) isa LeftParenthesisToken
             popfirst!(tokens)  # consume '('
             args = Node[]
             while !(lookahead(tokens) isa RightParenthesisToken)
                 push!(args, parse_expression!(tokens))
-                if lookahead(tokens) isa CommaToken
+                if lookahead(tokens) isa PunctuationToken
                     popfirst!(tokens)
                 end
             end
             popfirst!(tokens)  # consume ')'
-            return CallNode(IdentifierNode(id_token), args)
+
+            return CallNode(FunctionNode(IdentifierNode(id_token), args), args)
         else
             return IdentifierNode(id_token)
         end
@@ -366,6 +384,23 @@ function parse_factor!(tokens)
 
     elseif lookahead(tokens) isa RightParenthesisToken
         return popfirst!(tokens)
+
+    elseif lookahead(tokens) isa MinusToken
+        minus_token = popfirst!(tokens)  # consume '-'
+        right = parse_factor!(tokens)
+        return UnaryOpNode(minus_token, right)
+    elseif lookahead(tokens) isa PlusToken
+        plus_token = popfirst!(tokens)  # consume '+'
+        right = parse_factor!(tokens)
+        return UnaryOpNode(plus_token, right)
+    elseif lookahead(tokens) isa NotToken
+        not_token = popfirst!(tokens)  # consume '!'
+        right = parse_factor!(tokens)
+        return UnaryOpNode(not_token, right)
+    elseif lookahead(tokens) isa SampleToken
+        sample_token = popfirst!(tokens)  # consume '~'
+        right = parse_factor!(tokens)
+        return UnaryOpNode(sample_token, right)
     else
         error("Unexpected token in factor: $(lookahead(tokens))")
     end
@@ -445,15 +480,100 @@ function parse_binary_op!(tokens, min_prec)
     return left
 end
 
-function parse_expression!(tokens)
-    left = parse_term!(tokens)
+function skip_eol!(tokens)
+    while !isempty(tokens) && isa(lookahead(tokens), EndLineToken)
+        popfirst!(tokens)
+    end
+    return nothing
+end
 
-    while !isempty(tokens) && (lookahead(tokens) isa PlusToken || lookahead(tokens) isa MinusToken)
+# entry point
+function parse_expression!(tokens)
+    return parse_assignment!(tokens)
+end
+
+function parse_expression_define!(tokens)
+end
+
+
+function parse_assignment!(tokens)  # lowest precedence, right-assoc
+    left = parse_logical_or!(tokens)
+    if !isempty(tokens) && (lookahead(tokens) isa EqualToken || lookahead(tokens) isa DefineToken)
+        skip_eol!(tokens)
+        op = popfirst!(tokens)               # '=' or compound like PlusEqToken if you add them
+        right = parse_assignment!(tokens)    # right-associative
+        return AssignNode(op, left, right)
+    end
+    return left
+end
+
+function parse_logical_or!(tokens)
+    left = parse_logical_and!(tokens)
+    while !isempty(tokens) && (lookahead(tokens) isa OrOrToken)
+        skip_eol!(tokens)
         op = popfirst!(tokens)
-        right = parse_term!(tokens)
+        right = parse_logical_and!(tokens)
+        left = BinaryOpNode(op, left, right)  # keep a distinct node type if you need short-circuit codegen
+    end
+    return left
+end
+
+function parse_logical_and!(tokens)
+    left = parse_equality!(tokens)
+    while !isempty(tokens) && (lookahead(tokens) isa AndAndToken)
+        skip_eol!(tokens)
+        op = popfirst!(tokens)
+        right = parse_equality!(tokens)
         left = BinaryOpNode(op, left, right)
     end
+    return left
+end
 
+function parse_equality!(tokens)  # ==, !=
+    left = parse_relational!(tokens)
+    while !isempty(tokens) && (lookahead(tokens) isa EqEqToken || lookahead(tokens) isa NotEqToken)
+        skip_eol!(tokens)
+        op = popfirst!(tokens)
+        right = parse_relational!(tokens)
+        left = BinaryOpNode(op, left, right)
+    end
+    return left
+end
+
+function parse_relational!(tokens)  # <, <=, >, >=
+    left = parse_additive!(tokens)
+    while !isempty(tokens) && (
+        lookahead(tokens) isa LtToken || lookahead(tokens) isa LtEqToken ||
+        lookahead(tokens) isa GtToken || lookahead(tokens) isa GtEqToken
+    )
+        skip_eol!(tokens)
+        op = popfirst!(tokens)
+        right = parse_additive!(tokens)
+        left = BinaryOpNode(op, left, right)
+    end
+    return left
+end
+
+# rename your existing parse_expression!/parse_term! to these:
+function parse_additive!(tokens)    # +, -
+    left = parse_multiplicative!(tokens)
+    while !isempty(tokens) && (lookahead(tokens) isa PlusToken || lookahead(tokens) isa MinusToken)
+        skip_eol!(tokens)
+        op = popfirst!(tokens)
+        right = parse_multiplicative!(tokens)
+        left = BinaryOpNode(op, left, right)
+    end
+    return left
+end
+
+function parse_multiplicative!(tokens)   # *, /
+    left = parse_factor!(tokens)
+    while !isempty(tokens) && (lookahead(tokens) isa AsteriskToken || lookahead(tokens) isa SlashToken)
+        skip_eol!(tokens)
+        op = popfirst!(tokens)
+        right = parse_factor!(tokens)
+        left = BinaryOpNode(op, left, right)
+    end
     return left
 end
 
@@ -513,9 +633,15 @@ end
 function parse_type_update_list!(tokens)
 
     type_updates = []
+
+    while isa(lookahead(tokens), EndLineToken)
+        popfirst!(tokens)
+    end
+
     if isa(lookahead(tokens), RightBracketToken)
         type_updates
     else
+
         while isa(lookahead(tokens), EndLineToken)
             popfirst!(tokens)
         end
@@ -540,6 +666,7 @@ function parse_where_clause!(tokens)
     Parse Where Clause
     """
 
+
     WhereClauseNode(
         parse_type_update_list!(tokens)
    )
@@ -550,26 +677,30 @@ function parse_with_clause!(tokens)
     Parse With Clause
     """
 
-    cur_token = popfirst!(tokens)
-    if !isa(cur_token, LeftParenthesisToken)
+    # cur_token = popfirst!(tokens)
+    if !isa(lookahead(tokens), LeftParenthesisToken)
         println("Expected LeftParenthesis got $cur_token")
     end
 
+    propensity = parse_expression!(tokens)
     # check lookahead
     # if isa(lookahead(tokens), LeftParenthesisToken)
-    if isa(lookahead(tokens), IdentifierToken) && tokens[2] isa LeftParenthesisToken
-        propensity = parse_function_type!(tokens)
-    else
+    # if isa(lookahead(tokens), IdentifierToken) && tokens[2] isa LeftParenthesisToken
+        # propensity = parse_function_type!(tokens)
+    # else
         # Probably some expression
-        propensity = parse_expression!(tokens)
-    end
+        # propensity = parse_expression!(tokens)
+    # end
+    #
+    # cur_token = popfirst!(tokens)
+    # if !isa(cur_token, RightParenthesisToken)
+        # println("Expected RightParenthesis got $cur_token")
+    # end
 
     cur_token = popfirst!(tokens)
-    if !isa(cur_token, RightParenthesisToken)
-        println("Expected RightParenthesis got $cur_token")
-    end
 
-    cur_token = popfirst!(tokens)
+    println("cur_token =======>: ", cur_token)
+
     if !isa(cur_token, WhereToken)
         throw("Expected WhereToken got $cur_token")
     end
@@ -610,13 +741,13 @@ function parse_solving_content(tokens)
     content = []
 
     while !isempty(tokens) && !isa(lookahead(tokens), EndLineToken)
-    if isa(lookahead(tokens), EndLineToken)
-        popfirst!(tokens)
-    elseif isa(lookahead(tokens), LeftParenthesisToken) || isa(lookahead(tokens), RightParenthesisToken)
-        popfirst!(tokens)
-    else
-        push!(content, parse_expression!(tokens))
-    end
+        if isa(lookahead(tokens), EndLineToken)
+            popfirst!(tokens)
+        elseif isa(lookahead(tokens), LeftParenthesisToken) || isa(lookahead(tokens), RightParenthesisToken)
+            popfirst!(tokens)
+        else
+            push!(content, parse_expression!(tokens))
+        end
     end
 
     return content
@@ -632,7 +763,6 @@ function parse_binding_variable!(tokens)
     if !isa(var_name, IdentifierToken)
         throw("Expected IdentifierToken got $var_name")
     end
-
 
     # Should pop := define symbol
     cur_token = popfirst!(tokens)
@@ -842,6 +972,7 @@ function parse_rule!(tokens)
         throw("Expected `->` in rule definition got $cur_token")
     end
 
+    # Parsing RHS
     rhs = []
     while !isempty(tokens) && !isa(lookahead(tokens), LeftAngleBracketToken)
         if isa(lookahead(tokens), EndLineToken)
@@ -894,6 +1025,12 @@ function parse_rule!(tokens)
 
     # TODO: check parameters
     modify_clause = nothing
+
+    # Removes Endlines Before Solving
+    while(isa(lookahead(tokens), EndLineToken))
+        popfirst!(tokens)  # Consume EndLineToken
+    end
+
     if (!isempty(tokens) 
         && (isa(lookahead(tokens), WithToken) 
             || isa(lookahead(tokens), SolvingToken))
@@ -915,6 +1052,7 @@ function parse_rule!(tokens)
             modify_clause = parse_rule_solve!(tokens)
         end
     end
+
 
     # Find where token
     return RuleNode(
@@ -1126,14 +1264,9 @@ function main()
     "
 
     res = tokenize_string(check)
-
     oof = parse_rule!(res)
-
     rhs_check = oof.rhs
-
     rhs_param = oof.rhs_parameter
-    println("rhs_param: $rhs_param")
-
 end
 
 # main()

@@ -120,9 +120,11 @@ function tokenize(source::String, line_no::Integer)
             end
             value = source[start:i-1]
             push!(tokens, IntegerToken(PositionToken(value, line_no, i)))
-            # push!(tokens, LiteralToken(PositionToken(value, line_no, i)))
 
-        # TODO: What about +,-,/, and * symbols?
+        elseif c == '~'
+            push!(tokens, SampleToken(PositionToken("~", line_no, i)))
+            i += 1
+
         elseif c == '-'
             if i + 1 <= length(source) && source[i + 1] == '>'
                 push!(tokens, RightArrowToken(PositionToken("->", line_no, i)))
@@ -140,35 +142,50 @@ function tokenize(source::String, line_no::Integer)
                   )
                 i += 1
             end
-        elseif c in ['!', '=', '<', '>', '*', '+', '/']
+        elseif c in ['!', '=', '<', '>', '*', '+', '/', '&', '|']
 
             if c == '<'
                 if i + 1 <= length(source) && source[i + 1] == '<'
                     push!(tokens, LeftAngleBracketToken(PositionToken("<<", line_no, i)))
                     i += 2
                 elseif i + 1 <= length(source) && source[i + 1] == '='
-                    push!(tokens, LeftAngleBracketToken(PositionToken("<<", line_no, i)))
+                    push!(tokens, LtEqToken(PositionToken("<=", line_no, i)))
                     i += 2
-
                 else
-                    push!(tokens, OperatorToken(PositionToken("<=", line_no, i)))
+                    push!(tokens, LtToken(PositionToken(string(c), line_no, i)))
                     i += 1
                 end
+
+            elseif c == '!'
+                if i + 1 <= length(source) && source[i + 1] == '='
+                    push!(tokens, NotEqToken(PositionToken("!=", line_no, i)))
+                    i += 2
+                else
+                    push!(tokens, NotToken(PositionToken("!", line_no, i)))
+                    i += 1
+                end
+
             elseif c == '>'
                 if i + 1 <= length(source) && source[i + 1] == '>'
                     push!(tokens, RightAngleBracketToken(PositionToken(">>", line_no, i)))
                     i += 2
                 elseif i + 1 <= length(source) && source[i + 1] == '='
-                    push!(tokens, OperatorToken(PositionToken(">=", line_no, i)))
+                    push!(tokens, GtEqToken(PositionToken(">=", line_no, i)))
                     i += 2
                 else
                     check = string(c, '>')
-                    push!(tokens, OperatorToken(PositionToken(string(c), line_no, i)))
+                    push!(tokens, GtToken(PositionToken(string(c), line_no, i)))
                     i += 1
                 end
 
-            elseif i + 1 <= length(source) && source[i + 1] == '='
-                push!(tokens, OperatorToken(PositionToken(string(c, '='), line_no, i)))
+            elseif c == '&' && i + 1 <= length(source) && (source[i + 1] == '&')
+                push!(tokens, AndToken(PositionToken("&&", line_no, i)))
+                i += 2
+            elseif c == '|' && i + 1 <= length(source) && (source[i + 1] == '|')
+                push!(tokens, OrToken(PositionToken("||", line_no, i)))
+                i += 2
+            elseif i + 1 <= length(source) && (source[i + 1] == '=') && (c == '=')
+                push!(tokens, EqEqToken(PositionToken("==", line_no, i)))
                 i += 2
             elseif c == '='
                 push!(tokens, EqualToken(PositionToken("=", line_no, i)))
@@ -183,9 +200,11 @@ function tokenize(source::String, line_no::Integer)
                 push!(tokens, PlusToken(PositionToken("+", line_no, i)))
                 i += 1
             else
-                push!(tokens, OperatorToken(PositionToken(string(c), line_no, i)))
-                i += 1
+                throw(ErrorException("Unexpected character: $c"))
+                # push!(tokens, OperatorToken(PositionToken(string(c), line_no, i)))
+                # i += 1
             end
+
 
         elseif c in ['(', ')', '{', '}', ',', ';']
 

@@ -10,7 +10,7 @@ include("ir_models_section.jl")
 import .IRRuleGeneration: ir_rules_section!
 import .IRBuildUtils: emit, build, IRBuilder
 import ..AstNodes: IntegerNode, FloatNode, IdentifierNode, BinaryOpNode, GroupNode, CallNode
-import ..Tokens: IntegerToken, FloatToken, PositionToken, LiteralToken
+import ..Tokens: IntegerToken, FloatToken, PositionToken, LiteralToken, ErrorToken, OperatorToken
 import .IRUtils: get_value, convert_type_name, write_file
 using OrderedCollections
 
@@ -104,7 +104,7 @@ function ir_parameter(ast)
             elseif isa(each_token, IdentifierNode)
 
                 # TODO: Must have a parameter node afterwards and parse it
-
+                # Assuming the that Fixed list is of type double
                 name = get_value(each_token)
                 if name == "FixedList"
                     # A fixed list has two parameters
@@ -122,13 +122,15 @@ function ir_parameter(ast)
 
                     dim = list_size.token.position.value
 
-                    push!(params, "\t\tfloat $(list_name)[$(dim)];\n")
+                    push!(params, "\t\tdouble $(list_name)[$(dim)];\n")
                     push!(param_names,"$(list_name)")
                     push!(param_types, list_type)
+
                 else
                     # TODO: Handle if the Identifer is another FoxFlow type
                     # Make sure it also has a parameter node
                 end
+
             end
 
         end
@@ -228,9 +230,7 @@ function ir_type_instance(ast, define_type=false)
     elseif isa(ast.value, BinaryOpNode)
         # It's a binary operation
         expression = ir_value(ast.value)
-
         ir_type = convert_type_name(type_class_name)
-
         begin_struct = ["\t"*ir_type*" $(type_name) "*"= $(expression);"]
 
     elseif isa(ast.value, IdentifierNode)
@@ -313,7 +313,7 @@ void add_boundary(
                 double px, py;
                 reaction_grid.cardinalCellToPoint(px, py, cardinal);
                 key_type curr_key = gen.get_key();
-                node_type node_n = {curr_key, {Particles::Boundary{}, px, py, 0.0}};
+                node_type node_n = {curr_key, {$type_namespace::Boundary{}, px, py, 0.0}};
                 graph.addNode(node_n);
                 //connect to previous node or its the first
                 if (i >= 1) graph.addEdge(prev_key, curr_key);
@@ -329,7 +329,7 @@ void add_boundary(
                 double px, py;
                 reaction_grid.cardinalCellToPoint(px, py, cardinal);
                 key_type curr_key = gen.get_key();
-                node_type node_n = {curr_key, {Particles::Boundary{}, px, py, 0.0}};
+                node_type node_n = {curr_key, {$type_namespace::Boundary{}, px, py, 0.0}};
                 graph.addNode(node_n);
                 //connect to previous node
                 graph.addEdge(prev_key, curr_key);
@@ -343,7 +343,7 @@ void add_boundary(
                 double px, py;
                 reaction_grid.cardinalCellToPoint(px, py, cardinal);
                 key_type curr_key = gen.get_key();
-                node_type node_n = {curr_key, {Particles::Boundary{}, px, py, 0.0}};
+                node_type node_n = {curr_key, {$type_namespace::Boundary{}, px, py, 0.0}};
                 graph.addNode(node_n);
                 //connect to previous node
                 graph.addEdge(prev_key, curr_key);
@@ -357,12 +357,13 @@ void add_boundary(
                 double px, py;
                 reaction_grid.cardinalCellToPoint(px, py, cardinal);
                 key_type curr_key = gen.get_key();
-                node_type node_n = {curr_key, {Particles::Boundary{}, px, py, 0.0}};
+                node_type node_n = {curr_key, {$type_namespace::Boundary{}, px, py, 0.0}};
                 graph.addNode(node_n);
                 //connect to previous node
                 graph.addEdge(prev_key, curr_key);
                 prev_key = curr_key;
             }
+
             //complete the loop with the first
             graph.addEdge(prev_key, first_key);
 
@@ -417,18 +418,17 @@ end
 # explicit SolvingRule(std::string rname, GraphType& lhs_graph, GraphType& rhs_graph, std::size_t num_eq, initial_condition_t&& ic, solving_t&& ode)  
 #
 
-# TODO: Get branching to work.
-# TODO: Need to handle settings.json
-# # FIXME: Rules are not firing anymore...
 function generate_ir()
     """
     Generate IR
     """
 
-    name_space = "Particles"
+    # name_space = "Particles"
+    name_space = "Microtubule"
 
     # test_folder = "particle_sim"
-    test_folder = "particle_sim_branching"
+    # test_folder = "particle_sim_branching"
+    test_folder = "microtubules"
 
     base = "../tests/generated_tests/generated_2/"
 
@@ -438,13 +438,14 @@ function generate_ir()
     ast_params = parse_file!(tokens_params)
 
     println("Generating Params")
-    generated_params = ir_parameter_section(ast_params[1])
+    generated_params = ir_parameter_section(ast_params[1], propensity_table)
 
     write_file(base*"parameters.h",
             generated_params)
 
     tokens_types = tokenize_file(test_base*"$test_folder/types.fflow")
     ast_types = parse_file!(tokens_types)
+
     println("Generating Types")
     generated_types = ir_types_section(ast_types[1])
     write_file(base*"types.h",
@@ -465,10 +466,11 @@ function generate_ir()
     write_file(
             base*"main.cpp",
             main_ir
-        )
+    )
 
     println("Generating Model")
-    ir_models = ir_models_section(nothing)
+
+    ir_models = ir_models_section(nothing, name_space)
     write_file(base*"model.h", ir_models)
 
     println("Done")

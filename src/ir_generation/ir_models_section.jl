@@ -2,7 +2,7 @@
 IR Models Section
 """
 
-function ir_models_section(ast)
+function ir_models_section(ast, type_namespace)
     """
     Generate Intermediate Models
     for the Section
@@ -49,8 +49,8 @@ function ir_models_section(ast)
 
             double center_x, center_y;
             reaction_grid.cardinalCellToPoint(center_x, center_y, centerCardinal);
-            Particles::graph_type tg;
-            Particles::StartType tmp = Particles::StartType{};
+            $type_namespace::graph_type tg;
+            $type_namespace::StartType tmp = $type_namespace::StartType{};
 
             // Initial placement of particle node creator
             tmp.start_location[0] = center_x; // X
@@ -87,7 +87,7 @@ function ir_models_section(ast)
         "#include \"YAGL_Algorithms.hpp\"\n",
         "#include \"parameters.h\"\n",
         "namespace $model_section_name {\n",
-        "using graph_grammar_t = DGGML::Grammar<Particles::graph_type>;\n",
+        "using graph_grammar_t = DGGML::Grammar<$type_namespace::graph_type>;\n",
         "class Model : public DGGML::Model<graph_grammar_t> {\n",
         "\tpublic:\n",
         "\tParameters settings;\n",

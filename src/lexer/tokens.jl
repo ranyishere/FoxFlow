@@ -5,6 +5,7 @@ Defines Tokens
 module Tokens
 
     abstract type Token end
+    abstract type OperatorToken <: Token end
 
     struct PositionToken <: Token
         value::String
@@ -43,23 +44,19 @@ module Tokens
         position::PositionToken
     end
 
-    struct OperatorToken <: Token
+    struct PlusToken <: OperatorToken
         position::PositionToken
     end
 
-    struct PlusToken <: Token
+    struct MinusToken <: OperatorToken
         position::PositionToken
     end
 
-    struct MinusToken <: Token
+    struct AsteriskToken <: OperatorToken
         position::PositionToken
     end
 
-    struct AsteriskToken <: Token
-        position::PositionToken
-    end
-
-    struct SlashToken <: Token
+    struct SlashToken <: OperatorToken
         position::PositionToken
     end
 
@@ -211,6 +208,48 @@ module Tokens
         position::PositionToken
     end
 
+    struct SampleToken <: OperatorToken
+        position::PositionToken
+    end
+
+    struct EqEqToken <: OperatorToken
+        position::PositionToken
+    end
+
+    struct LtToken <: OperatorToken
+        position::PositionToken
+    end
+
+    struct GtToken <: OperatorToken
+        position::PositionToken
+    end
+
+    struct LtEqToken <: OperatorToken
+        position::PositionToken
+    end
+
+    struct GtEqToken <: OperatorToken
+        position::PositionToken
+    end
+
+    struct NotEqToken <: OperatorToken
+        position::PositionToken
+    end
+
+    struct NotToken <: OperatorToken
+        position::PositionToken
+    end
+
+    struct AndAndToken <: OperatorToken
+        position::PositionToken
+    end
+
+    struct OrOrToken <: OperatorToken
+        position::PositionToken
+    end
+
     struct EndLineToken <: Token
     end
+
+
 end
