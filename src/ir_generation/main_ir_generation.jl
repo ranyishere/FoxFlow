@@ -1,7 +1,8 @@
 # include("../main_parser_op.jl")
 # include("../ast_nodes.jl")
 # include("ir_builder.jl")
-#
+# include("ir.jl")
+# include("utils.jl")
 include("ir_rule_generation.jl")
 include("ir_parameter_section.jl")
 include("ir_types_section.jl")
@@ -10,6 +11,7 @@ include("ir_models_section.jl")
 import .IRRuleGeneration: ir_rules_section!
 import .IRBuildUtils: emit, build, IRBuilder
 import ..AstNodes: IntegerNode, FloatNode, IdentifierNode, BinaryOpNode, GroupNode, CallNode
+
 import ..Tokens: IntegerToken, FloatToken, PositionToken, LiteralToken, ErrorToken, OperatorToken
 import .IRUtils: get_value, convert_type_name, write_file
 using OrderedCollections
@@ -428,7 +430,8 @@ function generate_ir()
 
     # test_folder = "particle_sim"
     # test_folder = "particle_sim_branching"
-    test_folder = "microtubules"
+    test_folder = "fracture_network"
+    # test_folder = "random_network"
 
     base = "../tests/generated_tests/generated_2/"
 
@@ -461,6 +464,7 @@ function generate_ir()
 
     write_file(base*"rules.h", ir_rules_section)
 
+    # Grammar Entry Point
     println("Generating Main")
     main_ir = ir_main(name_space)
     write_file(
@@ -468,8 +472,8 @@ function generate_ir()
             main_ir
     )
 
+    # This is where you define your observables
     println("Generating Model")
-
     ir_models = ir_models_section(nothing, name_space)
     write_file(base*"model.h", ir_models)
 

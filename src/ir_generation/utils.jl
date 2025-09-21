@@ -1,5 +1,4 @@
 
-
 module IRUtils
 
     export
@@ -26,11 +25,12 @@ module IRUtils
         end
     end
 
-
     function write_file(file_name, ans)
+
         open("$(file_name)", "w+") do file
             write(file, ans)
         end
+
     end
 
 end

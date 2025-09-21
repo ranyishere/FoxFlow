@@ -156,9 +156,10 @@ function parse_type_assignment!(tokens)
     symbol_parameters = parse_symbol_parameters!(tokens)
 
     if !isa(popfirst!(tokens), SingleColonToken)
-        throw("Expected `:` after symbol name")
+        throw("Expected `:` after symbol name got $(lookahead(tokens))")
     end
 
+    # Parse Type Signature
     type_signature_list = parse_type_signature_list!(tokens)
 
     if !isempty(tokens) && isa(lookahead(tokens), DefineToken)
@@ -177,13 +178,10 @@ function parse_type_assignment!(tokens)
             return TypeInstanceNode(symbol_name, symbol_parameters, type_signature_list, type_declarations)
         else
 
-            #TODO: Support expression
-
             # Assume it's a literal/expression
             tmp = parse_expression!(tokens)
             # literal = popfirst!(tokens)  
             #
-
             return TypeInstanceNode(symbol_name, symbol_parameters, type_signature_list, tmp)
         end
     end
@@ -801,6 +799,7 @@ function parse_binding_variable!(tokens)
     BindingVariableNode(var_name, ode_variables)
 end
 
+# TODO: Add support for DefinitionNode
 function parse_solve_clause!(tokens)
     """
     Parses Solve Clause and returns an ODENode
@@ -879,6 +878,7 @@ function parse_rule_solve!(tokens)
             popfirst!(tokens)
         elseif isa(lookahead(tokens), LeftParenthesisToken) || isa(lookahead(tokens), RightParenthesisToken)
             popfirst!(tokens)
+            # Check its a definition token
         else
             ode_node = parse_solve_clause!(tokens)
             # push!(solve_clause, parse_expression!(tokens))
@@ -1178,7 +1178,7 @@ function parse_rules_list!(tokens)
         popfirst!(tokens)
     end
 
-    # Pares rule
+    # Parse rule
     rule = parse_rule!(tokens)
     push!(rules, rule)
 
@@ -1247,26 +1247,3 @@ function parse_rules_section!(tokens)
     end
 end
 
-# Entry point for parsing
-function main()
-    # tokens = tokenize_file("tests/rules/test_edge_rule.fflow")
-    # ast = parse_file!(tokens)
-    # println("ast: ", ast)
-
-    check = "
-    create_edge_2 := (p1 : ParticleNode) (p2: ParticleNode) << (x_0, y_0), (x_1, y_1) >> ->
-    (p1 : ParticleNode) -- (p2 : ParticleNode) -- (p3 : ParticleNode) << (x_0, y_0), (x_1, y_1), (x_2, y_2) >> with (heaviside(10, 1)) where { 
-
-        x_2 : Float = x_2 + 0.3 
-        y_2 : Float = y_2 + 0.3 
-
-    } 
-    "
-
-    res = tokenize_string(check)
-    oof = parse_rule!(res)
-    rhs_check = oof.rhs
-    rhs_param = oof.rhs_parameter
-end
-
-# main()

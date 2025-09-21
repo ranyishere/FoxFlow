@@ -14,21 +14,33 @@ function ir_types_section(ast)
         "#include \"SpatialData3D.hpp\" \n",
         "namespace $(section_name) {\n",
         "\tstruct Type {};\n",
-        "\tstruct Boundary {};\n",
+        "\tstruct Boundary {
+            float boundary_location[2];\n
+        };\n",
         "\tstruct StartType {
             float start_location[2];\n
        };\n"
     ]
 
     symbol_tables["StartType"] = Dict()
+    symbol_tables["Boundary"] = Dict()
     start_type_info = (
                    true, 
                    IntegerNode(IntegerToken(PositionToken("2", -1, -1))), 
                    FloatNode(FloatToken(PositionToken("Float", -1, -1)))
                )
+    boundary_type_info = (
+                   true, 
+                   IntegerNode(IntegerToken(PositionToken("2", -1, -1))), 
+                   FloatNode(FloatToken(PositionToken("Float", -1, -1)))
+               )
+
 
     symbol_tables["StartType"][1] = ("float", "start_location[0]", start_type_info)
     symbol_tables["StartType"][2] = ("float", "start_location[1]", start_type_info)
+
+    symbol_tables["Boundary"][1] = ("float", "boundary_location[0]", boundary_type_info)
+    symbol_tables["Boundary"][2] = ("float", "boundary_location[1]", boundary_type_info)
 
     type_instances_ast = ast.types
     type_instance_names = []

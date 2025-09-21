@@ -2,6 +2,18 @@
 IR Models Section
 """
 
+function ir_grid_file_Writer(ast, type_namespace)
+    """
+    Generate Intermediate Representation
+    for the Grid File Writer
+    """
+
+    models_ir = IRBuilder([])
+
+
+
+    # model_grid_file_writer =
+
 function ir_models_section(ast, type_namespace)
     """
     Generate Intermediate Models
@@ -128,7 +140,7 @@ function ir_models_section(ast, type_namespace)
                     std::filesystem::remove_all(results_dir_name);
                     std::filesystem::create_directory(results_dir_name);
 
-                        DGGML::GridFileWriter grid_writer;
+                    DGGML::GridFileWriter grid_writer;
                     grid_writer.save({geoplex2D.reaction_grid,geoplex2D.dim_label},
                                      results_dir_name+\"/expanded_cell_complex\");
 

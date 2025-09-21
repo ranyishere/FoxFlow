@@ -28,11 +28,23 @@ module IRRuleGeneration
         Handles Indicator function
         """
 
+        # Ahh he
+
         # TODO: check if values are in propensity table
         ir = "( $arg_str ? 1.0 : 0.0)"
         return ir
     end
 
+    function ir_distribution_func(distribution_node, args)
+        distribution = get_value(distribution_node)
+        if distribution == "UniformDistribution"
+            return "std::uniform_real_distribution<double>"
+        elseif distribution == "NormalDistribution"
+            return "std::normal_distribution<double>"
+        else
+            throw("Unknown distribution: $distribution")
+        end
+    end
 
     function traverse_group_node(group_node, variables=Set{String}())
         """
@@ -113,12 +125,20 @@ module IRRuleGeneration
                 end
         end, args), ", ")
 
+    println("variables ===>", variables)
+
         # Emit out variables
         map( (var) -> begin
-            if var in collect(keys(propensity_table))
-                ir = propensity_table[var]
-                emit(prop_body_ir, ir)
-            end
+                if var in collect(keys(propensity_table))
+                    ir = propensity_table[var]
+                    emit(prop_body_ir, ir)
+                elseif var in collect(keys(propensity_table["parameter_table"]))
+                    # ir = propensity_table["parameter_table"][var]
+                    ir = "auto $var =  settings.$var;\n"
+                    emit(prop_body_ir, ir)
+                else
+                    throw("Variable $var not found in propensity table for built-in function $func_name.")
+                end
             end,
             collect(variables)
         )
@@ -200,10 +220,10 @@ module IRRuleGeneration
 
         propensity_table["var_local_table"] = var_local_table
 
-                ir_rule!(rules_ir, rule,
-                         type_namespace,
-                         symbol_tables,
-                         propensity_table)
+    ir_rule!(rules_ir, rule,
+         type_namespace,
+         symbol_tables,
+         propensity_table)
 
             end, ast.rules_list
            )
@@ -225,6 +245,14 @@ module IRRuleGeneration
                 operation = expression.expression
                 traverse_ode_expr(expression.operand, ir_builder, var_loc_attr)
                 emit(ir_builder, " $(get_value(operation)) ")
+            elseif (expression isa GroupNode)
+                emit(ir_builder, "(")
+                traverse_ode_expr(expression.expression, ir_builder, var_loc_attr)
+                emit(ir_builder, ")")
+            elseif (expression isa UnaryOpNode)
+                operation = expression.expression
+                emit(ir_builder, " $(get_value(operation)) ")
+                traverse_ode_expr(expression.operand, ir_builder, var_loc_attr)
             else
                 emit(ir_builder, " $(get_value(expression)) ")
             end
@@ -240,6 +268,11 @@ module IRRuleGeneration
             ix_ir = "ix_"*get_value(expression.lhs)
             ir = "NV_Ith_S(y, varmap.at(&$ix_ir))"
             emit(ir_builder, ir)
+        elseif expression.lhs isa UnaryOpNode
+            operation = expression.lhs.expression
+            println("expression: ", expression)
+            emit(ir_builder, " $(operation.position.value) ")
+            traverse_ode_expr(expression.lhs.operand, ir_builder, var_loc_attr)
         else
             # If it is a single value, just print it
             emit(ir_builder, get_value(expression.lhs))
@@ -456,7 +489,6 @@ module IRRuleGeneration
             prop_hdr = "[&](auto &lhs, auto &m) {\n"
             emit(prop_body_ir, prop_hdr)
             emit(prop_ir_builder, "return ")
-
             ir_propensity!(with_clause, prop_ir_builder, propensity_table, prop_body_ir)
             emit(prop_ir_builder, ";},")
 
@@ -857,8 +889,6 @@ module IRRuleGeneration
             param.token
         )
 
-        println("user_param_names ========================>: ", user_param_names, "\n")
-
         ix = 0
         node_attrs = []
 
@@ -866,6 +896,7 @@ module IRRuleGeneration
 
             if !(node_type in collect(keys(symbol_tables)))
                 println("Node type $node_type not found in symbol tables.")
+                throw("Node type $node_type not found in symbol tables.")
                 continue
             end
 
@@ -897,8 +928,6 @@ module IRRuleGeneration
                             )
 
         flatten_node_attrs = collect(Iterators.flatten(flatten_node_attrs))
-
-        println("flatten_node_attrs ========================>: ", flatten_node_attrs, "\n")
 
         node_to_params = []
         node_to_types = []
@@ -1030,9 +1059,12 @@ module IRRuleGeneration
             propensity_table["var_local_table"]["random_device"] = true
 
         end
+
+        func_name = ir_distribution_func(distribution, args)
         
         # TODO: Check dist_type and return the correct one here instead.
-        ir2 = "std::uniform_real_distribution<double>("*args *")(random_engine)"
+        # ir2 = "std::uniform_real_distribution<double>("*args *")(random_engine)"
+        ir2 = "$func_name("*args *")(random_engine)"
         return ir2
     end
 
@@ -1061,80 +1093,7 @@ module IRRuleGeneration
 
                 ir_where_assignment!(assign_node, type_namespace, rhs_assgn_to_node,
                                      propensity_table, ir_builder)
-
-                
-                    # exit(0)
-
-                    # println(
-
-                    # Need to check for intermediate expressions.
-
-                    # This handles the where clause expressions.
-                    # Lets go ahead and handle special cases here.
-                    # FIXME: This should be done already at the parser level.
-                    # We should not have to do this here. but I am going to because
-                    # I am lazy at this moment.
-                    # assgn_expr = []
-                    # expr_count = 1
-                    # while expr_count <= length(node_value)
-                        # expr = node_value[expr_count]
-                        # ir =  expr.position.value
-                        # if ir == "~"
-                            # expr_count += 1
-                            # dist_type = node_value[expr_count].position.value
-                            # expr_count += 1
-                            # Remove (
-                            # expr_count += 1
-                            # if propensity_table["var_local_table"]["random_device"] == false
-                                # # We need to define the random device and engine
-                                # # only once.
-                                # ir0 = "std::random_device random_device;\n"
-                                # emit(ir_builder, ir0)
-                                # ir1 = "std::mt19937 random_engine(random_device());\n"
-                                # emit(ir_builder, ir1)
-                                # propensity_table["var_local_table"]["random_device"] = true
-                            # end
-                            # args = []
-                            # while length(node_value) > expr_count
-                                # arg = node_value[expr_count].position.value
-                                # if arg == ")"
-                                    # break
-                                # end
-                                # push!(args, arg)
-                                # expr_count += 1
-                            # end
-                            # args = join(args)
-
-                            # TODO: Check dist_type and return the correct one here instead.
-                            # ir2 = "std::uniform_real_distribution<double>("*args *")(random_engine)"
-                            # ir = ir2
-                            # push!(assgn_expr, ir)
-                            # expr_count += 1
-                            # ir = ir_distribution!(node_value, ir_builder)
-                        # else
-                            # push!(assgn_expr, ir)
-                            # expr_count += 1
-                        # end
-                    # end
-
-                    # joined_expr = join(assgn_expr)
-
-                    # Add to propensity function if it is not used
-                    # in node assignment.
-                    # assigned_param = rhs_assgn_node[4][3]
-                    # assigned_node = rhs_assgn_node[1]
-                    # rhs_attr = rhs_assgn_node[4][2]
-                    # node_type = rhs_assgn_node[3]
-
-                    # assigned_param_name = assigned_param
-                    # ir = "\t\tstd::get<$type_namespace::$node_type>(rhs[m2[$assigned_node]].data).$rhs_attr = $joined_expr;"
-                    # if assigned_param == 1 || assigned_param == 2
-                        # ir_node_pos = "\t\trhs[m2[$assigned_node]].position[$(assigned_param-1)] = $joined_expr;"
-                        # emit(ir_builder, ir_node_pos)
-                    # end
-
-                    # emit(ir_builder, ir)
-            end, 
+                            end, 
             where_clause
         )
 
@@ -1143,6 +1102,8 @@ module IRRuleGeneration
 
 
     function ir_prop_expr!(with_clause, ir_builder, propensity_table, prop_body_ir, propensity)
+
+    println("propensity: ", propensity)
 
         function_node = with_clause
 
@@ -1157,20 +1118,34 @@ module IRRuleGeneration
             # fetch the function arguments from the identifier
             arg = function_node.token
 
+            if arg.position.value == "s_min"
+                println("propensity: ", propensity)
+                println("found!")
+            end
+
             # println("propensity_table: ", propensity_table)
 
             # FIXME: Check to see if it is in the rule_lhs also..
             if arg.position.value in collect(keys(propensity_table)) && propensity == true
+
                 ir = propensity_table[arg.position.value]
                 # Loads it into the body
                 emit(prop_body_ir, ir)
                 emit(ir_builder, arg.position.value)
+
             elseif arg.position.value in collect(keys(propensity_table["parameter_table"]))
+
+                # if propensity == true
+                    # emit(prop_body_ir, "settings."*arg.position.value)
+                # end
+
                 # ir = propensity_table[arg.position.value]
                 ir = "settings." * arg.position.value
                 emit(ir_builder, ir)
 
-            elseif arg.position.value in collect(keys(propensity_table["var_local_table"]["rule_rhs"]))
+            elseif arg.position.value in collect(
+                                     keys(propensity_table["var_local_table"]["rule_rhs"])
+                                )
                 ir = propensity_table["var_local_table"]["rule_rhs"][arg.position.value]
                 emit(ir_builder, ir)
 
@@ -1258,6 +1233,7 @@ module IRRuleGeneration
         # is using a variable. If it is using a propensity.
         function_node = with_clause.function_node
 
+    println("in ir_propensity! ========>")
         ir_prop_expr!(function_node, ir_builder, propensity_table, prop_body_ir, true)
     end
 
@@ -1283,7 +1259,6 @@ module IRRuleGeneration
             ir_value = build_sameline(ir_value)
 
             # Adds the definition to propensity table local scope.
-            println("assigning name: $name with type: $type and value: $ir_value")
             propensity_table["var_local_table"]["rule_rhs"][name] = "$name"
 
             ir = "$type $name = $ir_value;"
@@ -1295,7 +1270,6 @@ module IRRuleGeneration
             type = convert_type_name(get_value(assign_node.type.name))
             value = assign_node.value
 
-            println("rhs_assgn_to_node: ", collect(keys(rhs_assgn_to_node)))
 
             rhs_assgn_node = rhs_assgn_to_node[name]
             node_value = assign_node.value
@@ -1303,8 +1277,6 @@ module IRRuleGeneration
 
             local_namespace = type_namespace
 
-            println("assign_node: $assign_node")
-            println("Processing assignment for node: $name with value: $node_value")
             if !(value isa GroupNode)
                 value = GroupNode(value)
             end
@@ -1315,8 +1287,15 @@ module IRRuleGeneration
             ir_value = build_sameline(ir_value)
 
             # Adds the definition to propensity table local scope.
-            println("assigning name: $name with type: $type and value: $ir_value")
             propensity_table["var_local_table"]["rule_rhs"][name] = "$name"
+
+            # Fix self-referrential assignment
+            if occursin(name, ir_value)
+                throw("Error: Self-referential assignment detected for variable '$name'. This is not supported.")
+                # ir_value = replace(ir_value, name => "tmp_$name")
+                # emit(ir_builder, "$type tmp_$name = $ir_value;")
+            end
+
             new_ir = "$type $name = $ir_value;"
 
             emit(ir_builder, new_ir)

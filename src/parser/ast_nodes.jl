@@ -8,10 +8,14 @@ module AstNodes
                     PlusToken, AsteriskToken,
                     SlashToken, NotToken, SampleToken
 
-
     abstract type Node end
     abstract type LiteralNode <: Node end
     abstract type ModifyClauseNode <: Node end
+
+    struct FloatNode <: LiteralNode
+        token::Token
+    end
+
 
     struct TimeTypeNode <: Node
         token::Token
@@ -35,10 +39,7 @@ module AstNodes
         token::Array{Node} # Can be a ParameterNode or a IdentifierNode
     end
 
-    struct FloatNode <: LiteralNode
-        token::Token
-    end
-
+    
     struct IntegerNode <: LiteralNode
         token::Token
     end
@@ -83,7 +84,8 @@ module AstNodes
         value :: Union{BinaryOpNode,
                        IdentifierNode,
                         IntegerNode,
-                        FloatNode
+                        FloatNode,
+                        GroupNode
                       }
     end
 
@@ -177,13 +179,13 @@ module AstNodes
         value::Array{InitialConditionNode}
     end
 
-    struct GrammarNode <: Node
-        time::TimeTypeNode
-        name::IdentifierNode
-        signature::GrammarSignatureNode
-        initial_conditions::InitialConditionListNode
-        rules::Array{RuleNode}
-    end
+    # struct GrammarNode <: Node
+        # time::TimeTypeNode
+        # name::IdentifierNode
+        # signature::GrammarSignatureNode
+        # initial_conditions::InitialConditionListNode
+        # rules::Array{RuleNode}
+    # end
 
     struct TypeSectionNode <: Node
         name :: IdentifierNode
@@ -254,14 +256,18 @@ module AstNodes
         rhs :: Token
     end
 
-    
-    struct FoxFlowNode <: Node
+    struct GrammarNode <: Node
         type_section :: TypeSectionNode
         parameter_section :: ParameterSectionNode
+        # Helper function Section
         function_section :: FunctionSectionNode
         rule_section :: RuleSectionNode
         observable_section :: ObservableSectionNode
-        grammar_section :: GrammarSectionNode
     end
 
+    struct FoxFlowNode <: Node
+        grammars :: Array{GrammarNode}
+        parameters :: ParameterSectionNode
+    end
+    
 end
