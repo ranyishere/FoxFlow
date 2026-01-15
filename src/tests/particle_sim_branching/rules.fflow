@@ -1,5 +1,4 @@
 
-
 rules particle_rules {
 
 start_to_node := (start : StartType) << start_x, start_y >> 

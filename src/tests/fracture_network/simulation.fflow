@@ -1,0 +1,19 @@
+
+simulation Test {
+
+    # Loading parameters
+    params : Parameter := Microtubule
+    
+    # Load VTK File
+    initialState : State := load("")
+
+    # What rules to use.
+    rules : Rules := load("rules.fflow")
+
+    # Number of iterations
+    iterations : Float := 3
+
+    # TODO: Where to save results
+    # Where to save results
+
+}

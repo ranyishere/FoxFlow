@@ -1,0 +1,16 @@
+
+types Microtubule {
+
+    Counter << FixedList <<2, Float>>, Float>> : Type
+
+    Growing <<FixedList<<2, Float>>, FixedList<<2, Float>> >> : Type
+    Intermediate << FixedList<<2, Float>>, FixedList<<2, Float>> >> : Type
+    Retraction << FixedList<<2, Float>>, FixedList<<2, Float>> >> : Type
+    Zipper << FixedList<<2, Float>>, FixedList<<2, Float>> >> : Type
+    Junction << FixedList <<2, Float >>, FixedList<<2, Float>> >> : Type
+
+    CellBoundary << FixedList<<2, Float>>, FixedList<<2, Float>> >> : Type
+    NucleatorCreator << FixedList<<2, Float>>, Integer , Integer>> : Type
+
+    Nucleator << FixedList<<2, Float>> >> : Type
+}

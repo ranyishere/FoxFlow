@@ -1,0 +1,170 @@
+
+rules FractureNetwork {
+
+    # This is your source
+    start_node_up := (start : StartType) << (start_x, start_y) >> -> 
+    (start : FractureSegmentEnd) (start0 : FractureSegmentEnd) (start1 : FractureSegmentEnd) << (start_xn, start_yn, pn, ux, uy),
+                                                            (start_xn0, start_yn0, pn0, ux0, uy0),
+                                                            (start_xn1, start_yn1, pn1, ux1, uy1) >> with (10 * s_min) where {
+
+        start_xn : Float = 3.0 + s_min
+        start_yn : Float = 3.0 + s_min
+
+        pn : Float = 10.0
+        ux : Float = 1.0
+        uy : Float = 1.0
+
+        start_xn0 : Float = 3.0 + s_min
+        start_yn0 : Float = 6.0 + s_min
+
+        pn0 : Float = 10.0
+        ux0 : Float = 1.0
+        uy0 : Float = -1.0
+
+        start_xn1 : Float = 4.0 + s_min
+        start_yn1 : Float = 6.0 + s_min
+        pn1 : Float = 10.0
+        ux1 : Float = 1.0
+        uy1 : Float = -1.0
+
+    }
+
+    start_to_node_fracture := (p0 : FractureSegmentEnd) << (x, y, p, ux, uy) >> 
+        -> (p0 : FractureSegment) -- (p1 : FractureSegmentEnd)
+    << (xn0, yn0, pn0, ux0, uy0), (x2, y2, p2, ux2, uy2) >> with (1.0) where {
+
+        # N/m2 pressure
+        xn0 : Float = x
+        yn0 : Float = y
+        pn0 : Float = p
+        ux0 : Float = ux
+        uy0 : Float = uy
+
+        x2 : Float = (xn0 + s_min * ux)
+        y2 : Float = (yn0 + s_min * uy)
+        p2 : Float = p - 0.1
+        ux2 : Float = ux
+        uy2 : Float = uy
+    }
+
+    # single_segment_pressure_flux := (p0 : FractureSegment) -- (p1 : FractureSegment) << (x0, y0, p0, ux0, uy0),
+                                                                                        # (x1, y1, p1, ux1, uy1) >> 
+        # ->  (p0 : FractureSegment) -- (p1 : FractureSegment) << (x0n, y0n, dp0, ux0n, uy0n),
+                                                               # (x1n, y1n, dp1, ux1n, uy1n) >> solving ( dp0 := D(p0, t), dp1 := D(p1, t)) {
+            # dp0 : ODE = -1 * p0
+            # dp1 : ODE = -1 * p1
+    # }
+
+    single_segment_pressure_flux := (p0 : FractureSegment)  << (x0, y0, p0, ux0, uy0) >> 
+        ->  (p0 : FractureSegment) << (x0n, y0n, dp0, ux0n, uy0n) >> solving ( dp0 := D(p0, t)) {
+            dp0 : ODE = 0.1 * p0
+    }
+
+    fracture_junction := (p1 : FractureSegment) -- (p2 : FractureSegmentEnd)
+        (p3 : FractureSegment) -- (p4 : FractureSegment) -- (p5 : FractureSegment)
+        <<
+            (x1, y1, p1, ux1, uy1), (x2, y2, p2, ux2, uy2), 
+            (x3, y3, p3, ux3, uy3), (x4, y4, p4, ux4, uy4), (x5, y5, p5, ux5, uy5) >> -> 
+            (p1 : FractureSegment) -- (p5 : Junction) -- (p3 : FractureSegmentEnd)
+            (p4 : FractureSegment) -- (p5 : Junction) -- (p6 : FractureSegment)
+        << 
+            (x1n, y1n, p1n, ux1n, uy1n), (x5n, y5n, p5n, ux5n, uy5n), (x3n, y3n, p3n, ux3n, uy3n),
+            (x4n, y4n, p4n, ux4n, uy4n), (x5n, y5n, p5n, ux5n, uy5n), (x6n, y6n, p6n, ux6n, uy6n) >> 
+         with (indicator(uy2 != uy4)*indicator( sqrt((x2 - x4 )*(x2 - x4) + (y2 - y4)*(y2 - y4) ) <= s_min) ) where {
+
+        x1n : Float = x1
+        y1n : Float = y1
+        p1n : Float = p1
+        ux1n : Float = ux1
+        uy1n : Float = uy1
+
+        x5n : Float = x2
+        y5n : Float = y2
+        p5n : Float = p2
+        ux5n : Float = ux2
+        uy5n : Float = uy2
+        
+        x3n : Float = x2 + s_min * ux2
+        y3n : Float = y2  + s_min * uy2
+        p3n : Float = 1.0
+        ux3n : Float = ux2
+        uy3n : Float = uy2
+
+        x4n : Float = x3
+        y4n : Float = y3
+        p4n : Float = p3
+        ux4n : Float = ux3
+        uy4n : Float = uy3
+        
+        x6n : Float = x5n
+        y6n : Float = y5n
+        p6n : Float = p5n
+        ux6n : Float = ux5n
+        uy6n : Float = uy5n
+
+    }
+
+fracture_cross := (p1 : FractureSegment) -- (p2 : FractureSegment) -- (p3 : FractureSegment)
+        (p4 : FractureSegment) -- (p5 : FractureSegment) -- (p6 : FractureSegment)
+        <<
+            (x1, y1, p1, ux1, uy1), (x2, y2, p2, ux2, uy2), 
+            (x3, y3, p3, ux3, uy3), (x4, y4, p4, ux4, uy4), (x5, y5, p5, ux5, uy5), (x6, y6, p6, ux6, uy6)>> -> 
+            (p1 : FractureSegment) -- (p5 : Junction) -- (p3 : FractureSegment)
+            (p4 : FractureSegment) -- (p5 : Junction) -- (p6 : FractureSegment)
+        << 
+            (x1n, y1n, p1n, ux1n, uy1n), (x5n, y5n, p5n, ux5n, uy5n), (x3n, y3n, p3n, ux3n, uy3n),
+            (x4n, y4n, p4n, ux4n, uy4n), (x5n, y5n, p5n, ux5n, uy5n), (x6n, y6n, p6n, ux6n, uy6n) >> 
+         with (indicator(uy2 != uy5)*indicator( sqrt((x2 - x5 )*(x2 - x5) + (y2 - y5)*(y2 - y5) ) <= s_min*3) ) where {
+
+        x1n : Float = x1
+        y1n : Float = y1
+        p1n : Float = p1
+        ux1n : Float = ux1
+        uy1n : Float = uy1
+
+        x5n : Float = x2
+        y5n : Float = y2
+        p5n : Float = p2
+        ux5n : Float = ux2
+        uy5n : Float = uy2
+        
+        x3n : Float = x2 + s_min * ux2
+        y3n : Float = y2  + s_min * uy2
+        p3n : Float = 1.0
+        ux3n : Float = ux2
+        uy3n : Float = uy2
+
+        x4n : Float = x3
+        y4n : Float = y3
+        p4n : Float = p3
+        ux4n : Float = ux3
+        uy4n : Float = uy3
+        
+        x6n : Float = x5n
+        y6n : Float = y5n
+        p6n : Float = p5n
+        ux6n : Float = ux5n
+        uy6n : Float = uy5n
+
+    }
+
+
+#     hit_boundary := (p0 : FractureSegment) -- (end : FractureSegmentEnd)  (bound0 : Boundary) -- (bound1 : Boundary) <<
+#             (x0, y0, p0, ux0, uy0),
+#             (x1, y1, p1, ux1, uy1),
+#             (xb0, yb0),
+#         (xb1, yb1) >> -> (p0 : FractureSegment) -- (p1 : FractureSegmentEnd) <<
+#         (x0n, y0n, p0n, ux0n, uy0n),
+#         (x1n, y1n, p1n, ux1n, uy1n) >> with (0.0) where {
+# 
+#             x0n : Float = x0
+#             y0n : Float = y0
+#             p0n : Float = p0
+# 
+#             x1n : Float = x1
+#             y1n : Float = y1
+#             p1n : Float = 0.0
+# 
+#         }
+
+}

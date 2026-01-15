@@ -1,4 +1,3 @@
-
 """
 IR Generation for FoxFlow
 """

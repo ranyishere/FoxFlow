@@ -2,6 +2,7 @@
 #define DGGML_RULES_HPP
 #include "types.h"
 #include "parameters.h"
+#include "functions.h"
 
 namespace particle_rules {
 

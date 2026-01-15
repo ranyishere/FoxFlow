@@ -3,13 +3,15 @@
 # include("ir_builder.jl")
 # include("ir.jl")
 # include("utils.jl")
+
 include("ir_rule_generation.jl")
 include("ir_parameter_section.jl")
 include("ir_types_section.jl")
 include("ir_models_section.jl")
+include("ir_functions_section.jl")
 
 import .IRRuleGeneration: ir_rules_section!
-import .IRBuildUtils: emit, build, IRBuilder
+import .IRBuildUtils: emit, build, IRBuilder, build_sameline
 import ..AstNodes: IntegerNode, FloatNode, IdentifierNode, BinaryOpNode, GroupNode, CallNode
 
 import ..Tokens: IntegerToken, FloatToken, PositionToken, LiteralToken, ErrorToken, OperatorToken
@@ -20,13 +22,10 @@ using OrderedCollections
 # FIXME: Spaces should not be relevant.
 # FIXME: need to fix that the rules are updating the wrong nodes.
 #    seems like node counts are wrong.
-
 using UUIDs
 
-symbol_tables = OrderedDict()
 rules_table = Dict()
 propensity_table = Dict()
-
 type_namespace = ""
 rule_namespace = ""
 
@@ -84,8 +83,9 @@ function ir_parameter(ast)
         # to the identifier.
         # =============================
 
-        while length(ast.token) > 0
-            each_token = popfirst!(ast.token)
+        copy_ast = deepcopy(ast.token)
+        while length(copy_ast) > 0
+            each_token = popfirst!(copy_ast)
             if isa(each_token, IntegerNode)
                 int_name = "fflow_"*string(UUIDs.uuid4())[1:6]
 
@@ -113,7 +113,7 @@ function ir_parameter(ast)
                     # the first one is the size
                     # the second one is the type
 
-                    list_params = popfirst!(ast.token)
+                    list_params = popfirst!(copy_ast)
                     list_size = list_params.token[1]
                     list_type = list_params.token[2]
 
@@ -164,7 +164,8 @@ function ir_struct_like_array(param_names)
     return variant_func
 end
 
-function ir_type_instance(ast, define_type=false)
+
+function ir_type_instance(ast, define_type=false, symbol_tables=nothing)
     """
     IR Type Instance
     """
@@ -218,16 +219,10 @@ function ir_type_instance(ast, define_type=false)
     elseif isa(ast.value, LiteralToken)
 
         ir_type = convert_type_name(type_class_name)
-
-        # It's a literal
-        # begin_struct = ["\t"*type_class_name*" $(type_name) "*"= $(ast.value.position.value);"]
         begin_struct = ["\t"*ir_type*" $(type_name) "*"= $(ast.value.position.value);"]
     elseif isa(ast.value, IntegerNode)
-        # It's an integer
-        # ir_type = "int"
 
-    ir_type = convert_type_name(get_value(ast.type.name))
-
+        ir_type = convert_type_name(get_value(ast.type.name))
         begin_struct = ["\t"*ir_type*" $(type_name) "*"= $(ast.value.token.position.value);"]
     elseif isa(ast.value, BinaryOpNode)
         # It's a binary operation
@@ -236,13 +231,12 @@ function ir_type_instance(ast, define_type=false)
         begin_struct = ["\t"*ir_type*" $(type_name) "*"= $(expression);"]
 
     elseif isa(ast.value, IdentifierNode)
-        # It's an identifier
         ir_type = convert_type_name(type_class_name)
         begin_struct = ["\t"*ir_type*" $(type_name) "*"= $(ast.value.token.position.value);"]
     end
 
     push!(begin_struct,"\n")
-    join(begin_struct)
+    join(begin_struct), param_names
 end
 
 
@@ -403,7 +397,6 @@ function ir_main(name_space)
                      # "\t model_simulator.get_gamma();\n",
                 # ]
 
-
     ir_footer = [
                "\treturn 0;\n"
                  "}\n"
@@ -415,27 +408,38 @@ function ir_main(name_space)
     check_main
 end
 
-
 # NOTE: Solving rule takes in:
 # explicit SolvingRule(std::string rname, GraphType& lhs_graph, GraphType& rhs_graph, std::size_t num_eq, initial_condition_t&& ic, solving_t&& ode)  
-#
+function do_simulation()
+    """
+    Do Simulation
+    """
+    println("test")
+end
 
 function generate_ir()
     """
     Generate IR
     """
 
-    # name_space = "Particles"
     name_space = "Microtubule"
-
-    # test_folder = "particle_sim"
-    # test_folder = "particle_sim_branching"
     test_folder = "fracture_network"
-    # test_folder = "random_network"
-
     base = "../tests/generated_tests/generated_2/"
-
     test_base = "../tests/"
+
+    symbol_tables = OrderedDict()
+    function_table = OrderedDict()
+
+    # TODO: If functions.fflow is missing just make it empty.
+    tokens_funct = tokenize_file(test_base*"$test_folder/functions.fflow")
+    funct_ast = parse_file!(tokens_funct)
+    ir_functions = ir_function_section(funct_ast[1], function_table)
+    println("ir_functions: ", ir_functions)
+
+    propensity_table["function_table"] = function_table
+
+    write_file(base*"functions.h", ir_functions)
+    # exit(0)
 
     tokens_params = tokenize_file(test_base*"$test_folder/params.fflow")
     ast_params = parse_file!(tokens_params)
@@ -450,9 +454,14 @@ function generate_ir()
     ast_types = parse_file!(tokens_types)
 
     println("Generating Types")
-    generated_types = ir_types_section(ast_types[1])
+    generated_types = ir_types_section(ast_types[1], symbol_tables)
+
     write_file(base*"types.h",
                generated_types)
+
+    # exit(0)
+
+    # print("generated_types: ", generated_types, "\n")
 
     tokens_rules = tokenize_file(test_base*"$test_folder/rules.fflow")
     ast_rules = parse_file!(tokens_rules)[1]
@@ -460,7 +469,8 @@ function generate_ir()
     println("Generating Rules")
     ir_rules_section = ir_rules_section!(ast_rules,
                                          rules_table, symbol_tables,
-                                         propensity_table, type_namespace)
+                                         propensity_table,
+                     type_namespace)
 
     write_file(base*"rules.h", ir_rules_section)
 
@@ -472,13 +482,13 @@ function generate_ir()
             main_ir
     )
 
-    # This is where you define your observables
+    # This is where you define your observables and saving/loading mechanisms
     println("Generating Model")
-    ir_models = ir_models_section(nothing, name_space)
+    ir_models = ir_models_section(nothing, name_space, symbol_tables)
     write_file(base*"model.h", ir_models)
 
     println("Done")
-
 end
 
+# do_simulation()
 generate_ir()

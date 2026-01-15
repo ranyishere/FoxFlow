@@ -1,0 +1,10 @@
+
+
+functions helperFunctions {
+
+	distance : Function <<(x0 : Float, y0 : Float), (x1 : Float, y1 : Float)>> -> Float := {
+		res : Float := sqrt( (x1 - x0)^2 + (y1 - y0)^2 )
+		return res
+	}
+
+}

@@ -1,0 +1,598 @@
+Tokenizing file: ../tests/fracture_network/params.fflow
+Generating Params
+Tokenizing file: ../tests/fracture_network/types.fflow
+Value: Type
+Value: Type
+Value: Type
+Generating Types
+Tokenizing file: ../tests/fracture_network/rules.fflow
+cur_token =======>: WhereToken(PositionToken("where", 8, 64))
+cur_token =======>: WhereToken(PositionToken("where", 34, 72))
+Parsing solving clause
+cur_token =======>: WhereToken(PositionToken("where", 74, 40))
+Generating Rules
+========> Adding node: start, type: StartType at index: 1 <========
+max value ===> 0
+Adding new node to graph table: start, type: StartType at index: 2
+========> Adding node: start, type: StartType at cur_index: 2 <========
+========> Adding node: start, type: FractureSegmentEnd at index: 2 <========
+max value ===> 2
+Adding new node to graph table: start, type: FractureSegmentEnd at index: 3
+========> Adding node: start, type: FractureSegmentEnd at cur_index: 3 <========
+========> Adding node: start0, type: FractureSegmentEnd at index: 2 <========
+max value ===> 3
+Adding new node to graph table: start0, type: FractureSegmentEnd at index: 3
+========> Adding node: start0, type: FractureSegmentEnd at cur_index: 3 <========
+========> Adding node: start1, type: FractureSegmentEnd at index: 2 <========
+max value ===> 3
+Adding new node to graph table: start1, type: FractureSegmentEnd at index: 3
+========> Adding node: start1, type: FractureSegmentEnd at cur_index: 3 <========
+lhs_names ===>: Any["start"]
+user_param_names ==========>: [("start_x", 1), ("start_y", 2)]
+len(zipped): 2
+len(user_param_names): 2
+node_names: Any["start"]
+user_param_name: ("start_x", 1) node_loc: 1 node_param: start node_type: StartType attr: ("float", "start_location[0]", 1)
+user_param_name: ("start_y", 2) node_loc: 1 node_param: start node_type: StartType attr: ("float", "start_location[1]", 2)
+len(user_param_names): 2
+len(values(param_name_to_node)): 2
+linked_params: Dict{Any, Any}("start_y" => (1, "start", "StartType", ("float", "start_location[1]", 2)), "start_x" => (1, "start", "StartType", ("float", "start_location[0]", 1)))
+rhs_name: start_node_up_rhs
+rhs_names: Any["start", "start0", "start1"]
+user_param_names ==========>: [("start_xn", 1), ("start_yn", 2), ("pn", 3), ("ux", 4), ("uy", 5), ("start_xn0", 6), ("start_yn0", 7), ("pn0", 8), ("ux0", 9), ("uy0", 10), ("start_xn1", 11), ("start_yn1", 12), ("pn1", 13), ("ux1", 14), ("uy1", 15)]
+len(zipped): 15
+len(user_param_names): 15
+node_names: Any["start", "start0", "start1"]
+user_param_name: ("start_xn", 1) node_loc: 1 node_param: start node_type: FractureSegmentEnd attr: ("double", "fflow_b5962b[0]", 1)
+user_param_name: ("start_yn", 2) node_loc: 1 node_param: start node_type: FractureSegmentEnd attr: ("double", "fflow_b5962b[1]", 2)
+user_param_name: ("pn", 3) node_loc: 1 node_param: start node_type: FractureSegmentEnd attr: ("double", "fflow_88db82", 3)
+user_param_name: ("ux", 4) node_loc: 1 node_param: start node_type: FractureSegmentEnd attr: ("double", "fflow_6062bd[0]", 4)
+user_param_name: ("uy", 5) node_loc: 1 node_param: start node_type: FractureSegmentEnd attr: ("double", "fflow_6062bd[1]", 5)
+user_param_name: ("start_xn0", 6) node_loc: 2 node_param: start0 node_type: FractureSegmentEnd attr: ("double", "fflow_b5962b[0]", 1)
+user_param_name: ("start_yn0", 7) node_loc: 2 node_param: start0 node_type: FractureSegmentEnd attr: ("double", "fflow_b5962b[1]", 2)
+user_param_name: ("pn0", 8) node_loc: 2 node_param: start0 node_type: FractureSegmentEnd attr: ("double", "fflow_88db82", 3)
+user_param_name: ("ux0", 9) node_loc: 2 node_param: start0 node_type: FractureSegmentEnd attr: ("double", "fflow_6062bd[0]", 4)
+user_param_name: ("uy0", 10) node_loc: 2 node_param: start0 node_type: FractureSegmentEnd attr: ("double", "fflow_6062bd[1]", 5)
+user_param_name: ("start_xn1", 11) node_loc: 3 node_param: start1 node_type: FractureSegmentEnd attr: ("double", "fflow_b5962b[0]", 1)
+user_param_name: ("start_yn1", 12) node_loc: 3 node_param: start1 node_type: FractureSegmentEnd attr: ("double", "fflow_b5962b[1]", 2)
+user_param_name: ("pn1", 13) node_loc: 3 node_param: start1 node_type: FractureSegmentEnd attr: ("double", "fflow_88db82", 3)
+user_param_name: ("ux1", 14) node_loc: 3 node_param: start1 node_type: FractureSegmentEnd attr: ("double", "fflow_6062bd[0]", 4)
+user_param_name: ("uy1", 15) node_loc: 3 node_param: start1 node_type: FractureSegmentEnd attr: ("double", "fflow_6062bd[1]", 5)
+len(user_param_names): 15
+len(values(param_name_to_node)): 15
+linked_params: Dict{Any, Any}("uy1" => (3, "start1", "FractureSegmentEnd", ("double", "fflow_6062bd[1]", 5)), "pn1" => (3, "start1", "FractureSegmentEnd", ("double", "fflow_88db82", 3)), "start_xn1" => (3, "start1", "FractureSegmentEnd", ("double", "fflow_b5962b[0]", 1)), "ux" => (1, "start", "FractureSegmentEnd", ("double", "fflow_6062bd[0]", 4)), "start_yn" => (1, "start", "FractureSegmentEnd", ("double", "fflow_b5962b[1]", 2)), "start_xn" => (1, "start", "FractureSegmentEnd", ("double", "fflow_b5962b[0]", 1)), "ux0" => (2, "start0", "FractureSegmentEnd", ("double", "fflow_6062bd[0]", 4)), "uy0" => (2, "start0", "FractureSegmentEnd", ("double", "fflow_6062bd[1]", 5)), "pn0" => (2, "start0", "FractureSegmentEnd", ("double", "fflow_88db82", 3)), "start_xn0" => (2, "start0", "FractureSegmentEnd", ("double", "fflow_b5962b[0]", 1)), "ux1" => (3, "start1", "FractureSegmentEnd", ("double", "fflow_6062bd[0]", 4)), "start_yn0" => (2, "start0", "FractureSegmentEnd", ("double", "fflow_b5962b[1]", 2)), "pn" => (1, "start", "FractureSegmentEnd", ("double", "fflow_88db82", 3)), "uy" => (1, "start", "FractureSegmentEnd", ("double", "fflow_6062bd[1]", 5)), "start_yn1" => (3, "start1", "FractureSegmentEnd", ("double", "fflow_b5962b[1]", 2)))
+====================>
+assigned_param ===> 1
+assigned_node ===> 1
+rhs_assign_node ===> (1, "start", "FractureSegmentEnd", ("double", "fflow_b5962b[0]", 1))
+name ===> start_xn
+====================>
+====================>
+assigned_param ===> 2
+assigned_node ===> 1
+rhs_assign_node ===> (1, "start", "FractureSegmentEnd", ("double", "fflow_b5962b[1]", 2))
+name ===> start_yn
+====================>
+====================>
+assigned_param ===> 3
+assigned_node ===> 1
+rhs_assign_node ===> (1, "start", "FractureSegmentEnd", ("double", "fflow_88db82", 3))
+name ===> pn
+====================>
+====================>
+assigned_param ===> 4
+assigned_node ===> 1
+rhs_assign_node ===> (1, "start", "FractureSegmentEnd", ("double", "fflow_6062bd[0]", 4))
+name ===> ux
+====================>
+====================>
+assigned_param ===> 5
+assigned_node ===> 1
+rhs_assign_node ===> (1, "start", "FractureSegmentEnd", ("double", "fflow_6062bd[1]", 5))
+name ===> uy
+====================>
+====================>
+assigned_param ===> 1
+assigned_node ===> 2
+rhs_assign_node ===> (2, "start0", "FractureSegmentEnd", ("double", "fflow_b5962b[0]", 1))
+name ===> start_xn0
+====================>
+====================>
+assigned_param ===> 2
+assigned_node ===> 2
+rhs_assign_node ===> (2, "start0", "FractureSegmentEnd", ("double", "fflow_b5962b[1]", 2))
+name ===> start_yn0
+====================>
+====================>
+assigned_param ===> 3
+assigned_node ===> 2
+rhs_assign_node ===> (2, "start0", "FractureSegmentEnd", ("double", "fflow_88db82", 3))
+name ===> pn0
+====================>
+====================>
+assigned_param ===> 4
+assigned_node ===> 2
+rhs_assign_node ===> (2, "start0", "FractureSegmentEnd", ("double", "fflow_6062bd[0]", 4))
+name ===> ux0
+====================>
+====================>
+assigned_param ===> 5
+assigned_node ===> 2
+rhs_assign_node ===> (2, "start0", "FractureSegmentEnd", ("double", "fflow_6062bd[1]", 5))
+name ===> uy0
+====================>
+====================>
+assigned_param ===> 1
+assigned_node ===> 3
+rhs_assign_node ===> (3, "start1", "FractureSegmentEnd", ("double", "fflow_b5962b[0]", 1))
+name ===> start_xn1
+====================>
+====================>
+assigned_param ===> 2
+assigned_node ===> 3
+rhs_assign_node ===> (3, "start1", "FractureSegmentEnd", ("double", "fflow_b5962b[1]", 2))
+name ===> start_yn1
+====================>
+====================>
+assigned_param ===> 3
+assigned_node ===> 3
+rhs_assign_node ===> (3, "start1", "FractureSegmentEnd", ("double", "fflow_88db82", 3))
+name ===> pn1
+====================>
+====================>
+assigned_param ===> 4
+assigned_node ===> 3
+rhs_assign_node ===> (3, "start1", "FractureSegmentEnd", ("double", "fflow_6062bd[0]", 4))
+name ===> ux1
+====================>
+====================>
+assigned_param ===> 5
+assigned_node ===> 3
+rhs_assign_node ===> (3, "start1", "FractureSegmentEnd", ("double", "fflow_6062bd[1]", 5))
+name ===> uy1
+====================>
+========> Adding node: p0, type: FractureSegmentEnd at index: 1 <========
+max value ===> 0
+Adding new node to graph table: p0, type: FractureSegmentEnd at index: 2
+========> Adding node: p0, type: FractureSegmentEnd at cur_index: 2 <========
+========> Adding node: p0, type: FractureSegment at index: 2 <========
+max value ===> 2
+Adding new node to graph table: p0, type: FractureSegment at index: 3
+========> Adding node: p0, type: FractureSegment at cur_index: 3 <========
+lhs ix =====> 3
+========> Adding node: p1, type: FractureSegmentEnd at index: 3 <========
+max value ===> 3
+Adding new node to graph table: p1, type: FractureSegmentEnd at index: 4
+========> Adding node: p1, type: FractureSegmentEnd at cur_index: 4 <========
+rhs ix =====> 4
+graph_table: Dict{Any, Any}(("p0", "FractureSegment") => 3, ("p0", "FractureSegmentEnd") => 2, ("p1", "FractureSegmentEnd") => 4)
+Adding edge between nodes: 3 and 4
+lhs_names ===>: Any["p0"]
+user_param_names ==========>: [("x", 1), ("y", 2), ("p", 3), ("ux", 4), ("uy", 5)]
+len(zipped): 5
+len(user_param_names): 5
+node_names: Any["p0"]
+user_param_name: ("x", 1) node_loc: 1 node_param: p0 node_type: FractureSegmentEnd attr: ("double", "fflow_b5962b[0]", 1)
+user_param_name: ("y", 2) node_loc: 1 node_param: p0 node_type: FractureSegmentEnd attr: ("double", "fflow_b5962b[1]", 2)
+user_param_name: ("p", 3) node_loc: 1 node_param: p0 node_type: FractureSegmentEnd attr: ("double", "fflow_88db82", 3)
+user_param_name: ("ux", 4) node_loc: 1 node_param: p0 node_type: FractureSegmentEnd attr: ("double", "fflow_6062bd[0]", 4)
+user_param_name: ("uy", 5) node_loc: 1 node_param: p0 node_type: FractureSegmentEnd attr: ("double", "fflow_6062bd[1]", 5)
+len(user_param_names): 5
+len(values(param_name_to_node)): 5
+linked_params: Dict{Any, Any}("ux" => (1, "p0", "FractureSegmentEnd", ("double", "fflow_6062bd[0]", 4)), "x" => (1, "p0", "FractureSegmentEnd", ("double", "fflow_b5962b[0]", 1)), "uy" => (1, "p0", "FractureSegmentEnd", ("double", "fflow_6062bd[1]", 5)), "p" => (1, "p0", "FractureSegmentEnd", ("double", "fflow_88db82", 3)), "y" => (1, "p0", "FractureSegmentEnd", ("double", "fflow_b5962b[1]", 2)))
+rhs_name: start_to_node_fracture_rhs
+rhs_names: Any["p0", "p1"]
+user_param_names ==========>: [("xn0", 1), ("yn0", 2), ("pn0", 3), ("ux0", 4), ("uy0", 5), ("x2", 6), ("y2", 7), ("p2", 8), ("ux2", 9), ("uy2", 10)]
+len(zipped): 10
+len(user_param_names): 10
+node_names: Any["p0", "p1"]
+user_param_name: ("xn0", 1) node_loc: 1 node_param: p0 node_type: FractureSegment attr: ("double", "fflow_3ffcd5[0]", 1)
+user_param_name: ("yn0", 2) node_loc: 1 node_param: p0 node_type: FractureSegment attr: ("double", "fflow_3ffcd5[1]", 2)
+user_param_name: ("pn0", 3) node_loc: 1 node_param: p0 node_type: FractureSegment attr: ("double", "fflow_e9575c", 3)
+user_param_name: ("ux0", 4) node_loc: 1 node_param: p0 node_type: FractureSegment attr: ("double", "fflow_1dfd81[0]", 4)
+user_param_name: ("uy0", 5) node_loc: 1 node_param: p0 node_type: FractureSegment attr: ("double", "fflow_1dfd81[1]", 5)
+user_param_name: ("x2", 6) node_loc: 2 node_param: p1 node_type: FractureSegmentEnd attr: ("double", "fflow_b5962b[0]", 1)
+user_param_name: ("y2", 7) node_loc: 2 node_param: p1 node_type: FractureSegmentEnd attr: ("double", "fflow_b5962b[1]", 2)
+user_param_name: ("p2", 8) node_loc: 2 node_param: p1 node_type: FractureSegmentEnd attr: ("double", "fflow_88db82", 3)
+user_param_name: ("ux2", 9) node_loc: 2 node_param: p1 node_type: FractureSegmentEnd attr: ("double", "fflow_6062bd[0]", 4)
+user_param_name: ("uy2", 10) node_loc: 2 node_param: p1 node_type: FractureSegmentEnd attr: ("double", "fflow_6062bd[1]", 5)
+len(user_param_names): 10
+len(values(param_name_to_node)): 10
+linked_params: Dict{Any, Any}("xn0" => (1, "p0", "FractureSegment", ("double", "fflow_3ffcd5[0]", 1)), "x2" => (2, "p1", "FractureSegmentEnd", ("double", "fflow_b5962b[0]", 1)), "y2" => (2, "p1", "FractureSegmentEnd", ("double", "fflow_b5962b[1]", 2)), "p2" => (2, "p1", "FractureSegmentEnd", ("double", "fflow_88db82", 3)), "ux0" => (1, "p0", "FractureSegment", ("double", "fflow_1dfd81[0]", 4)), "uy0" => (1, "p0", "FractureSegment", ("double", "fflow_1dfd81[1]", 5)), "ux2" => (2, "p1", "FractureSegmentEnd", ("double", "fflow_6062bd[0]", 4)), "pn0" => (1, "p0", "FractureSegment", ("double", "fflow_e9575c", 3)), "yn0" => (1, "p0", "FractureSegment", ("double", "fflow_3ffcd5[1]", 2)), "uy2" => (2, "p1", "FractureSegmentEnd", ("double", "fflow_6062bd[1]", 5)))
+====================>
+assigned_param ===> 1
+assigned_node ===> 1
+rhs_assign_node ===> (1, "p0", "FractureSegment", ("double", "fflow_3ffcd5[0]", 1))
+name ===> xn0
+====================>
+====================>
+assigned_param ===> 2
+assigned_node ===> 1
+rhs_assign_node ===> (1, "p0", "FractureSegment", ("double", "fflow_3ffcd5[1]", 2))
+name ===> yn0
+====================>
+====================>
+assigned_param ===> 3
+assigned_node ===> 1
+rhs_assign_node ===> (1, "p0", "FractureSegment", ("double", "fflow_e9575c", 3))
+name ===> pn0
+====================>
+====================>
+assigned_param ===> 4
+assigned_node ===> 1
+rhs_assign_node ===> (1, "p0", "FractureSegment", ("double", "fflow_1dfd81[0]", 4))
+name ===> ux0
+====================>
+====================>
+assigned_param ===> 5
+assigned_node ===> 1
+rhs_assign_node ===> (1, "p0", "FractureSegment", ("double", "fflow_1dfd81[1]", 5))
+name ===> uy0
+====================>
+====================>
+assigned_param ===> 1
+assigned_node ===> 2
+rhs_assign_node ===> (2, "p1", "FractureSegmentEnd", ("double", "fflow_b5962b[0]", 1))
+name ===> x2
+====================>
+====================>
+assigned_param ===> 2
+assigned_node ===> 2
+rhs_assign_node ===> (2, "p1", "FractureSegmentEnd", ("double", "fflow_b5962b[1]", 2))
+name ===> y2
+====================>
+====================>
+assigned_param ===> 3
+assigned_node ===> 2
+rhs_assign_node ===> (2, "p1", "FractureSegmentEnd", ("double", "fflow_88db82", 3))
+name ===> p2
+====================>
+====================>
+assigned_param ===> 4
+assigned_node ===> 2
+rhs_assign_node ===> (2, "p1", "FractureSegmentEnd", ("double", "fflow_6062bd[0]", 4))
+name ===> ux2
+====================>
+====================>
+assigned_param ===> 5
+assigned_node ===> 2
+rhs_assign_node ===> (2, "p1", "FractureSegmentEnd", ("double", "fflow_6062bd[1]", 5))
+name ===> uy2
+====================>
+========> Adding node: p0, type: FractureSegment at index: 1 <========
+max value ===> 0
+Adding new node to graph table: p0, type: FractureSegment at index: 2
+========> Adding node: p0, type: FractureSegment at cur_index: 2 <========
+========> Adding node: p0, type: FractureSegment at index: 2 <========
+max value ===> 2
+Node already exists in graph table: p0, type: FractureSegment
+========> Adding node: p0, type: FractureSegment at cur_index: 2 <========
+lhs_names ===>: Any["p0"]
+user_param_names ==========>: [("x0", 1), ("y0", 2), ("p0", 3), ("ux0", 4), ("uy0", 5)]
+len(zipped): 5
+len(user_param_names): 5
+node_names: Any["p0"]
+user_param_name: ("x0", 1) node_loc: 1 node_param: p0 node_type: FractureSegment attr: ("double", "fflow_3ffcd5[0]", 1)
+user_param_name: ("y0", 2) node_loc: 1 node_param: p0 node_type: FractureSegment attr: ("double", "fflow_3ffcd5[1]", 2)
+user_param_name: ("p0", 3) node_loc: 1 node_param: p0 node_type: FractureSegment attr: ("double", "fflow_e9575c", 3)
+user_param_name: ("ux0", 4) node_loc: 1 node_param: p0 node_type: FractureSegment attr: ("double", "fflow_1dfd81[0]", 4)
+user_param_name: ("uy0", 5) node_loc: 1 node_param: p0 node_type: FractureSegment attr: ("double", "fflow_1dfd81[1]", 5)
+len(user_param_names): 5
+len(values(param_name_to_node)): 5
+linked_params: Dict{Any, Any}("x0" => (1, "p0", "FractureSegment", ("double", "fflow_3ffcd5[0]", 1)), "ux0" => (1, "p0", "FractureSegment", ("double", "fflow_1dfd81[0]", 4)), "uy0" => (1, "p0", "FractureSegment", ("double", "fflow_1dfd81[1]", 5)), "p0" => (1, "p0", "FractureSegment", ("double", "fflow_e9575c", 3)), "y0" => (1, "p0", "FractureSegment", ("double", "fflow_3ffcd5[1]", 2)))
+rhs_name: single_segment_pressure_flux_rhs
+rhs_names: Any["p0"]
+user_param_names ==========>: [("x0n", 1), ("y0n", 2), ("dp0", 3), ("ux0n", 4), ("uy0n", 5)]
+len(zipped): 5
+len(user_param_names): 5
+node_names: Any["p0"]
+user_param_name: ("x0n", 1) node_loc: 1 node_param: p0 node_type: FractureSegment attr: ("double", "fflow_3ffcd5[0]", 1)
+user_param_name: ("y0n", 2) node_loc: 1 node_param: p0 node_type: FractureSegment attr: ("double", "fflow_3ffcd5[1]", 2)
+user_param_name: ("dp0", 3) node_loc: 1 node_param: p0 node_type: FractureSegment attr: ("double", "fflow_e9575c", 3)
+user_param_name: ("ux0n", 4) node_loc: 1 node_param: p0 node_type: FractureSegment attr: ("double", "fflow_1dfd81[0]", 4)
+user_param_name: ("uy0n", 5) node_loc: 1 node_param: p0 node_type: FractureSegment attr: ("double", "fflow_1dfd81[1]", 5)
+len(user_param_names): 5
+len(values(param_name_to_node)): 5
+linked_params: Dict{Any, Any}("x0n" => (1, "p0", "FractureSegment", ("double", "fflow_3ffcd5[0]", 1)), "y0n" => (1, "p0", "FractureSegment", ("double", "fflow_3ffcd5[1]", 2)), "dp0" => (1, "p0", "FractureSegment", ("double", "fflow_e9575c", 3)), "uy0n" => (1, "p0", "FractureSegment", ("double", "fflow_1dfd81[1]", 5)), "ux0n" => (1, "p0", "FractureSegment", ("double", "fflow_1dfd81[0]", 4)))
+========> Adding node: p1, type: FractureSegment at index: 1 <========
+max value ===> 0
+Adding new node to graph table: p1, type: FractureSegment at index: 2
+========> Adding node: p1, type: FractureSegment at cur_index: 2 <========
+lhs ix =====> 2
+========> Adding node: p2, type: FractureSegmentEnd at index: 2 <========
+max value ===> 2
+Adding new node to graph table: p2, type: FractureSegmentEnd at index: 3
+========> Adding node: p2, type: FractureSegmentEnd at cur_index: 3 <========
+rhs ix =====> 3
+graph_table: Dict{Any, Any}(("p1", "FractureSegment") => 2, ("p2", "FractureSegmentEnd") => 3)
+Adding edge between nodes: 2 and 3
+========> Adding node: p3, type: FractureSegment at index: 3 <========
+max value ===> 3
+Adding new node to graph table: p3, type: FractureSegment at index: 4
+========> Adding node: p3, type: FractureSegment at cur_index: 4 <========
+lhs ix =====> 4
+========> Adding node: p4, type: FractureSegment at index: 4 <========
+max value ===> 4
+Adding new node to graph table: p4, type: FractureSegment at index: 5
+========> Adding node: p4, type: FractureSegment at cur_index: 5 <========
+rhs ix =====> 5
+graph_table: Dict{Any, Any}(("p1", "FractureSegment") => 2, ("p3", "FractureSegment") => 4, ("p4", "FractureSegment") => 5, ("p2", "FractureSegmentEnd") => 3)
+Adding edge between nodes: 4 and 5
+========> Adding node: p1, type: FractureSegment at index: 5 <========
+max value ===> 5
+Node already exists in graph table: p1, type: FractureSegment
+========> Adding node: p1, type: FractureSegment at cur_index: 2 <========
+lhs ix =====> 5
+========> Adding node: p5, type: Junction at index: 5 <========
+max value ===> 5
+Adding new node to graph table: p5, type: Junction at index: 6
+========> Adding node: p5, type: Junction at cur_index: 6 <========
+rhs ix =====> 6
+graph_table: Dict{Any, Any}(("p5", "Junction") => 6, ("p1", "FractureSegment") => 2, ("p3", "FractureSegment") => 4, ("p4", "FractureSegment") => 5, ("p2", "FractureSegmentEnd") => 3)
+Adding edge between nodes: 2 and 6
+========> Adding node: p3, type: FractureSegment at index: 5 <========
+max value ===> 6
+Node already exists in graph table: p3, type: FractureSegment
+========> Adding node: p3, type: FractureSegment at cur_index: 4 <========
+lhs ix =====> 5
+========> Adding node: p5, type: Junction at index: 5 <========
+max value ===> 6
+Node already exists in graph table: p5, type: Junction
+========> Adding node: p5, type: Junction at cur_index: 6 <========
+rhs ix =====> 5
+graph_table: Dict{Any, Any}(("p5", "Junction") => 6, ("p1", "FractureSegment") => 2, ("p3", "FractureSegment") => 4, ("p4", "FractureSegment") => 5, ("p2", "FractureSegmentEnd") => 3)
+Adding edge between nodes: 4 and 6
+========> Adding node: p5, type: Junction at index: 5 <========
+max value ===> 6
+Node already exists in graph table: p5, type: Junction
+========> Adding node: p5, type: Junction at cur_index: 6 <========
+lhs ix =====> 5
+========> Adding node: p2, type: FractureSegmentEnd at index: 5 <========
+max value ===> 6
+Node already exists in graph table: p2, type: FractureSegmentEnd
+========> Adding node: p2, type: FractureSegmentEnd at cur_index: 3 <========
+rhs ix =====> 5
+graph_table: Dict{Any, Any}(("p5", "Junction") => 6, ("p1", "FractureSegment") => 2, ("p3", "FractureSegment") => 4, ("p4", "FractureSegment") => 5, ("p2", "FractureSegmentEnd") => 3)
+Adding edge between nodes: 6 and 3
+========> Adding node: p5, type: Junction at index: 5 <========
+max value ===> 6
+Node already exists in graph table: p5, type: Junction
+========> Adding node: p5, type: Junction at cur_index: 6 <========
+lhs ix =====> 5
+========> Adding node: p6, type: FractureSegment at index: 5 <========
+max value ===> 6
+Adding new node to graph table: p6, type: FractureSegment at index: 6
+========> Adding node: p6, type: FractureSegment at cur_index: 6 <========
+rhs ix =====> 6
+graph_table: Dict{Any, Any}(("p5", "Junction") => 6, ("p6", "FractureSegment") => 6, ("p1", "FractureSegment") => 2, ("p3", "FractureSegment") => 4, ("p4", "FractureSegment") => 5, ("p2", "FractureSegmentEnd") => 3)
+Adding edge between nodes: 6 and 6
+lhs_names ===>: Any["p1", "p2", "p3", "p4"]
+user_param_names ==========>: [("x1", 1), ("y1", 2), ("p1", 3), ("ux1", 4), ("uy1", 5), ("x2", 6), ("y2", 7), ("p2", 8), ("ux2", 9), ("uy2", 10), ("x3", 11), ("y3", 12), ("p3", 13), ("ux3", 14), ("uy3", 15), ("x4", 16), ("y4", 17), ("p4", 18), ("ux4", 19), ("uy4", 20)]
+len(zipped): 20
+len(user_param_names): 20
+node_names: Any["p1", "p2", "p3", "p4"]
+user_param_name: ("x1", 1) node_loc: 1 node_param: p1 node_type: FractureSegment attr: ("double", "fflow_3ffcd5[0]", 1)
+user_param_name: ("y1", 2) node_loc: 1 node_param: p1 node_type: FractureSegment attr: ("double", "fflow_3ffcd5[1]", 2)
+user_param_name: ("p1", 3) node_loc: 1 node_param: p1 node_type: FractureSegment attr: ("double", "fflow_e9575c", 3)
+user_param_name: ("ux1", 4) node_loc: 1 node_param: p1 node_type: FractureSegment attr: ("double", "fflow_1dfd81[0]", 4)
+user_param_name: ("uy1", 5) node_loc: 1 node_param: p1 node_type: FractureSegment attr: ("double", "fflow_1dfd81[1]", 5)
+user_param_name: ("x2", 6) node_loc: 2 node_param: p2 node_type: FractureSegmentEnd attr: ("double", "fflow_b5962b[0]", 1)
+user_param_name: ("y2", 7) node_loc: 2 node_param: p2 node_type: FractureSegmentEnd attr: ("double", "fflow_b5962b[1]", 2)
+user_param_name: ("p2", 8) node_loc: 2 node_param: p2 node_type: FractureSegmentEnd attr: ("double", "fflow_88db82", 3)
+user_param_name: ("ux2", 9) node_loc: 2 node_param: p2 node_type: FractureSegmentEnd attr: ("double", "fflow_6062bd[0]", 4)
+user_param_name: ("uy2", 10) node_loc: 2 node_param: p2 node_type: FractureSegmentEnd attr: ("double", "fflow_6062bd[1]", 5)
+user_param_name: ("x3", 11) node_loc: 3 node_param: p3 node_type: FractureSegment attr: ("double", "fflow_3ffcd5[0]", 1)
+user_param_name: ("y3", 12) node_loc: 3 node_param: p3 node_type: FractureSegment attr: ("double", "fflow_3ffcd5[1]", 2)
+user_param_name: ("p3", 13) node_loc: 3 node_param: p3 node_type: FractureSegment attr: ("double", "fflow_e9575c", 3)
+user_param_name: ("ux3", 14) node_loc: 3 node_param: p3 node_type: FractureSegment attr: ("double", "fflow_1dfd81[0]", 4)
+user_param_name: ("uy3", 15) node_loc: 3 node_param: p3 node_type: FractureSegment attr: ("double", "fflow_1dfd81[1]", 5)
+user_param_name: ("x4", 16) node_loc: 4 node_param: p4 node_type: FractureSegment attr: ("double", "fflow_3ffcd5[0]", 1)
+user_param_name: ("y4", 17) node_loc: 4 node_param: p4 node_type: FractureSegment attr: ("double", "fflow_3ffcd5[1]", 2)
+user_param_name: ("p4", 18) node_loc: 4 node_param: p4 node_type: FractureSegment attr: ("double", "fflow_e9575c", 3)
+user_param_name: ("ux4", 19) node_loc: 4 node_param: p4 node_type: FractureSegment attr: ("double", "fflow_1dfd81[0]", 4)
+user_param_name: ("uy4", 20) node_loc: 4 node_param: p4 node_type: FractureSegment attr: ("double", "fflow_1dfd81[1]", 5)
+len(user_param_names): 20
+len(values(param_name_to_node)): 20
+linked_params: Dict{Any, Any}("uy4" => (4, "p4", "FractureSegment", ("double", "fflow_1dfd81[1]", 5)), "uy1" => (1, "p1", "FractureSegment", ("double", "fflow_1dfd81[1]", 5)), "x4" => (4, "p4", "FractureSegment", ("double", "fflow_3ffcd5[0]", 1)), "p3" => (3, "p3", "FractureSegment", ("double", "fflow_e9575c", 3)), "ux4" => (4, "p4", "FractureSegment", ("double", "fflow_1dfd81[0]", 4)), "x3" => (3, "p3", "FractureSegment", ("double", "fflow_3ffcd5[0]", 1)), "y4" => (4, "p4", "FractureSegment", ("double", "fflow_3ffcd5[1]", 2)), "ux2" => (2, "p2", "FractureSegmentEnd", ("double", "fflow_6062bd[0]", 4)), "p4" => (4, "p4", "FractureSegment", ("double", "fflow_e9575c", 3)), "y3" => (3, "p3", "FractureSegment", ("double", "fflow_3ffcd5[1]", 2)), "ux1" => (1, "p1", "FractureSegment", ("double", "fflow_1dfd81[0]", 4)), "x2" => (2, "p2", "FractureSegmentEnd", ("double", "fflow_b5962b[0]", 1)), "x1" => (1, "p1", "FractureSegment", ("double", "fflow_3ffcd5[0]", 1)), "y1" => (1, "p1", "FractureSegment", ("double", "fflow_3ffcd5[1]", 2)), "ux3" => (3, "p3", "FractureSegment", ("double", "fflow_1dfd81[0]", 4)), "y2" => (2, "p2", "FractureSegmentEnd", ("double", "fflow_b5962b[1]", 2)), "uy2" => (2, "p2", "FractureSegmentEnd", ("double", "fflow_6062bd[1]", 5)), "p2" => (2, "p2", "FractureSegmentEnd", ("double", "fflow_88db82", 3)), "p1" => (1, "p1", "FractureSegment", ("double", "fflow_e9575c", 3)), "uy3" => (3, "p3", "FractureSegment", ("double", "fflow_1dfd81[1]", 5)))
+rhs_name: fracture_junction_rhs
+rhs_names: Any["p1", "p5", "p3", "p5", "p5", "p2", "p5", "p6"]
+user_param_names ==========>: [("x1n", 1), ("y1n", 2), ("p1n", 3), ("ux1n", 4), ("uy1n", 5), ("x5n", 6), ("y5n", 7), ("p5n", 8), ("ux5n", 9), ("uy5n", 10), ("x3n", 11), ("y3n", 12), ("p3n", 13), ("ux3n", 14), ("uy3n", 15), ("x5n", 16), ("y5n", 17), ("p5n", 18), ("ux5n", 19), ("uy5n", 20), ("x5n", 21), ("y5n", 22), ("p5n", 23), ("ux5n", 24), ("uy5n", 25), ("x2n", 26), ("y2n", 27), ("p2n", 28), ("ux2n", 29), ("uy2n", 30), ("x5n", 31), ("y5n", 32), ("p5n", 33), ("ux5n", 34), ("uy5n", 35), ("x6n", 36), ("y6n", 37), ("p6n", 38), ("ux6n", 39), ("uy6n", 40)]
+len(zipped): 40
+len(user_param_names): 40
+node_names: Any["p1", "p5", "p3", "p5", "p5", "p2", "p5", "p6"]
+user_param_name: ("x1n", 1) node_loc: 1 node_param: p1 node_type: FractureSegment attr: ("double", "fflow_3ffcd5[0]", 1)
+user_param_name: ("y1n", 2) node_loc: 1 node_param: p1 node_type: FractureSegment attr: ("double", "fflow_3ffcd5[1]", 2)
+user_param_name: ("p1n", 3) node_loc: 1 node_param: p1 node_type: FractureSegment attr: ("double", "fflow_e9575c", 3)
+user_param_name: ("ux1n", 4) node_loc: 1 node_param: p1 node_type: FractureSegment attr: ("double", "fflow_1dfd81[0]", 4)
+user_param_name: ("uy1n", 5) node_loc: 1 node_param: p1 node_type: FractureSegment attr: ("double", "fflow_1dfd81[1]", 5)
+user_param_name: ("x5n", 6) node_loc: 2 node_param: p5 node_type: Junction attr: ("double", "fflow_344613[0]", 1)
+user_param_name: ("y5n", 7) node_loc: 2 node_param: p5 node_type: Junction attr: ("double", "fflow_344613[1]", 2)
+user_param_name: ("p5n", 8) node_loc: 2 node_param: p5 node_type: Junction attr: ("double", "fflow_228687", 3)
+user_param_name: ("ux5n", 9) node_loc: 2 node_param: p5 node_type: Junction attr: ("double", "fflow_1b96b4[0]", 4)
+user_param_name: ("uy5n", 10) node_loc: 2 node_param: p5 node_type: Junction attr: ("double", "fflow_1b96b4[1]", 5)
+user_param_name: ("x3n", 11) node_loc: 3 node_param: p3 node_type: FractureSegment attr: ("double", "fflow_3ffcd5[0]", 1)
+user_param_name: ("y3n", 12) node_loc: 3 node_param: p3 node_type: FractureSegment attr: ("double", "fflow_3ffcd5[1]", 2)
+user_param_name: ("p3n", 13) node_loc: 3 node_param: p3 node_type: FractureSegment attr: ("double", "fflow_e9575c", 3)
+user_param_name: ("ux3n", 14) node_loc: 3 node_param: p3 node_type: FractureSegment attr: ("double", "fflow_1dfd81[0]", 4)
+user_param_name: ("uy3n", 15) node_loc: 3 node_param: p3 node_type: FractureSegment attr: ("double", "fflow_1dfd81[1]", 5)
+user_param_name: ("x5n", 16) node_loc: 2 node_param: p5 node_type: Junction attr: ("double", "fflow_344613[0]", 1)
+user_param_name: ("y5n", 17) node_loc: 2 node_param: p5 node_type: Junction attr: ("double", "fflow_344613[1]", 2)
+user_param_name: ("p5n", 18) node_loc: 2 node_param: p5 node_type: Junction attr: ("double", "fflow_228687", 3)
+user_param_name: ("ux5n", 19) node_loc: 2 node_param: p5 node_type: Junction attr: ("double", "fflow_1b96b4[0]", 4)
+user_param_name: ("uy5n", 20) node_loc: 2 node_param: p5 node_type: Junction attr: ("double", "fflow_1b96b4[1]", 5)
+user_param_name: ("x5n", 21) node_loc: 2 node_param: p5 node_type: Junction attr: ("double", "fflow_344613[0]", 1)
+user_param_name: ("y5n", 22) node_loc: 2 node_param: p5 node_type: Junction attr: ("double", "fflow_344613[1]", 2)
+user_param_name: ("p5n", 23) node_loc: 2 node_param: p5 node_type: Junction attr: ("double", "fflow_228687", 3)
+user_param_name: ("ux5n", 24) node_loc: 2 node_param: p5 node_type: Junction attr: ("double", "fflow_1b96b4[0]", 4)
+user_param_name: ("uy5n", 25) node_loc: 2 node_param: p5 node_type: Junction attr: ("double", "fflow_1b96b4[1]", 5)
+user_param_name: ("x2n", 26) node_loc: 4 node_param: p2 node_type: FractureSegmentEnd attr: ("double", "fflow_b5962b[0]", 1)
+user_param_name: ("y2n", 27) node_loc: 4 node_param: p2 node_type: FractureSegmentEnd attr: ("double", "fflow_b5962b[1]", 2)
+user_param_name: ("p2n", 28) node_loc: 4 node_param: p2 node_type: FractureSegmentEnd attr: ("double", "fflow_88db82", 3)
+user_param_name: ("ux2n", 29) node_loc: 4 node_param: p2 node_type: FractureSegmentEnd attr: ("double", "fflow_6062bd[0]", 4)
+user_param_name: ("uy2n", 30) node_loc: 4 node_param: p2 node_type: FractureSegmentEnd attr: ("double", "fflow_6062bd[1]", 5)
+user_param_name: ("x5n", 31) node_loc: 2 node_param: p5 node_type: Junction attr: ("double", "fflow_344613[0]", 1)
+user_param_name: ("y5n", 32) node_loc: 2 node_param: p5 node_type: Junction attr: ("double", "fflow_344613[1]", 2)
+user_param_name: ("p5n", 33) node_loc: 2 node_param: p5 node_type: Junction attr: ("double", "fflow_228687", 3)
+user_param_name: ("ux5n", 34) node_loc: 2 node_param: p5 node_type: Junction attr: ("double", "fflow_1b96b4[0]", 4)
+user_param_name: ("uy5n", 35) node_loc: 2 node_param: p5 node_type: Junction attr: ("double", "fflow_1b96b4[1]", 5)
+user_param_name: ("x6n", 36) node_loc: 5 node_param: p6 node_type: FractureSegment attr: ("double", "fflow_3ffcd5[0]", 1)
+user_param_name: ("y6n", 37) node_loc: 5 node_param: p6 node_type: FractureSegment attr: ("double", "fflow_3ffcd5[1]", 2)
+user_param_name: ("p6n", 38) node_loc: 5 node_param: p6 node_type: FractureSegment attr: ("double", "fflow_e9575c", 3)
+user_param_name: ("ux6n", 39) node_loc: 5 node_param: p6 node_type: FractureSegment attr: ("double", "fflow_1dfd81[0]", 4)
+user_param_name: ("uy6n", 40) node_loc: 5 node_param: p6 node_type: FractureSegment attr: ("double", "fflow_1dfd81[1]", 5)
+len(user_param_names): 40
+len(values(param_name_to_node)): 40
+linked_params: Dict{Any, Any}("p3n" => (3, "p3", "FractureSegment", ("double", "fflow_e9575c", 3)), "uy1n" => (1, "p1", "FractureSegment", ("double", "fflow_1dfd81[1]", 5)), "uy6n" => (5, "p6", "FractureSegment", ("double", "fflow_1dfd81[1]", 5)), "p1n" => (1, "p1", "FractureSegment", ("double", "fflow_e9575c", 3)), "p2n" => (4, "p2", "FractureSegmentEnd", ("double", "fflow_88db82", 3)), "x1n" => (1, "p1", "FractureSegment", ("double", "fflow_3ffcd5[0]", 1)), "x3n" => (3, "p3", "FractureSegment", ("double", "fflow_3ffcd5[0]", 1)), "y6n" => (5, "p6", "FractureSegment", ("double", "fflow_3ffcd5[1]", 2)), "y5n" => (2, "p5", "Junction", ("double", "fflow_344613[1]", 2)), "p5n" => (2, "p5", "Junction", ("double", "fflow_228687", 3)), "uy2n" => (4, "p2", "FractureSegmentEnd", ("double", "fflow_6062bd[1]", 5)), "ux1n" => (1, "p1", "FractureSegment", ("double", "fflow_1dfd81[0]", 4)), "x6n" => (5, "p6", "FractureSegment", ("double", "fflow_3ffcd5[0]", 1)), "ux6n" => (5, "p6", "FractureSegment", ("double", "fflow_1dfd81[0]", 4)), "uy5n" => (2, "p5", "Junction", ("double", "fflow_1b96b4[1]", 5)), "ux5n" => (2, "p5", "Junction", ("double", "fflow_1b96b4[0]", 4)), "ux3n" => (3, "p3", "FractureSegment", ("double", "fflow_1dfd81[0]", 4)), "y3n" => (3, "p3", "FractureSegment", ("double", "fflow_3ffcd5[1]", 2)), "uy3n" => (3, "p3", "FractureSegment", ("double", "fflow_1dfd81[1]", 5)), "p6n" => (5, "p6", "FractureSegment", ("double", "fflow_e9575c", 3)), "y2n" => (4, "p2", "FractureSegmentEnd", ("double", "fflow_b5962b[1]", 2)), "x5n" => (2, "p5", "Junction", ("double", "fflow_344613[0]", 1)), "x2n" => (4, "p2", "FractureSegmentEnd", ("double", "fflow_b5962b[0]", 1)), "ux2n" => (4, "p2", "FractureSegmentEnd", ("double", "fflow_6062bd[0]", 4)), "y1n" => (1, "p1", "FractureSegment", ("double", "fflow_3ffcd5[1]", 2)))
+====================>
+assigned_param ===> 1
+assigned_node ===> 1
+rhs_assign_node ===> (1, "p1", "FractureSegment", ("double", "fflow_3ffcd5[0]", 1))
+name ===> x1n
+====================>
+====================>
+assigned_param ===> 2
+assigned_node ===> 1
+rhs_assign_node ===> (1, "p1", "FractureSegment", ("double", "fflow_3ffcd5[1]", 2))
+name ===> y1n
+====================>
+====================>
+assigned_param ===> 3
+assigned_node ===> 1
+rhs_assign_node ===> (1, "p1", "FractureSegment", ("double", "fflow_e9575c", 3))
+name ===> p1n
+====================>
+====================>
+assigned_param ===> 4
+assigned_node ===> 1
+rhs_assign_node ===> (1, "p1", "FractureSegment", ("double", "fflow_1dfd81[0]", 4))
+name ===> ux1n
+====================>
+====================>
+assigned_param ===> 5
+assigned_node ===> 1
+rhs_assign_node ===> (1, "p1", "FractureSegment", ("double", "fflow_1dfd81[1]", 5))
+name ===> uy1n
+====================>
+====================>
+assigned_param ===> 1
+assigned_node ===> 4
+rhs_assign_node ===> (4, "p2", "FractureSegmentEnd", ("double", "fflow_b5962b[0]", 1))
+name ===> x2n
+====================>
+====================>
+assigned_param ===> 2
+assigned_node ===> 4
+rhs_assign_node ===> (4, "p2", "FractureSegmentEnd", ("double", "fflow_b5962b[1]", 2))
+name ===> y2n
+====================>
+====================>
+assigned_param ===> 3
+assigned_node ===> 4
+rhs_assign_node ===> (4, "p2", "FractureSegmentEnd", ("double", "fflow_88db82", 3))
+name ===> p2n
+====================>
+====================>
+assigned_param ===> 4
+assigned_node ===> 4
+rhs_assign_node ===> (4, "p2", "FractureSegmentEnd", ("double", "fflow_6062bd[0]", 4))
+name ===> ux2n
+====================>
+====================>
+assigned_param ===> 5
+assigned_node ===> 4
+rhs_assign_node ===> (4, "p2", "FractureSegmentEnd", ("double", "fflow_6062bd[1]", 5))
+name ===> uy2n
+====================>
+====================>
+assigned_param ===> 1
+assigned_node ===> 3
+rhs_assign_node ===> (3, "p3", "FractureSegment", ("double", "fflow_3ffcd5[0]", 1))
+name ===> x3n
+====================>
+====================>
+assigned_param ===> 2
+assigned_node ===> 3
+rhs_assign_node ===> (3, "p3", "FractureSegment", ("double", "fflow_3ffcd5[1]", 2))
+name ===> y3n
+====================>
+====================>
+assigned_param ===> 3
+assigned_node ===> 3
+rhs_assign_node ===> (3, "p3", "FractureSegment", ("double", "fflow_e9575c", 3))
+name ===> p3n
+====================>
+====================>
+assigned_param ===> 4
+assigned_node ===> 3
+rhs_assign_node ===> (3, "p3", "FractureSegment", ("double", "fflow_1dfd81[0]", 4))
+name ===> ux3n
+====================>
+====================>
+assigned_param ===> 5
+assigned_node ===> 3
+rhs_assign_node ===> (3, "p3", "FractureSegment", ("double", "fflow_1dfd81[1]", 5))
+name ===> uy3n
+====================>
+====================>
+assigned_param ===> 1
+assigned_node ===> 2
+rhs_assign_node ===> (2, "p5", "Junction", ("double", "fflow_344613[0]", 1))
+name ===> x5n
+====================>
+====================>
+assigned_param ===> 2
+assigned_node ===> 2
+rhs_assign_node ===> (2, "p5", "Junction", ("double", "fflow_344613[1]", 2))
+name ===> y5n
+====================>
+====================>
+assigned_param ===> 3
+assigned_node ===> 2
+rhs_assign_node ===> (2, "p5", "Junction", ("double", "fflow_228687", 3))
+name ===> p5n
+====================>
+====================>
+assigned_param ===> 4
+assigned_node ===> 2
+rhs_assign_node ===> (2, "p5", "Junction", ("double", "fflow_1b96b4[0]", 4))
+name ===> ux5n
+====================>
+====================>
+assigned_param ===> 5
+assigned_node ===> 2
+rhs_assign_node ===> (2, "p5", "Junction", ("double", "fflow_1b96b4[1]", 5))
+name ===> uy5n
+====================>
+====================>
+assigned_param ===> 1
+assigned_node ===> 5
+rhs_assign_node ===> (5, "p6", "FractureSegment", ("double", "fflow_3ffcd5[0]", 1))
+name ===> x6n
+====================>
+====================>
+assigned_param ===> 2
+assigned_node ===> 5
+rhs_assign_node ===> (5, "p6", "FractureSegment", ("double", "fflow_3ffcd5[1]", 2))
+name ===> y6n
+====================>
+====================>
+assigned_param ===> 3
+assigned_node ===> 5
+rhs_assign_node ===> (5, "p6", "FractureSegment", ("double", "fflow_e9575c", 3))
+name ===> p6n
+====================>
+====================>
+assigned_param ===> 4
+assigned_node ===> 5
+rhs_assign_node ===> (5, "p6", "FractureSegment", ("double", "fflow_1dfd81[0]", 4))
+name ===> ux6n
+====================>
+====================>
+assigned_param ===> 5
+assigned_node ===> 5
+rhs_assign_node ===> (5, "p6", "FractureSegment", ("double", "fflow_1dfd81[1]", 5))
+name ===> uy6n
+====================>
+Generating Main
+Generating Model
+Done

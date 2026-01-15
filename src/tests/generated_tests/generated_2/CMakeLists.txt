@@ -9,3 +9,6 @@ add_executable(main main.cpp ../include/DGGML/thirdparty/simdjson/simdjson.cpp)
 # target_link_libraries(mt_dgg_simulator PUBLIC SUNDIALS::arkode SUNDIALS::nvecserial)
 target_link_libraries(main PRIVATE vtu11::vtu11)
 target_link_libraries(main PUBLIC SUNDIALS::arkode SUNDIALS::nvecserial)
+
+# Adding cereal
+target_link_libraries(main PRIVATE cereal::cereal)

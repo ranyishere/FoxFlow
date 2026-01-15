@@ -71,30 +71,31 @@ function tokenize(source::String, line_no::Integer)
                     push!(tokens, ObservableSectionToken(PositionToken(value, line_no, i-1)))
                 elseif value == "states"
                     push!(tokens, StateSectionToken(PositionToken(value, line_no, i-1)))
-                elseif value == "simulations"
-                    push!(tokens, SimulationSectionToken(PositionToken(value, line_no, i-1)))
+                elseif value == "simulation"
+                    push!(tokens, SimulationToken(PositionToken(value, line_no, i-1)))
             end
 
             elseif value in [
-                     "type", "parameter",
-                     "function", "rule",
-                     "observable", "state",
-                     "simulation"
+                     "Type", "Parameter",
+                     "Function", "Rule",
+                     "Observable", "State",
+                     "Simulation"
                 ]
 
-                if value == "type"
+                if value == "Type"
+                    println("Value: ", value)
                     push!(tokens, TypeToken(PositionToken(value, line_no, i-1)))
-                elseif value == "parameter"
+                elseif value == "Parameter"
                     push!(tokens, ParameterToken(PositionToken(value, line_no, i-1)))
-                elseif value == "function"
+                elseif value == "Function"
                     push!(tokens, FunctionToken(PositionToken(value, line_no, i-1)))
-                elseif value == "rule"
+                elseif value == "Rule"
                     push!(tokens, RuleToken(PositionToken(value, line_no, i-1)))
-                elseif value == "observable"
+                elseif value == "Observable"
                     push!(tokens, ObservableToken(PositionToken(value, line_no, i-1)))
-                elseif value == "state"
+                elseif value == "State"
                     push!(tokens, StateToken(PositionToken(value, line_no, i-1)))
-                elseif value == "simulation"
+                elseif value == "Simulation"
                     push!(tokens, SimulationToken(PositionToken(value, line_no, i-1)))
             end
 
@@ -107,9 +108,9 @@ function tokenize(source::String, line_no::Integer)
                     push!(tokens, IntegerToken(PositionToken(value, line_no, i-1)))
             end
 
+            elseif value == "return"
+                push!(tokens, ReturnToken(PositionToken(value, line_no, i-1)))
         else
-
-
             push!(tokens, IdentifierToken(PositionToken(value, line_no, i-1)))
         end
 
@@ -142,7 +143,7 @@ function tokenize(source::String, line_no::Integer)
                   )
                 i += 1
             end
-        elseif c in ['!', '=', '<', '>', '*', '+', '/', '&', '|']
+        elseif c in ['!', '=', '<', '>', '*', '+', '/', '&', '|', '^']
 
             if c == '<'
                 if i + 1 <= length(source) && source[i + 1] == '<'
@@ -198,6 +199,9 @@ function tokenize(source::String, line_no::Integer)
                 i += 1
             elseif c == '+'
                 push!(tokens, PlusToken(PositionToken("+", line_no, i)))
+                i += 1
+            elseif c == '^'
+                push!(tokens, CaretToken(PositionToken("^", line_no, i)))
                 i += 1
             else
                 throw(ErrorException("Unexpected character: $c"))

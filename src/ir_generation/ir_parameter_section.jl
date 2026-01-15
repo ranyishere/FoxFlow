@@ -6,7 +6,7 @@ function ir_grammar_parameter!(ast, parameter_table)
 
     if isa(ast, TypeInstanceNode)
 
-        grammar_parameter = ir_type_instance(ast)
+        grammar_parameter, param_names = ir_type_instance(ast)
 
         type_name = get_value(ast.name)
         parameter_table[type_name] = ast

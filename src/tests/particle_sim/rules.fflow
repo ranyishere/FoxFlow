@@ -1,10 +1,22 @@
 rules particle_rules {
 
-move_node := (start : StartType) << x, y >>  
-    -> (start : StartType) << dx, dy >> solving (dx := D(x,t), dy := D(y,t)) {
+transform := (start : StartType) << x, y >>  
+    -> (p1 : ParabolaParticle) << px, py, v, w>> with (heaviside(10, 1)) where {
+        px : Float = x
+        py : Float = y
+        v : Float = 0
+        w : Float = 0.6
 
-        dx : ODE = 0.1
-        dy : ODE = 0.1
+    }
+
+
+move_node := (pb : ParabolaParticle) << x, y, v, w >>  
+    -> (pbnew : ParabolaParticle) << dx, dy, dv, dw >> solving (dx := D(x,t), dy := D(y,t), dv := D(v,t), dw := D(w,t) ) {
+
+        dx : ODE = 0.1 * y * w * -1
+        dy : ODE = 0.1 * x * w
+        dv : ODE = 0
+        dw : ODE = 0
 
     }
 

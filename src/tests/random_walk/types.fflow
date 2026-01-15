@@ -1,0 +1,6 @@
+
+types Microtubule {
+
+    # (x,y, w, b, val)
+    Neuron << FixedList<<2, Float>>, Float, Float, Float >> : Type
+}

@@ -1,0 +1,163 @@
+
+rules Microtubule {
+
+    start_to_node := (start : StartType) << (start_x, start_y) >> 
+            -> (counter : Counter) -- (p1 : NucleatorCreator) << (cstart_x, cstart_y, count),
+                                                                 (x, y, counter_x, counter_y) >> with (heaviside(10,1)) where {
+                counter_x : Integer = 10
+                counter_y : Integer = 10
+                x : Float = 5
+                y : Float = 5
+                cstart_x : Float = start_x
+                cstart_y : Float = start_x
+                count : Float = 1
+    }
+
+    # Goes across x
+    create_grid_x := (counter : Counter) -- (p1 : NucleatorCreator) << (cx, cy, prev_count), (x, y, counter_x, counter_y) >>
+        -> (new_counter : Counter) -- (p1 : NucleatorCreator) (new_counter : Counter) -- (p2 : NucleatorCreator) <<
+             (cnx, cny, new_count), (x_1, y_1, c1_x, c1_y),
+             (cnx, cny, new_count), (x_2, y_2, c2_x, c2_y) >> with (heaviside(counter_x, 1) ) where {
+
+            x_1 : Float = x
+            y_1 : Float = y
+
+            c1_x : Float = 0
+            c1_y : Float = counter_y
+
+            x_2 : Float = x + 0.1
+            y_2 : Float = y
+
+            c2_x : Float = counter_x - 1
+            c2_y : Float = counter_y
+
+            cnx : Float = cx
+            cny : Float = cy
+            new_count : Float = prev_count + 1
+
+        }
+
+    # create_grid_y := (counter : Counter) -- (p1 : NucleatorCreator) << (cx, cy, prev_count), (x, y, counter_x, counter_y) >>
+        # -> (p1 : NucleatorCreator) -- (new_counter : Counter) -- (p2 : NucleatorCreator) <<
+
+    # Goes up y
+    create_grid_y := (counter : Counter) -- (p1 : NucleatorCreator) << (cx, cy, prev_count), (x, y, counter_x, counter_y) >>
+        -> (new_counter : Counter) -- (p1 : NucleatorCreator) (new_counter : Counter) -- (p2 : NucleatorCreator) <<
+             (cnx, cny, new_count), (x_1, y_1, c1_x, c1_y),
+             (cnx, cny, new_count), (x_2, y_2, c2_x, c2_y) >> with ( heaviside(counter_y, 1) ) where {
+
+            x_1 : Float = x
+            y_1 : Float = y
+
+            c1_x : Float = counter_x
+            c1_y : Float = 0
+
+            c2_x : Float = counter_x
+            c2_y : Float = counter_y - 1
+
+            x_2 : Float = x
+            y_2 : Float = y + 0.1
+
+            cnx : Float = cx
+            cny : Float = cy
+            new_count : Float = prev_count + 1
+    }
+
+    transform_rule := (counter : Counter) -- (p1 : NucleatorCreator) << (cx, cy, prev_count), (x, y, counter_x, counter_y) >> 
+        -> (new_counter : Counter) -- (p1 : Nucleator) << (ncx, ncy, new_count),
+                                                          (new_x, new_y) >> with ( indicator(counter_x == 0) * indicator(counter_y == 0) ) where {
+
+            new_x : Float = x
+            new_y : Float = y
+
+            ncx : Float = cx
+            ncy : Float = cy
+            new_count : Float = prev_count - 1
+
+    }
+
+    creation_rule := (counter : Counter) -- (p1 : Nucleator) << (cx, cy, count), (x, y) >> ->
+            (ncounter : Counter) -- (p1 : Nucleator) (p2 : Retraction) -- (p3 : Intermediate) -- (p4 : Growing) 
+        << (ncx, ncy, ncount), (p1x, p1y), (p2x, p2y, u2x, u2y), (p3x, p3y, u3x, u3y),
+            (p4x, p4y, u4x, u4y) >> with ( indicator(count == 0) * rho_create) where {
+
+
+                ncx : Float := cx
+                ncy : Float := cy
+                ncount : Float := count
+
+                # d : Float := ~UniformDistribution(s_min, s_max)
+                d : Float := 0.027
+
+                # Probably pull from c++
+                pi : Float := 3.14159
+
+                theta_rotate : Float := ~UniformDistribution(0, 2*pi)
+
+                # Nucleator
+                # p1x : Float = x
+                # p1y : Float = y
+
+                # varepsilon is reaction distance length
+                # p3x : Float = x + ~UniformDistribution(-0.5*varepsilon, 0.5*varepsilon)
+                # p3y : Float = y + ~UniformDistribution(-0.5*varepsilon, 0.5*varepsilon)
+
+                # TODO: He is actually using a different equation to place the center.
+                # Right now the center is at (0,0) so that needs to change.
+
+                x_c : Float := x
+                y_c : Float := y
+
+                # Rotation matrix
+                # TODO: Handle unary operation on a group
+                x_r_t : Float := 0*cos(theta_rotate) + (d)*sin(theta_rotate)
+                y_r_t : Float := -1*0*sin(theta_rotate) + (d)*cos(theta_rotate)
+                x_r : Float := x_c + x_r_t
+                y_r : Float := y_c + y_r_t
+
+                x_l : Float := x_c - (x_r - x_c)
+                y_l : Float := y_c - (y_r - y_c)
+
+                # p4x : Float = x + x_r_t
+                # p4y : Float = y + y_r_t
+
+                # TODO: Handle exponentials
+                norm : Float := sqrt( (x_c - x_r)*(x_c - x_r) + (y_c - y_r)*(y_c - y_r) )
+
+                ux_tmp : Float := (x_r - x_c) / norm
+                uy_tmp : Float := (y_r - y_c) / norm
+
+                u4x : Float = ux_tmp
+                u4y : Float = uy_tmp
+
+                u3x : Float = ux_tmp
+                u3y : Float = uy_tmp
+
+                u2x : Float = ux_tmp
+                u2y : Float = uy_tmp
+
+                p1x : Float = x
+                p1y : Float = y
+
+                # P1 is done
+                p2x : Float = x_l / ux_tmp
+                p2y : Float = y_l / uy_tmp
+
+                # Retraction
+                p3x : Float = x_c / ux_tmp
+                p3y : Float = y_c / uy_tmp
+
+                # P4
+                p4x : Float = x_r / ux_tmp
+                p4y : Float = y_r / uy_tmp
+
+    }
+
+    # growing_rule := (p1 : Intermediate) -- (p2 : Growing) << (p1x, p1y, u2x, u2y), (p2x, p2y, u2x, u2y) >> 
+            # -> (p1 : Intermediate) -- (p2 : Growing) << (dp1x, dp1y, du2x, du2y), (dp2x, dp2y, du2x, du2y) >> 
+            # solving ( dp2x := D(p1x,t), dp2y := D(p2y,t) ) {
+                # dp2x : ODE = 0.4 * 0.075
+                # dp2y : ODE = 0.3 * 0.075
+        # }
+
+}

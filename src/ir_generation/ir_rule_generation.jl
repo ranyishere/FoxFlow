@@ -3,8 +3,6 @@
         Module for generating Intermediate Representation (IR) for rules in a grammar.
 """
 
-# Strucute Function
-
 module IRRuleGeneration
 
     import ..IRUtils: get_value, convert_type_name
@@ -66,7 +64,8 @@ module IRRuleGeneration
         elseif group_node.expression isa CallNode
 
             call_node = group_node.expression
-            func_name = get_value(call_node.function_node.name)
+            func_name = get_value(call_node.function_node)
+
             args = call_node.args
             arg_str = join(map( (arg) -> begin
                 if arg isa LiteralNode
@@ -77,10 +76,15 @@ module IRRuleGeneration
                     return traverse_group_node(GroupNode(arg), variables)
                 elseif arg isa UnaryOpNode
                     return traverse_group_node(GroupNode(arg), variables)
+                elseif arg isa IdentifierNode
+                    var_name = get_value(arg)
+                    push!(variables, var_name)
+                    return var_name
                 else
                     return arg.token
                 end
                 end, args), ", ")
+
             return "$func_name($arg_str)"
 
         elseif group_node.expression isa LiteralNode
@@ -100,9 +104,9 @@ module IRRuleGeneration
     function ir_builtin_func(func_name, args, ir_builder, propensity_table, prop_body_ir)
         """
         Generates the IR for a built-in function.
-        This is a placeholder function that should be
-        replaced with actual built-in function handling logic.
         """
+
+        name_space = "FractureNetwork"
         
         variables = Set{String}()
         arg_str = join(map( (arg) -> begin
@@ -125,15 +129,19 @@ module IRRuleGeneration
                 end
         end, args), ", ")
 
-    println("variables ===>", variables)
+        # println("check --- >: ", collect(keys(propensity_table["var_local_table"]["rule_rhs"])))
 
         # Emit out variables
         map( (var) -> begin
                 if var in collect(keys(propensity_table))
                     ir = propensity_table[var]
                     emit(prop_body_ir, ir)
+                elseif var in collect(keys(propensity_table["var_local_table"]["rule_rhs"]))
+                    nothing
+                    # ir = propensity_table["var_local_table"]["rule_rhs"][var]
+                    # println("ir ==>: ", ir)
+                    # emit(prop_body_ir, ir)
                 elseif var in collect(keys(propensity_table["parameter_table"]))
-                    # ir = propensity_table["parameter_table"][var]
                     ir = "auto $var =  settings.$var;\n"
                     emit(prop_body_ir, ir)
                 else
@@ -146,7 +154,6 @@ module IRRuleGeneration
         if func_name == "heaviside"
             # arg_str = parse_func_args(args)
             ir = "DGGML::$func_name($arg_str)"
-
         elseif func_name == "sqrt"
             ir = "sqrt($arg_str)"
         elseif func_name == "normal_distr"
@@ -155,6 +162,8 @@ module IRRuleGeneration
             ir = "DGGML::uniform_distr()"
         elseif func_name == "cos"
             ir = "cos($arg_str)"
+        elseif func_name == "arccos"
+            ir = "acos($arg_str)"
         elseif func_name == "sin"
             ir = "sin($arg_str)"
         elseif func_name == "inverse"
@@ -165,10 +174,11 @@ module IRRuleGeneration
             ir = "abs($arg_str)"
         elseif func_name == "indicator"
             ir = ir_indicator_func(arg_str)
+        elseif func_name in collect(keys(propensity_table["function_table"]))
+            ir = "$name_space::$func_name($arg_str)"
         else
             throw("Unknown built-in function: $func_name")
         end
-
         emit(ir_builder, ir)
     end
 
@@ -189,6 +199,7 @@ module IRRuleGeneration
             "#define DGGML_RULES_HPP",
             "#include \"types.h\"",
             "#include \"parameters.h\"",
+            "#include \"functions.h\"",
             "namespace $rule_section_name {",
             "using GT = $type_namespace::graph_type;"
         ]
@@ -220,13 +231,13 @@ module IRRuleGeneration
 
         propensity_table["var_local_table"] = var_local_table
 
-    ir_rule!(rules_ir, rule,
-         type_namespace,
-         symbol_tables,
-         propensity_table)
+        ir_rule!(rules_ir, rule,
+             type_namespace,
+             symbol_tables,
+             propensity_table)
 
             end, ast.rules_list
-           )
+        )
 
         emit(rules_ir, "}\n#endif")
         build(rules_ir)
@@ -270,7 +281,6 @@ module IRRuleGeneration
             emit(ir_builder, ir)
         elseif expression.lhs isa UnaryOpNode
             operation = expression.lhs.expression
-            println("expression: ", expression)
             emit(ir_builder, " $(operation.position.value) ")
             traverse_ode_expr(expression.lhs.operand, ir_builder, var_loc_attr)
         else
@@ -330,12 +340,11 @@ module IRRuleGeneration
                 bv_name = get_value(bv_node.name)
 
                 bv_to_dep[bv_name] = dep_vars
-                # bv_pos = rhs_assgn_to_node[bv_name][1]
                 bv_pos = lhs_assgn_to_node[dep_vars][1]
                 attr_pos = lhs_assgn_to_node[dep_vars][4][3]
                 ir = nothing
                 ir_ix_attr_loc = nothing
-                if attr_pos > 2
+                if attr_pos > 3
 
                     bv_attr = lhs_assgn_to_node[dep_vars][4][2]
                     bv_type = lhs_assgn_to_node[dep_vars][3]
@@ -390,10 +399,11 @@ module IRRuleGeneration
             bv_pos = rhs_assgn_to_node[bv_name][1]
             attr_pos = rhs_assgn_to_node[bv_name][4][3]
 
-            # FIXME: It should be grabbing from the data attribute.
+            # TODO: Generalize this so that it works for multiple
+            # dimensions besides 3.
             ir_attr = nothing
             ref = nothing
-            if attr_pos > 2
+            if attr_pos > 3
                 bv_attr = rhs_assgn_to_node[bv_name][4][2]
                 ir_attr = bv_attr
                 ref = "ix_$(bv_to_dep[bv_name])"
@@ -402,7 +412,6 @@ module IRRuleGeneration
                 ref = "ix_$(bv_to_dep[bv_name])"
             end
 
-            # ir = "NV_Ith_S(ydot, varmap[&lhs[m1[$bv_pos]].$ir_attr]) += "
             ir = "NV_Ith_S(ydot, varmap[&$ref]) += "
 
             expr_ir = IRBuilder([])
@@ -424,23 +433,118 @@ module IRRuleGeneration
         Generates the IR for a rule, including its header, nodes, and edges.
         """
 
+        function visit_rule_node!(each_node, graph_table, ir_builder,
+            graph_name, type_namespace=type_namespace)
+            """
+            Visits each node in the rule and builds the graph
+            for the lhs and rhs of the rule
+            """
+
+            # NOTE: Shouldn't this include adding
+            # the symbol table?
+
+            if each_node isa UndirectedTypeEdgeNode
+                left_node = each_node.left_vertex
+                right_node = each_node.right_vertex
+
+                visit_rule_node!(left_node, graph_table,
+                                ir_builder, graph_name, type_namespace)
+
+                visit_rule_node!(right_node, graph_table,
+                                ir_builder, graph_name, type_namespace)
+
+                rhs_node_count_0 = graph_table[(get_value(left_node.name), get_value(left_node.type.name))]
+                rhs_node_count_1 = graph_table[(get_value(right_node.name), get_value(right_node.type.name))]
+
+                println("Adding edge between nodes: $rhs_node_count_0 and $rhs_node_count_1")
+
+                edge_ir = "$graph_name.addEdge($rhs_node_count_0, $rhs_node_count_1);\n"
+                # edge_ir = "$graph_name.addEdge($lhs_ix, $ix);\n"
+
+                emit(ir_builder, edge_ir)
+
+                # emit edge
+
+            elseif each_node isa TypeInstanceNode
+                node_type = get_value(each_node.type.name)
+                node_name = get_value(each_node.name)
+
+                # if haskey(graph_table, (node_name, node_type))
+                    # throw("Duplicate node name found in rule $graph_name: $node_name, type: $node_type")
+                # end
+                # Just get the max value in graph_table
+                vals  = values(graph_table)
+
+                res = nothing
+                if length(vals) == 0
+                    res = 0
+                else
+                    res = maximum(collect(vals))
+                end
+
+                if !((node_name, node_type) in keys(graph_table))
+
+                    node_names = [x[1] for x in keys(graph_table)]
+
+                    if node_name in node_names
+                        throw("Duplicate node name found in rule $graph_name: $node_name, type: $node_type. Are you sure you want to do this?")
+                    end
+
+                    res = res + 1
+                    graph_table[(node_name, node_type)] = res
+                    # Grab from symbol table
+                    # cur_count = graph_table[(node_name, node_type)]
+                    # add_node_ir = "$graph_name.addNode({$rhs_node_count, {$type_namespace::$node_type{} }});\n"
+                    # Emit it since it hasn't been seen yet.
+                    add_node_ir = "$graph_name.addNode({$res, {$type_namespace::$node_type{} }});\n"
+                    emit(ir_builder, add_node_ir)
+
+                else
+                    res = graph_table[(node_name, node_type)]
+                end
+
+                else
+                    println("Visiting other node type: ", typeof(each_node))
+                    exit(0)
+            end
+        end
+
         rule_name = get_value(rule_node.name)
 
         emit_rule_header(ir_builder, rule_node, type_namespace)
         
         # Generating the lhs nodes
         lhs_node_type = rule_node.lhs
+
         lhs_param = rule_node.lhs_parameter
         lhs_name = "$(rule_name)_lhs"
         emit(ir_builder, "GT $lhs_name;")
-        emit_add_nodes(ir_builder, lhs_name, lhs_node_type, type_namespace)
 
-        # Generating rhs nodes
+        rule_graphs = Dict()
+        # Generating lhs graph
+        lhs_symbol = Dict()
+        # lhs_count = 1
+        for each_node in lhs_node_type
+            visit_rule_node!(each_node, lhs_symbol, ir_builder, lhs_name, type_namespace)
+        end
+
+        # emit_add_nodes(ir_builder, lhs_name, lhs_node_type, type_namespace, lhs_symbol)
+
+        # Generating rhs graph
         rhs_node_type = rule_node.rhs
         rhs_param = rule_node.rhs_parameter
+
+        rhs_node_type = rule_node.rhs
+        rhs_symbol = Dict()
+        # rhs_count = 1
         rhs_name = "$(rule_name)_rhs"
         emit(ir_builder, "GT $rhs_name;")
-        emit_add_nodes(ir_builder, rhs_name, rhs_node_type, type_namespace)
+        for each_node in rhs_node_type
+            visit_rule_node!(each_node, rhs_symbol,
+                            ir_builder, rhs_name, type_namespace)
+        end
+        # rhs_symbol = visit_rule_node!(rhs_node_type, rhs_symbol)
+        # emit_add_nodes(ir_builder, rhs_name, rhs_node_type, type_namespace, rhs_symbol)
 
         # Building propensity function
         modify_clause = rule_node.modify_clause
@@ -454,9 +558,11 @@ module IRRuleGeneration
         else
             throw("Unknown modify clause type: $(typeof(modify_clause))")
         end
-        emit(ir_builder, rule_hdr)
 
+        emit(ir_builder, rule_hdr)
         lhs_names, lhs_types, lhs_order_of_nodes = build_node_pos_to_type(lhs_node_type)
+
+        println("lhs_names ===>: ", lhs_names)
         lhs_param_to_node, lhs_assgn_to_node = link_param_to_nodes(lhs_param,
                                                 lhs_types,
                                                 symbol_tables,
@@ -465,6 +571,8 @@ module IRRuleGeneration
         # rhs_node_ix_to_type, rhs_names, rhs_types = build_node_pos_to_type(rhs_node_type)
         rhs_names, rhs_types, rhs_order_of_nodes = build_node_pos_to_type(rhs_node_type)
 
+        # println("rhs_name: ", rhs_name)
+        println("rhs_names =======>: ", rhs_names)
         rhs_param_to_node, rhs_assgn_to_node = link_param_to_nodes(rhs_param,
                                                 rhs_types,
                                                 symbol_tables,
@@ -541,6 +649,7 @@ module IRRuleGeneration
 
     end
 
+
     function _emit_single_node(ir_builder, graph_name, each_node_info,
                               rhs_count, rhs_node_registry, rhs_node_key,
                               type_namespace)
@@ -562,12 +671,13 @@ module IRRuleGeneration
         return rhs_count
     end
 
-    function _emit_undirected_edge(ir_builder, graph_name, each_node_info, rhs_count,
-                                   rhs_node_registry, rhs_node_key, type_namespace)
+    function _emit_undirected_edge_old(ir_builder, graph_name, each_node_info, rhs_count,
+            rhs_node_registry, rhs_node_key, type_namespace, graph_symbol=Dict())
 
         vert_0 = each_node_info[2].left_vertex
         node_0_name = get_value(vert_0.name)
-        rhs_node_count_0 = rhs_count
+        # rhs_node_count_0 = rhs_count
+        rhs_node_count_0 = graph_symbol[(node_0_name, node_type_0)]
 
         if !(node_0_name in rhs_node_registry)
             node_type_0 = get_value(vert_0.type.name)
@@ -577,7 +687,9 @@ module IRRuleGeneration
             rhs_node_key[node_0_name] = rhs_node_count_0
             push!(rhs_node_registry, node_0_name)
         else
-            rhs_node_count_0 = rhs_node_key[node_0_name]
+            # rhs_node_count_0 = rhs_node_key[node_0_name]
+            # rhs_node_count_0 = rhs_node_key[node_0_name]
+            rhs_node_count_0 = graph_symbol[(node_0_name, node_type_0)]
         end
 
         rhs_node_count_1 = rhs_count
@@ -602,7 +714,43 @@ module IRRuleGeneration
         return rhs_count
     end
 
-    function emit_add_nodes(ir_builder, graph_name, node_types, type_namespace)
+
+    function _emit_undirected_edge(ir_builder, graph_name, each_node_info, rhs_count,
+            rhs_node_registry, rhs_node_key, type_namespace, graph_symbol=Dict())
+
+        vert_0 = each_node_info[2].left_vertex
+        node_0_name = get_value(vert_0.name)
+        node_type_0 = get_value(vert_0.type.name)
+        rhs_node_count_0 = rhs_count
+        if !(node_0_name in rhs_node_registry)
+            add_node_ir_0 = "$graph_name.addNode({$rhs_node_count_0, {$type_namespace::$node_type_0{} }});\n"
+            rhs_count += 1
+            emit(ir_builder, add_node_ir_0)
+            rhs_node_key[node_0_name] = rhs_node_count_0
+            push!(rhs_node_registry, node_0_name)
+        end
+
+        rhs_node_count_1 = rhs_count
+        vert_1 = each_node_info[2].right_vertex
+        node_type_1 = get_value(vert_1.type.name)
+        node_1_name = get_value(vert_1.name)
+        rhs_node_count_1 = graph_symbol[(node_1_name, node_type_1)]
+        if !(node_1_name in rhs_node_registry)
+            node_type_1 = get_value(vert_1.type.name)
+            # rhs_node_key[node_1_name] = rhs_node_count_1
+            add_node_ir_1 = "$graph_name.addNode({$rhs_node_count_1, {$type_namespace::$node_type_1{} }});\n"
+            rhs_count += 1
+            emit(ir_builder, add_node_ir_1)
+            push!(rhs_node_registry, node_1_name)
+        end
+
+        # Create an edge
+        edge_ir = "$graph_name.addEdge($rhs_node_count_0, $rhs_node_count_1);\n"
+        emit(ir_builder, edge_ir)
+        return rhs_count
+    end
+
+    function emit_add_nodes(ir_builder, graph_name, node_types, type_namespace, graph_symbol=Dict())
         """
         Generates the IR for adding nodes and edges to the rule's graph.
 
@@ -618,19 +766,32 @@ module IRRuleGeneration
         rhs_node_key = Dict()
         map( (each_node_info) -> begin
 
-            if each_node_info[2] isa UndirectedTypeEdgeNode
-                # Undirected Edge
-                rhs_count = _emit_undirected_edge(ir_builder, graph_name, each_node_info,
-                                      rhs_count, rhs_node_registry, rhs_node_key,
-                                      type_namespace)
-            else
+            # node_type = get_value(each_node_info[2].type.name)
+            # node_name = get_value(each_node_info[2].name)
+
+            if !((node_name, node_type) in rhs_node_registry)
                 # Single Node
                 rhs_node_count = rhs_count
                 node_type = get_value(each_node_info[2].type.name)
                 node_name = get_value(each_node_info[2].name)
-                add_node_ir = "$graph_name.addNode({$rhs_node_count, {$type_namespace::$node_type{} }});\n"
+
+                # Grab from symbol table
+                cur_count = graph_symbol[(node_name, node_type)]
+                # add_node_ir = "$graph_name.addNode({$rhs_node_count, {$type_namespace::$node_type{} }});\n"
+                add_node_ir = "$graph_name.addNode({$cur_count, {$type_namespace::$node_type{} }});\n"
+
+                # Add to registry
+                push!(rhs_node_registry, node_name)
+
                 emit(ir_builder, add_node_ir)
                 rhs_count += 1
+            end
+
+            if each_node_info[2] isa UndirectedTypeEdgeNode
+                # Undirected Edge
+                rhs_count = _emit_undirected_edge(ir_builder, graph_name, each_node_info,
+                                      rhs_count, rhs_node_registry, rhs_node_key,
+                                      type_namespace, graph_symbol)
             end
 
         end,
@@ -742,7 +903,13 @@ module IRRuleGeneration
                 if isempty(unique_vert)
                     push!(unique_vert, edge[1])
                     push!(unique_types, node_types[ix][1])
-                elseif edge[1] != unique_vert[end]
+                # elseif edge[1] != unique_vert[end]
+                    # # If the left vertex is not the same as the last unique vertex
+                    # push!(unique_vert, edge[1])
+                    # push!(unique_types, node_types[ix][1])
+                else
+                    # println("it is the same vertex, skipping: ", edge[1])
+                    # exit(0)
                     # If the left vertex is not the same as the last unique vertex
                     push!(unique_vert, edge[1])
                     push!(unique_types, node_types[ix][1])
@@ -883,9 +1050,12 @@ module IRRuleGeneration
             A tuple containing two dictionaries.
         """
 
-        # println("param: $param\n")
+        tmp_count = 0
         user_param_names = map(
-            (x) -> begin get_value(x) end,
+            (x) -> begin
+                tmp_count += 1
+                (get_value(x), tmp_count)
+            end,
             param.token
         )
 
@@ -934,6 +1104,7 @@ module IRRuleGeneration
         node_to_loc = []
         unique_count = 0
         seen = Dict()
+
         # Map parameters to their node locations
         for (ix, node_name) in enumerate(node_names)
 
@@ -958,14 +1129,44 @@ module IRRuleGeneration
         zipped = collect(zip(node_to_loc, node_to_params, node_to_types,
                              flatten_node_attrs, user_param_names))
 
+        # println("len(zipped): ", length(zipped))
+        # println("len(user_param_names): ", length(user_param_names))
+        # println("node_names: ", node_names)
+
         param_name_to_node = Dict()
+        count = 0
         for (node_loc, node_param, node_type, attr, user_param_name) in zipped
+
             param_name_to_node[user_param_name] = (node_loc, node_param, node_type, attr)
+            count += 1
         end
 
+        setdiff(Set(user_param_names), Set(keys(param_name_to_node))) != Set() &&
+            println("Missing parameters: ",
+                    setdiff(Set(user_param_names), Set(keys(param_name_to_node))))
+
+        oof0 = keys(param_name_to_node)
+        oof1 = Set(user_param_names)
+
+        # Where is this error from?
         keys(param_name_to_node) == Set(user_param_names) || throw("Parameter names do not match node parameters.")
 
-        zipped, param_name_to_node
+        # exit(0)
+        #
+        
+        # For the param_name_to_node drop the name position and only have the name for the keys
+        # TODO: This is broken fix this
+        # println("len(user_param_names): ", length(user_param_names))
+        # println("len(values(param_name_to_node)): ", length(collect(values(param_name_to_node))))
+        # linked_params = Dict(k[1] => v for (k, v) in zip(user_param_names, collect(values(param_name_to_node))))
+        linked_params = Dict()
+        for param in param_name_to_node
+            key = param[1][1]
+            linked_params[key] = param[2]
+        end
+
+        # zipped, param_name_to_node
+        zipped, linked_params 
     end
 
     function ir_where_left_clause!(lhs, type_namespace, symbol_tables,
@@ -977,11 +1178,12 @@ module IRRuleGeneration
             node_type = param[3]
             attr_type = param[4][1]
             attr_name = param[4][2]
-            user_param_name = param[end]
+            user_param_name = param[end][1]
 
             ir = "$attr_type $user_param_name = std::get<$type_namespace::$node_type>(lhs[m1[$node_loc]].data).$attr_name;\n"
 
             # emit(ir_builder, ir)
+            #
 
             ir_prop = "$attr_type $user_param_name = std::get<$type_namespace::$node_type>(lhs[m[$node_loc]].data).$attr_name;\n"
             propensity_table[user_param_name] = ir_prop
@@ -1003,33 +1205,26 @@ module IRRuleGeneration
             node_type = param[3]
             attr_type = param[4][1]
             attr_name = param[4][2]
-            user_param_name = param[end]
+            user_param_name = param[end][1]
 
             node_name = "rhs_node_"*string(node_loc)
 
-            # NOTE: Do I need this??
             if !(node_name in collect(keys(rhs_table)))
-                # assign_ir = "$type_namespace::$node_type $node_name = std::get<$type_namespace::$node_type>(rhs[m2[$node_loc]].data);"
                 assign_ir = "$type_namespace::$node_type $node_name = std::get<$type_namespace::$node_type>(rhs[m2[$node_loc]].data);"
                 rhs_table[node_name] = assign_ir
-                # emit(ir_builder, assign_ir)
             end
 
             ir_prop = "$attr_type $user_param_name = std::get<$type_namespace::$node_type>(lhs[m[$node_loc]].data).$attr_name;\n"
-
             propensity_table["var_local_table"]["rule_rhs"][user_param_name] = ir_prop
         end
 
-    rhs_table
+        rhs_table
     end
 
     function ir_distribution!(node, ir_builder, propensity_table, propensity)
         """
         Generates the IR for a distribution.
-        This is a placeholder function that should be
-        replaced with actual distribution handling logic.
         """
-
 
         # NOTE: Let's just for now assume that we are only dealing with
         # arguments that have identifiers already loaded.
@@ -1069,9 +1264,9 @@ module IRRuleGeneration
     end
 
     function ir_where_clause!(where_clause, ir_builder,
-        lhs_param_to_node, lhs_assgn_to_node, rhs_param_to_node,
-        rhs_assgn_to_node, symbol_tables, type_namespace, propensity_table
-    )
+            lhs_param_to_node, lhs_assgn_to_node, rhs_param_to_node,
+            rhs_assgn_to_node, symbol_tables, type_namespace, propensity_table
+        )
         """
         Handles where clause
         """
@@ -1079,14 +1274,13 @@ module IRRuleGeneration
         where_hdr = "[&](auto &lhs, auto &rhs, auto &m1, auto &m2) {"
         emit(ir_builder, where_hdr)
 
-
         # These functions will populate the propensity table
         # with the local variables.
         ir_where_left_clause!(lhs_param_to_node, type_namespace,
                               symbol_tables, propensity_table, ir_builder)
 
         rhs_table = ir_where_right_clause!(rhs_param_to_node, type_namespace,
-                                   symbol_tables, propensity_table, ir_builder)
+                                           symbol_tables, propensity_table, ir_builder)
 
         map(
             (assign_node) -> begin
@@ -1103,8 +1297,6 @@ module IRRuleGeneration
 
     function ir_prop_expr!(with_clause, ir_builder, propensity_table, prop_body_ir, propensity)
 
-    println("propensity: ", propensity)
-
         function_node = with_clause
 
         # Check if function node is a function or expression or an identifier
@@ -1117,11 +1309,6 @@ module IRRuleGeneration
             # If it is an identifier, we should
             # fetch the function arguments from the identifier
             arg = function_node.token
-
-            if arg.position.value == "s_min"
-                println("propensity: ", propensity)
-                println("found!")
-            end
 
             # println("propensity_table: ", propensity_table)
 
@@ -1182,8 +1369,9 @@ module IRRuleGeneration
         elseif function_node isa CallNode
             call_args = function_node.args
             function_node = function_node.function_node
-            func_name = get_value(function_node.name)
-            func_args = function_node.args
+            func_name = get_value(function_node)
+            # func_args = function_node.args
+            func_args = call_args
             ir_builtin_func(func_name, func_args,
                             ir_builder, propensity_table, prop_body_ir)
 
@@ -1210,15 +1398,12 @@ module IRRuleGeneration
             if operation.position.value == "~"
                 ir = ir_distribution!(function_node.operand, prop_body_ir, propensity_table, propensity)
             elseif operation.position.value == "-"
-                println("operation: ", operation)
                 ir = "-" * get_value(function_node.operand)
             else
                 throw("Error: Unary operation $(operation.position.value) not recognized.")
             end
             emit(ir_builder, ir)
         else
-            # func_args = function_node.args
-            # func_name = get_value(function_node.name)
             throw("Error: $(function_node) not recognized.")
         end
 
@@ -1233,7 +1418,6 @@ module IRRuleGeneration
         # is using a variable. If it is using a propensity.
         function_node = with_clause.function_node
 
-    println("in ir_propensity! ========>")
         ir_prop_expr!(function_node, ir_builder, propensity_table, prop_body_ir, true)
     end
 
@@ -1244,6 +1428,7 @@ module IRRuleGeneration
         Handles the assignment in the where clause.
         """
 
+        # FIXME: if you assign a node to another node who is just assigned it will not work.
         if assign_node isa DefinitionNode
             name = get_value(assign_node.name)
             type = convert_type_name(get_value(assign_node.type.name))
@@ -1270,8 +1455,13 @@ module IRRuleGeneration
             type = convert_type_name(get_value(assign_node.type.name))
             value = assign_node.value
 
+            # println("rhs_assgn_node: ", rhs_assgn_to_node)
+
+            check = keys(rhs_assgn_to_node)
+            # println("check keys: ", check)
 
             rhs_assgn_node = rhs_assgn_to_node[name]
+
             node_value = assign_node.value
             value = assign_node.value
 
@@ -1289,11 +1479,12 @@ module IRRuleGeneration
             # Adds the definition to propensity table local scope.
             propensity_table["var_local_table"]["rule_rhs"][name] = "$name"
 
-            # Fix self-referrential assignment
             if occursin(name, ir_value)
-                throw("Error: Self-referential assignment detected for variable '$name'. This is not supported.")
-                # ir_value = replace(ir_value, name => "tmp_$name")
-                # emit(ir_builder, "$type tmp_$name = $ir_value;")
+                println("propensity_table: ", propensity_table["var_local_table"]["rule_rhs"])
+                println("ir_value: ", ir_value)
+                println(assign_node)
+                throw(
+                      "Error: Self-referential assignment detected for variable '$name'. This is not supported.")
             end
 
             new_ir = "$type $name = $ir_value;"
@@ -1308,7 +1499,7 @@ module IRRuleGeneration
             # assigned_param_name = assigned_param
             ir = "\t\tstd::get<$type_namespace::$node_type>(rhs[m2[$assigned_node]].data).$rhs_attr = $name;"
 
-            if assigned_param == 1 || assigned_param == 2
+            if assigned_param == 1 || assigned_param == 2 || assigned_param == 3
                 ir_node_pos = "\t\trhs[m2[$assigned_node]].position[$(assigned_param-1)] = $name;"
                 emit(ir_builder, ir_node_pos)
             end

@@ -21,6 +21,10 @@ module Tokens
         position::PositionToken
     end
 
+    struct SimulationToken <: Token
+	position::PositionToken
+    end
+
     struct GrammarTimeToken <: Token
         position::PositionToken
     end
@@ -44,6 +48,10 @@ module Tokens
         position::PositionToken
     end
 
+    struct ReturnToken <: Token
+        position::PositionToken
+    end
+
     struct PlusToken <: OperatorToken
         position::PositionToken
     end
@@ -54,6 +62,10 @@ module Tokens
 
     struct AsteriskToken <: OperatorToken
         position::PositionToken
+    end
+
+    struct CaretToken <: OperatorToken
+	position::PositionToken
     end
 
     struct SlashToken <: OperatorToken
@@ -250,6 +262,5 @@ module Tokens
 
     struct EndLineToken <: Token
     end
-
 
 end

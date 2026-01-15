@@ -1,0 +1,288 @@
+
+# DFNWork styled data
+# GEOS
+rules FractureNetwork {
+
+    # This is your source
+    # TODO: Add pressure source
+    # Add pressure segment tracker
+    # PressureSink
+
+    # TODO: Add macro that saves graph patterns
+    # NOTE: Nodes are counted uniquely on how they appear.
+    # TODO: Add a way a user can assign number to nodes themselves 
+    # Just in case if they want to put these out of order.
+
+    # Pressure should be sigmoidal
+    # C
+    start_node_up := (start : StartType) << (start_x, start_y) >> -> 
+    (s : PressureSource) -- (pre : FractureSegment) -- (start : FractureSegmentEnd)
+    (s0 : PressureSource) -- (pre0 : FractureSegment) -- (start0 : FractureSegmentEnd)
+    (s1 : PressureSource) -- (pre1 : FractureSegment) -- (start1 : FractureSegmentEnd)
+
+    (pressSeg00 : PressureSegment) -- (pre : FractureSegment)
+    (pressSeg00 : PressureSegment) -- (s : PressureSource)
+    (pressSeg01 : PressureSegment) -- (pre : FractureSegment)
+    (pressSeg01 : PressureSegment) -- (start : FractureSegmentEnd)
+
+    (pressSeg10 : PressureSegment) -- (pre0 : FractureSegment)
+    (pressSeg10 : PressureSegment) -- (s0 : PressureSource)
+    (pressSeg11 : PressureSegment) -- (pre0 : FractureSegment)
+    (pressSeg11 : PressureSegment) -- (start0 : FractureSegmentEnd)
+
+    << (psx, psy, ps), (prex, prey, prep), (start_xn, start_yn, pn, ux, uy),
+    (ps0x, ps0y, ps0), (pre0x, pre0y, pre0p), (start_xn0, start_yn0, pn0, ux0, uy0),
+    (ps1x, ps1y, ps1), (pre1x, pre1y, pre1p), (start_xn1, start_yn1, pn1, ux1, uy1),
+
+    # Pressure Segments 0
+    (presx00, presy00, presp00), (prex, prey, prep),
+    (presx00, presy00, presp00), (psx, psy, ps),
+    (presx01, presy01, presp01), (prex, prey, prep),
+    (presx01, presy01, presp01), (start_xn, start_yn, pn, ux, uy),
+
+    # Pressure Segments 1
+    (presx10, presy10, presp10), (pre0x, pre0y, pre0p),
+    (presx10, presy10, presp10), (ps0x, ps0y, ps0),
+    (presx11, presy11, presp11), (pre0x, pre0y, pre0p),
+    (presx11, presy11, presp11), (start_xn0, start_yn0, pn0, ux0, uy0),
+
+    # Pressure Sgments 2
+
+
+     >> with (10 * s_min) where {
+
+        ####################
+        # First Segment
+        # PressureSource
+        seg0BaseX : Float := 2.0
+        seg0BaseY : Float := 2.0
+        seg0Pressure : Float := 15.0
+
+        psx : Float = seg0BaseX
+        psy : Float = seg0BaseY
+        ps : Float = seg0Pressure
+
+        # FractureSegment
+        prex : Float = seg0BaseX + 0.5
+        prey : Float = seg0BaseY + 0.5
+        prep : Float = 0.0
+
+        # FractureSegmentEnd
+        start_xn : Float = 3.0 + s_min
+        start_yn : Float = 3.0 + s_min
+        pn : Float = 0.0
+        ux : Float = 1.0
+        uy : Float = 1.0
+
+        ####################
+
+        # Second Segment
+        # Pressure Source
+        seg1BaseX : Float := 3.0
+        seg1BaseY : Float := 4.0
+        ps0x : Float = seg1BaseX
+        ps0y : Float = seg1BaseY
+        ps0 : Float = seg0Pressure
+
+        # FractureSegment
+        pre0x : Float = seg1BaseX + 0.5
+        pre0y : Float = seg1BaseY + 0.5
+        pre0p : Float = 0.0
+
+        # FractureSegment End
+        start_xn0 : Float = seg1BaseX + s_min
+        start_yn0 : Float = sesg1BaseY + s_min
+
+        pn0 : Float = 0
+        ux0 : Float = 1.0
+        uy0 : Float = -1.0
+
+        ####################
+        seg2BaseX : Float := 3.0
+        seg2BaseY : Float := 5.0
+        ps1x : Float = seg0BaseX
+        ps1y : Float = seg0BaseY
+        ps1 : Float = seg0Pressure
+
+        # FractureSegment
+        pre1x : Float = seg2BaseX + 0.5
+        pre1y : Float = seg2BaseY + 0.5
+        pre1p : Float = 0.0
+        
+        # Third Segment
+        start_xn1 : Float = 3.0 + s_min
+        start_yn1 : Float = 5.0 + s_min
+        pn1 : Float = 10.0
+        ux1 : Float = 1.0
+        uy1 : Float = -1.0
+
+        ########################
+        # Pressure Segments
+
+    }
+
+    # TODO: Add pressure segment tracker to LHS
+    start_to_node_fracture := (pre : FractureSegment) -- (p0 : FractureSegmentEnd)
+    << (prex, prey, p, ux, uy), (x, y, p, ux, uy) >> 
+        -> (pre : FractureSegment) -- (p0 : FractureSegment)  -- (p1 : FractureSegmentEnd)
+        (presSeg : PressureSegment) -- (p0 : FractureSegment)
+        (presSeg : PressureSegment) -- (p1 : FractureSegmentEnd)
+    << (xn0, yn0, pn0, ux0, uy0), (x2, y2, p2, ux2, uy2),
+        (presx, presy, presp), (xn0, yn0, pn0, ux0, uy0),
+        (presx, presy, presp), (x2, y2, p2, ux2, uy2) >> with (1.0) where {
+
+        # N/m2 pressure
+        xn0 : Float = x
+        yn0 : Float = y
+        pn0 : Float = p - 0.1
+        ux0 : Float = ux
+        uy0 : Float = uy
+
+        # Pressure segment
+        presx : Float = x + 0.2
+        presy : Float = y + 0.5
+        presp : Float = ((p - 0.1) - p) * (aperture/(12 * 0.001))
+
+        # growth : Float := ~UniformDistribution(s_min, s_max)
+        growth : Float := s_min/2
+        x2 : Float = (xn0 + growth * ux)
+        y2 : Float = (yn0 + growth * uy)
+        p2 : Float = p
+        ux2 : Float = ux
+        uy2 : Float = uy
+    }
+
+    # Small pressure flux
+    single_segment_pressure_flux := (p0 : FractureSegment)  << (x0, y0, p0, ux0, uy0) >> 
+        ->  (p0 : FractureSegment) << (x0n, y0n, dp0, ux0n, uy0n) >> solving ( dp0 := D(p0, t)) {
+            dp0 : ODE = 0.01 * p0
+    }
+
+    # Need to remove the segments also so we consume it
+    fracture_junction := (p1 : FractureSegment) -- (p2 : FractureSegmentEnd)
+        (p3 : FractureSegment) -- (p4 : FractureSegment)
+
+        (p5 : PressureSegment) -- (p1 : FractureSegment)
+        (p5 : PressureSegment) -- (p2 : FractureSegmentEnd)
+
+        (p6 : PressureSegment) -- (p3 : FractureSegment)
+        (p6 : PressureSegment) -- (p4 : FractureSegment)
+        <<
+            (x1, y1, p1, ux1, uy1), (x2, y2, p2, ux2, uy2), 
+            (x3, y3, p3, ux3, uy3), (x4, y4, p4, ux4, uy4) 
+
+            (x5, y5, p5), (x1, y1, p1, ux1, uy1),
+            (x5, y5, p5), (x2, y2, p2, ux2, uy2),
+            (x6, y6, p6), (x3, y3, p3, ux3, uy3),
+            (x6, y6, p6), (x4, y4, p4, ux4, uy4) >> 
+            
+        -> 
+            (p1 : FractureSegment) -- (p2 : Junction)
+            (p3 : FractureSegment) -- (p2 : Junction)
+            (p2 : Junction) -- (p4 : FractureSegment)
+            (p5 : FractureSegment) -- (p2 : Junction)
+            (p5 : FractureSegment) -- (p6 : FractureSegmentEnd)
+            (p2 : Junction) -- (p4 : FractureSegment)
+
+            (p7 : PressureSegment) -- (p1 : FractureSegment)
+            (p7 : PressureSegment) -- (p2 : Junction)
+            (p7 : PressureSegment) -- (p3 : FractureSegment)
+            (p7 : PressureSegment) -- (p4 : FractureSegment)
+            (p7 : PressureSegment) -- (p5 : FractureSegment)
+
+            (p8 : PressureSegment) -- (p5 : FractureSegment)
+            (p8 : PressureSegment) -- (p6 : FractureSegmentEnd)
+        << 
+            (x1n, y1n, p1n, ux1n, uy1n), (x2n, y2n, p2n, ux2n, uy2n),
+            (x3n, y3n, p3n, ux3n, uy3n), (x2n, y2n, p2n, ux2n, uy2n),
+            (x2n, y2n, p2n, ux2n, uy2n), (x4n, y4n, p4n, ux4n, uy4n),
+            (x5n, y5n, p5n, ux5n, uy5n), (x2n, y2n, p2n, ux2n, uy2n),
+            (x5n, y5n, p5n, ux5n, uy5n), (x6n, y6n, p6n, ux6n, uy6n),
+            (x2n, y2n, p2n, ux2n, uy2n), (x4n, y4n, p4n, ux4n, uy4n),
+
+            (x7, y7, p7), (x1n, y1n, p1n, ux1n, uy1n),
+            (x7, y7, p7), (x2n, y2n, p2n, ux2n, uy2n),
+            (x7, y7, p7), (x3n, y3n, p3n, ux3n, uy3n),
+            (x7, y7, p7), (x4n, y4n, p4n, ux4n, uy4n),
+            (x7, y7, p7), (x5n, y5n, p5n, ux5n, uy5n),
+
+            (x8, y8, p8), (x5n, y5n, p5n, ux5n, uy5n),
+            (x8, y8, p8), (x6n, y6n, p6n, ux6n, uy6n)>> 
+        with (1000000000*indicator(uy2 != uy4)*indicator( sqrt((x2 - x4 )*(x2 - x4) + (y2 - y4)*(y2 - y4) ) <= (s_min + s_min) ) ) where {
+        # with (100.0*indicator(uy2 != uy4)) where {
+
+        # TODO: Where assignments should include other
+        # assignments that are in the local scope define by the user.
+        # the most simple thing is just to copy the ir there.
+        x1n : Float = x1
+        y1n : Float = y1
+        p1n : Float = p1
+        ux1n : Float = ux1
+        uy1n : Float = uy1
+
+        x_mid : Float := ((x1*y2 - y1*x2)*(x3-x4) - (x1-x2)*(x3*y4 - y3*x4))/((x1 - x2)*(y3 - y4) - (y1 - y2)*(x3 - x4))
+        y_mid : Float := ((x1*y2 - y1*x2)*(y3-y4) - (y1-y2)*(x3*y4 - y3*x4))/((x1 - x2)*(y3 - y4) - (y1 - y2)*(x3 - x4))
+
+        x2n : Float = x_mid
+        y2n : Float = y_mid
+        p2n : Float = 1.0
+        ux2n : Float = ux2
+        uy2n : Float = uy2
+
+        growth0 : Float := s_min
+        growth1 : Float := s_min
+        growth2 : Float := s_min + s_min
+
+        x5n : Float = x2 + growth0 * ux2
+        y5n : Float = y2  + growth0 * uy2
+        p5n : Float = 1.0
+        ux5n : Float = ux2
+        uy5n : Float = uy2
+
+        x6n : Float = x2 + growth2 * ux2
+        y6n : Float = y2  + growth2 * uy2
+
+        p6n : Float = 1.0
+        ux6n : Float = ux2
+        uy6n : Float = uy2
+
+        x3n : Float = x3 + 0.05 * ux3
+        y3n : Float = y3 + 0.05 * uy3
+        p3n : Float = p3
+        ux3n : Float = ux3
+        uy3n : Float = uy3
+
+        x4n : Float = x4 + growth1 * ux4
+        y4n : Float = y4 + growth1 * uy4
+        p4n : Float = 1.0
+        ux4n : Float = ux4
+        uy4n : Float = uy4
+
+        x7 : Float = x_mid + 0.2
+        y7 : Float = y_mid + 0.5
+        p7 : Float = 1.0
+
+        x8 : Float = x2 + (growth0 + 0.2) * ux2
+        y8 : Float = y2 + (growth0 + 0.5) * ux2
+        p8 : Float = 1.0
+    }
+
+#     hit_boundary := (p0 : FractureSegment) -- (end : FractureSegmentEnd)  (bound0 : Boundary) -- (bound1 : Boundary) <<
+#             (x0, y0, p0, ux0, uy0),
+#             (x1, y1, p1, ux1, uy1),
+#             (xb0, yb0),
+#         (xb1, yb1) >> -> (p0 : FractureSegment) -- (p1 : FractureSegmentEnd) <<
+#         (x0n, y0n, p0n, ux0n, uy0n),
+#         (x1n, y1n, p1n, ux1n, uy1n) >> with (0.0) where {
+# 
+#             x0n : Float = x0
+#             y0n : Float = y0
+#             p0n : Float = p0
+# 
+#             x1n : Float = x1
+#             y1n : Float = y1
+#             p1n : Float = 0.0
+# 
+#         }
+
+}

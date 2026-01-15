@@ -1,0 +1,16 @@
+
+simulations Harness {
+
+	initState : State := LoadFile("State0.fflow")
+	rules : RuleSection := LoadFile("rules.fflow")
+	types : TypesSection := LoadFile("types.fflow")
+	params : ParamSection := LoadFile("params.fflow")
+	helpFunctions : FunctionSection := LoadFile("functions.fflow")
+
+	run1 : ApproximateSimulation<< init, rules, types, params, helpFunctions >>
+
+	# Maybe allowing parallel running
+	# TODO: Add save location
+	runner0 : Run(run1)
+
+}

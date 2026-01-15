@@ -1,4 +1,3 @@
-
 ## Symbol
 <symbol-name> ::= [Aa-Zz] | [0-9] | _ | <symbol-name>
 <symbol-parameters> ::= "<<" <symbol-parameter> ">> | ""
@@ -77,7 +76,7 @@
 <parameterized-type> ::= <symbol-name> ":" <type-signature-list> 
 
 # TODO:  define predicate and expressions to be a list of them.
-<with-clause> ::= "(" <function-type> ")" "where" "{" <predicate> "}" "\n" | <function-type> "\n"
+<with-clause> ::= "indicator" "(" <predicate> ")" | <function-type> "\n"
 <solve-clause> ::= <function-type> "solving" "{" <expression> "}" "\n" | <function-type> "\n"
 
 <where-clause> ::= <expressions> | <type-assignment-list>
@@ -98,7 +97,23 @@
 ## Grammar
 <grammar> ::= "grammar" <symbol-name> ":" <time-type> 
           "<<" <parameterized-types> ">>" "{" <rules> "}"
-<time-type> ::= "DiscreteTime)" | "ContinuousTime"
+<time-type> ::= "DiscreteTime" | "ContinuousTime"
+
+
+## Functions
+<function-parameterized-types> ::= <function-parameterized-types> | ""
+<function-parameterized-type> ::= <symbol-name> ":" <type-signature-list>
+
+# Function Section
+<functions-section> ::= "functions" <symbol-name> "{" <function-list> "}"
+<function-list> ::= <function-declaration> <function-list> | <function-declaration>
+<function-type-signature> ::= "<<" <parameterized-types> ">>" <symbol-name> "->"
+                        | <symbol-name>
+
+<function-declaration> ::= <symbol-name>  ":" "Function" <function-type-signature> ":=" "{" <function-expression-list> "return" <expression> "}" "\n"
+
+<function-expression-list> ::= <expressions> | <type-assignment-list>
+<function-expression> ::= "return" <expression>
 
 ## Simulations
 <simulations> ::=  "simulations" <symbol-name> "{" <simulations-list> "}"
@@ -108,12 +123,11 @@
 <rules> ::= <rules> | <rule> | <solve-rule>
 <grammar-signature> ::= <parameterized-types-left> "->" <parameterized-types-right>
 
- <predicate> ::= <symbol-name> "!=" <symbol-name> 
-                | <symbol-name> "<" <symbol-name> 
-                | <symbol-name> ">" <symbol-name> 
-                | <symbol-name> "==" <symbol-name>
+<predicate> ::= <expression> "!=" <expression> 
+            | <expression> "<" <expression> 
+            | <expression> ">" <expression> 
+            | <expression> "==" <expression>
 
 <function-args> ::= <symbol-name> | <symbol-name> "," <function-args>
-
 <function-type> ::= <symbol-name> "(" <function-args> ")"
 <literal> ::= [0-9] | [Aa-Zz] | <literal>

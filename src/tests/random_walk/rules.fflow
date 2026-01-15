@@ -1,0 +1,34 @@
+
+rules Microtubule {
+
+    start_to_node := (start : StartType) << (start_x, start_y) >> 
+        -> (x1 : Neuron) 
+    << (x00, y00, vx00, vy00, val00) >> 
+    with (heaviside(10,1)) where {
+
+        x00 : Float = start_x
+        y00 : Float = start_y
+        vx00 : Float = ~UniformDistribution(0,1)
+        vy00 : Float = 0
+        val00 : Float = 0.3
+    }
+
+    langevin := (x1 : Neuron) << (x00, y00, w00, b00, v00) >> 
+        -> (x1 : Neuron) << (x00, y00, w00, b00, v00) >> solving (dx := D(x00, t), dy := D(y00,t), dvx := D() ) where {
+
+        lambda : Float := 0.3
+        mass : Float := 1.0
+
+        # TODO: Allow scientific notation
+        # TODO: Allow exponents
+        # TODO: Allow gaussian instead of uniform distribution
+
+        walk : Float := ~NormalDistribution(0, 1)
+        sigma : Float := 2 * lambda 
+
+        dx : ODE = -1 * lambda + walk
+
+    }
+
+
+}

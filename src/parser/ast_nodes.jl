@@ -16,7 +16,6 @@ module AstNodes
         token::Token
     end
 
-
     struct TimeTypeNode <: Node
         token::Token
     end
@@ -36,7 +35,7 @@ module AstNodes
     end
 
     struct ParameterNode <: Node
-        token::Array{Node} # Can be a ParameterNode or a IdentifierNode
+        token:: Union{Array{Node}, Nothing} # Can be a ParameterNode or a IdentifierNode
     end
 
     
@@ -57,6 +56,16 @@ module AstNodes
     struct UnaryOpNode <: Node
         expression :: Union{MinusToken, PlusToken, NotToken, SampleToken}
         operand :: Node
+    end
+
+    struct CallNode <: Node
+        function_node :: IdentifierNode
+        args :: Array{
+                      Union{Token, IntegerNode, FloatNode,
+                            IdentifierNode, BinaryOpNode, GroupNode,
+                            UnaryOpNode, CallNode
+                           }
+                     }
     end
 
     struct FunctionNode <: Node
@@ -112,7 +121,7 @@ module AstNodes
     end
 
     struct TypeClassNode <: Node
-        name :: IdentifierNode
+        name :: Union{IdentifierNode, FloatNode, IntegerNode}
         parameter :: ParameterNode
     end
 
@@ -197,11 +206,6 @@ module AstNodes
         parameter_list :: Array{Union{ParameterNode, TypeInstanceNode}}
     end
 
-    struct FunctionSectionNode <: Node
-        name :: IdentifierNode
-        # types ::Array{TypeInstanceNode}
-    end
-
     struct RuleSectionNode <: Node
         name :: IdentifierNode
         # rules_list ::Array{TypeInstanceNode}
@@ -234,14 +238,10 @@ module AstNodes
         lhs :: Token
     end
 
-    struct CallNode <: Node
-        function_node :: FunctionNode
-        args :: Array{
-                      Union{Token, IntegerNode, FloatNode,
-                            IdentifierNode, BinaryOpNode, GroupNode,
-                            UnaryOpNode, CallNode
-                           }
-                     }
+    
+    struct AssignNode <: Node
+        name :: IdentifierNode
+        value :: Node
     end
 
     struct MultiplyNode <: Node
@@ -254,6 +254,42 @@ module AstNodes
         expression :: OperatorToken
         lhs :: Token
         rhs :: Token
+    end
+
+    struct ReturnNode <: Node
+        value :: Union{Node, IdentifierNode, FloatNode, CallNode, BinaryOpNode}
+    end
+
+    struct FunctionArgNode <: Node
+        name :: IdentifierNode
+        type :: TypeClassNode
+    end
+
+    struct FunctionSignatureNode <: Node
+        args :: Array{FunctionArgNode}
+        output :: TypeClassNode
+    end
+
+    struct FunctionDefinitionExpressionNode <: Node
+        name :: IdentifierNode
+        type :: Union{IdentifierNode, FloatNode}
+        value :: Node
+    end
+
+    struct FunctionBodyExpressionNode <: Node
+        expressions :: Array{FunctionDefinitionExpressionNode}
+    end
+
+    struct FunctionDefinitionNode <: Node
+        name :: IdentifierNode
+        signature :: FunctionSignatureNode
+        body :: FunctionBodyExpressionNode
+        fun_return :: Node
+    end
+
+    struct FunctionSectionNode <: Node
+        name :: IdentifierNode
+        functions :: Array{FunctionDefinitionNode}
     end
 
     struct GrammarNode <: Node
