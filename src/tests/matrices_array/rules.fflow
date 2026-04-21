@@ -1,0 +1,35 @@
+rules Microtubule {
+
+
+    start_to_node := (start : StartType) << position : FixedList<<3, Float>> >> 
+            -> (p1 : Nucleator) << new_position : FixedList <<3, Float>>, count : FixedList <<2, Float>> >> with (heaviside(10,1)) where {
+
+        new_position = position + 0.1
+    }
+
+    move_pt := (p1 : Nucleator) << position : FixedList<<3, Float>>, count : FixedList<<2, Float>> >> ->  
+        (p1 : Nucleator) << dx : FixedList<<3, Float>>, count : FixedList<<2, Float>> >>
+        solving (dx := D(position, t)) {
+
+        dx[0] : ODE = 0.1
+        dx[1] : ODE = position[1] * 0.5
+        dx[2] : ODE = 0.0
+    }
+
+
+    move_pt_2 := (p1 : Nucleator) << position : FixedList <<3, Float>>, count : FixedList <<2, Float >> >> ->  
+        (p1 : Nucleator) << new_position : FixedList <<3, Float>>, count : FixedList <<2, Float >> >>
+            solving (dx := D(position, t) ) {
+
+            dx : ODE = 0.3
+
+    }
+
+    slice_test := (p1 : Nucleator) << position : FixedList<<3, Float>>, count : FixedList<<2, Float>> >> ->
+        (p1 : Nucleator) << new_position : FixedList<<3, Float>>, count : FixedList<<2, Float>> >> with (heaviside(10,1)) where {
+
+        new_position = position[0:2] + 0.5
+    }
+
+    
+}

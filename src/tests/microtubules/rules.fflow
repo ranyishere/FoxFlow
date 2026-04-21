@@ -1,163 +1,763 @@
-
 rules Microtubule {
 
-    start_to_node := (start : StartType) << (start_x, start_y) >> 
-            -> (counter : Counter) -- (p1 : NucleatorCreator) << (cstart_x, cstart_y, count),
-                                                                 (x, y, counter_x, counter_y) >> with (heaviside(10,1)) where {
-                counter_x : Integer = 10
-                counter_y : Integer = 10
-                x : Float = 5
-                y : Float = 5
-                cstart_x : Float = start_x
-                cstart_y : Float = start_x
-                count : Float = 1
+#     start_to_node := (start : StartType) << (start_x, start_y, start_z) >> 
+#             -> (p1 : Nucleator) (b0 : CellBoundary) << (x, y, z, countx, county),
+#         ( (bx, by, bz), (ux, uy, uz), (bcountx, bcounty)) >> with (heaviside(10,1)) where {
+# 
+#         x : Float = 0 + buffer
+#         y : Float = 0 + buffer
+#         z : Float = 0
+# 
+#         countx : Integer = 10
+#         county : Integer = 10
+# 
+#         bx : Float = 0.0
+#         by : Float = 0.0
+#         bz : Float = 0.0
+# 
+#         ux : Float = 1.0
+#         uy : Float = 1.0
+#         uz : Float = 1.0
+# 
+#         # FIXME: If there is a type mismatch there should be an error. At the moment that does no give an error.
+#         bcountx : Integer = 1
+#         bcounty : Integer = 1
+# 
+#     }
+
+    # FIXME: if a user doesnt define everything on the lhs it still works... It should given an error instead.
+#     make_boundary_bottom := (b0 : CellBoundary) << ( (x,y,z), (ux, uy, uz), (countx, county)) >> ->
+#         (b0 : CellBoundary) -- (b1 : CellBoundary) << ( (nx,ny,nz), (nux0, nuy0, nuz0), (ncountx0, ncounty0)),
+#         ( (nx1,ny1,nz1), (nux1, nuy1, nuz1), (ncountx1, ncounty1) ) >> with (
+#             indicator(countx != 0) * indicator(countx != boundary_pts) * indicator(ux == 1)
+#             * indicator(countx <= boundary_pts)
+#         ) where {
+# 
+#         nx : Float = x
+#         ny : Float = y
+#         nz : Float = z
+# 
+#         ncountx0 : Float = 0
+#         ncounty0 : Float = county
+# 
+#         nux0 : Float = ux
+#         nuy0 : Float = uy
+#         nuz0 : Float = uz
+# 
+#         nx1 : Float = x + boundary_offset
+#         ny1 : Float = y 
+#         nz1 : Float = z
+# 
+#         nux1 : Float = ux
+#         nuy1 : Float = uy
+#         nuz1 : Float = uz
+# 
+#         ncountx1 : Integer = countx + 1
+#         ncounty1 : Integer = county
+# 
+#     }
+
+#     make_boundary_right := (b0 : CellBoundary) << ( (x,y,z), (ux, uy, uz), (countx, county)) >> ->
+#        (b0 : CellBoundary) -- (b1 : CellBoundary) << ( (nx,ny,nz), (nux0, nuy0, nuz0), (ncountx0, ncounty0)),
+#         ( (nx1,ny1,nz1), (nux1, nuy1, nuz1), (ncountx1, ncounty1) ) >> with (
+#             indicator(countx >= boundary_pts) * indicator(county != 0) * indicator(county != boundary_pts) 
+#             * indicator(uy == 1)
+#         ) where {
+# 
+#         nx : Float = x
+#         ny : Float = y
+#         nz : Float = z
+# 
+#         ncountx0 : Float = countx
+#         ncounty0 : Float = 0
+# 
+#         nux0 : Float = 1
+#         nuy0 : Float = uy
+#         nuz0 : Float = uz
+# 
+#         nx1 : Float = x 
+#         ny1 : Float = y + boundary_offset
+#         nz1 : Float = z
+# 
+#         nux1 : Float = -1
+#         nuy1 : Float = uy
+#         nuz1 : Float = uz
+# 
+#         ncountx1 : Integer = countx
+#         ncounty1 : Integer = county + 1
+# 
+#     }
+
+#     make_boundary_top := (b0 : CellBoundary) << ( (x,y,z), (ux, uy, uz), (countx, county)) >> ->
+#         (b0 : CellBoundary) -- (b1 : CellBoundary) << ( (nx,ny,nz), (nux0, nuy0, nuz0), (ncountx0, ncounty0)),
+#         ( (nx1,ny1,nz1), (nux1, nuy1, nuz1), (ncountx1, ncounty1) ) >> with (
+#             indicator( (countx) <= (2*boundary_pts - 2) ) * indicator( (countx) >= boundary_pts )
+#             * indicator( county >= boundary_pts )
+#             * indicator(ux == -1) * indicator(uy == 1)
+#             ) where {
+# 
+#         nx : Float = x
+#         ny : Float = y
+#         nz : Float = z
+# 
+#         ncountx0 : Float = countx
+#         ncounty0 : Float = county
+# 
+#         nux0 : Float = 1
+#         nuy0 : Float = uy
+#         nuz0 : Float = uz
+# 
+#         nx1 : Float = x - boundary_offset
+#         ny1 : Float = y
+#         nz1 : Float = z
+# 
+#         nux1 : Float = -1
+#         nuy1 : Float = uy
+#         nuz1 : Float = uz
+# 
+#         ncountx1 : Integer = countx + 1
+#         ncounty1 : Integer = county
+# 
+#     }
+
+#     make_boundary_left := (b0 : CellBoundary) << ( (x,y,z), (ux, uy, uz), (countx, county)) >> ->
+#         (b0 : CellBoundary) -- (b1 : CellBoundary) << ( (nx,ny,nz), (nux0, nuy0, nuz0), (ncountx0, ncounty0)),
+#         ( (nx1,ny1,nz1), (nux1, nuy1, nuz1), (ncountx1, ncounty1) ) >> with (
+#             indicator( (countx) > (2*boundary_pts - 2) ) * indicator( county >= boundary_pts )
+#             * indicator(county <= (2*boundary_pts - 2))
+#         ) where {
+# 
+#         nx : Float = x
+#         ny : Float = y
+#         nz : Float = z
+# 
+#         ncountx0 : Float = countx
+#         ncounty0 : Float = county
+# 
+#         nux0 : Float = 1
+#         nuy0 : Float = uy
+#         nuz0 : Float = uz
+# 
+#         nx1 : Float = x
+#         ny1 : Float = y - boundary_offset
+#         nz1 : Float = z
+# 
+#         nux1 : Float = -1
+#         nuy1 : Float = -1
+#         nuz1 : Float = uz
+# 
+#         ncountx1 : Integer = countx
+#         ncounty1 : Integer = county + 1
+# 
+#     }
+
+
+
+#     create_nucleator_grid_x := (p1 : Nucleator) << (x,y,z, countx, county) >> ->
+#         (p1 : Nucleator) (p2 : Nucleator) << (nx, ny, nz, ncountx, ncounty),
+#         (nx2, ny2, nz2, ncountx2, ncounty2) >> with (indicator( 0 != countx)) where {
+# 
+#         nx : Float = x
+#         ny : Float = y
+#         nz : Float = z
+# 
+#         ncountx : Float = 0
+#         ncounty : Float = county
+# 
+#         nx2 : Float = x + offset
+#         ny2 : Float = y
+#         nz2 : Float = 0
+# 
+#         ncountx2 : Float = countx - 1
+#         ncounty2 : Float = county
+#     }
+
+#     create_nucleator_grid_y := (p1 : Nucleator) << (x,y,z, countx, county) >> ->
+#         (p1 : Nucleator) (p2 : Nucleator) << (nx, ny, nz, ncountx, ncounty),
+#         (nx2, ny2, nz2, ncountx2, ncounty2) >> with (indicator( 0 != county)) where {
+# 
+#         nx : Float = x
+#         ny : Float = y
+#         nz : Float = z
+# 
+#         ncountx : Float = countx
+#         ncounty : Float = 0
+# 
+#         nx2 : Float = x
+#         ny2 : Float = y + offset
+#         nz2 : Float = 0
+# 
+#         ncountx2 : Float = countx
+#         ncounty2 : Float = county - 1
+# 
+#     }
+
+
+    create_microtubule := (p1 : Nucleator) << (x,y,z, countx, county) >> -> 
+        (p1 : Nucleator)
+        (p2 : Retraction) -- (p3 : Intermediate)
+        (p3 : Intermediate) -- (p4 : Positive) << ((nuc_x,nuc_y,nuc_z), (nuc_countx, nuc_county)),
+        ((nx,ny,nz), (nux,nuy, nuz)), ((ix,iy,iz), (iux,iuy, iuz)),
+        ((ix,iy,iz), (iux,iuy, iuz)), ((px, py, pz), (pux, puy, puz)) >> with (creation_factor * creation_rate*100) where { 
+
+        mt_seg_len : Float := ~UniformDistribution(mt_min_segment_init, mt_max_segment_init)
+        mt_orientation : Float := ~UniformDistribution(0.0, 2.0 * 3.1415)
+
+        x_im : Float := x + ~UniformDistribution(-1*varepsilon, varepsilon)
+        y_im : Float := y + ~UniformDistribution(-1*varepsilon, varepsilon)
+
+
+        nuc_x : Float = x
+        nuc_y : Float = y
+        nuc_z : Float = z
+        nuc_countx : Float = countx
+        nuc_county : Float = county
+
+        x_c : Float := x_im
+        y_c : Float := y_im
+        z_c : Float := z
+
+        # x_s : Float := 0.0
+        x_s : Float := 0
+        y_s : Float := mt_seg_len
+
+        x_r_t : Float := x_s * cos(mt_orientation) + y_s * sin(mt_orientation)
+        y_r_t : Float := -x_s * sin(mt_orientation) + y_s * cos(mt_orientation)
+
+        x_r : Float := x_c + x_r_t
+        y_r : Float := y_c + y_r_t
+        z_r : Float := 0
+
+        x_l : Float := x_c - x_r_t
+        y_l : Float := y_c - y_r_t
+        z_l : Float := 0
+
+        nx : Float = x_l
+        ny : Float = y_l
+        nz : Float = z_l
+
+        # ix : Float = x_c
+        # iy : Float = y_c
+        # iz : Float = z_c
+
+        ix : Float = x_c
+        iy : Float = y_c
+        iz : Float = z_c
+
+        px : Float = x_r
+        py : Float = y_r
+        pz : Float = z_r
+
+        # tmp_x : Float := (x_im - x_r)/HELP::distance(x_im, y_im, x_r, y_r)
+        # tmp_x : Float := (x_im - x_r)/HELP::distance(x_im, y_im, x_r, y_r)
+        # tmp_y : Float := (y_im - y_r)/HELP::distance(x_im, y_im, x_r, y_r)
+
+        tmp_x : Float := (x_r - x_im)/HELP::distance(x_im, y_im, x_r, y_r)
+        tmp_y : Float := (y_r - y_im)/HELP::distance(x_im, y_im, x_r, y_r)
+
+        # Setting unit vectors
+        nux : Float = tmp_x
+        nuy : Float = tmp_y
+        nuz : Float = 0
+
+        # iux : Float = 1
+        # iuy : Float = 1
+        # iuz : Float = 1
+
+        iux : Float = tmp_x
+        iuy : Float = tmp_y
+        iuz : Float = 0
+
+        pux : Float = tmp_x
+        puy : Float = tmp_y
+        puz : Float = 0
+    
     }
+    
 
-    # Goes across x
-    create_grid_x := (counter : Counter) -- (p1 : NucleatorCreator) << (cx, cy, prev_count), (x, y, counter_x, counter_y) >>
-        -> (new_counter : Counter) -- (p1 : NucleatorCreator) (new_counter : Counter) -- (p2 : NucleatorCreator) <<
-             (cnx, cny, new_count), (x_1, y_1, c1_x, c1_y),
-             (cnx, cny, new_count), (x_2, y_2, c2_x, c2_y) >> with (heaviside(counter_x, 1) ) where {
+    # grow microtubule by stretching.
+    growing_rule_stretch := (im : Intermediate) -- (pos : Positive) << ((ix,iy,iz), (iux,iuy, iuz)), ((px, py, pz), (pux, puy, puz)) >>  ->
+        (new_im : Intermediate) -- (new_pos : Positive) << ((nix,niy,niz), (niux,niuy, iuz)), ((dpx, dpy, dpz), (npux, npuy, npuz)) >>
+        solving (dpx := D(px,t),  dpy := D(py,t)) {
 
-            x_1 : Float = x
-            y_1 : Float = y
 
-            c1_x : Float = 0
-            c1_y : Float = counter_y
+            check : Float := HELP::distance(ix, iy, px, py)
 
-            x_2 : Float = x + 0.1
-            y_2 : Float = y
-
-            c2_x : Float = counter_x - 1
-            c2_y : Float = counter_y
-
-            cnx : Float = cx
-            cny : Float = cy
-            new_count : Float = prev_count + 1
+            # TODO: Allow definition nodes and using setting parameters.
+            dpx : ODE = 0.0615*pux*4
+            dpy : ODE = 0.0615*puy*4
 
         }
 
-    # create_grid_y := (counter : Counter) -- (p1 : NucleatorCreator) << (cx, cy, prev_count), (x, y, counter_x, counter_y) >>
-        # -> (p1 : NucleatorCreator) -- (new_counter : Counter) -- (p2 : NucleatorCreator) <<
+    # Adds a segment
+    growing_rule_segment := (im0 : Intermediate) -- (pos : Positive) << ((ix,iy,iz), (iux,iuy, iuz)),
+                                                                        ((px, py, pz), (pux, puy, puz)) >>  ->
+        (im0 : Intermediate) -- (im1 : Intermediate) 
+        (im1 : Intermediate) -- (pos : Positive) << ((nix0,niy0,niz0), (niux0,niuy0, niuz0)),
+                                                    ((nix1,niy1,niz1), (niux1,niuy1, iuz1)),
+                                                    ((nix1,niy1,niz1), (niux1,niuy1, niuz1)),
+                                                    ((npx, npy, npz), (npux, npuy, npuz)) >> with (
+            heaviside(HELP::distance(ix, iy, px, py), L_DIV/2) * rho_grow*100
+        ) where {
 
-    # Goes up y
-    create_grid_y := (counter : Counter) -- (p1 : NucleatorCreator) << (cx, cy, prev_count), (x, y, counter_x, counter_y) >>
-        -> (new_counter : Counter) -- (p1 : NucleatorCreator) (new_counter : Counter) -- (p2 : NucleatorCreator) <<
-             (cnx, cny, new_count), (x_1, y_1, c1_x, c1_y),
-             (cnx, cny, new_count), (x_2, y_2, c2_x, c2_y) >> with ( heaviside(counter_y, 1) ) where {
+            # gamma : Float := 1.0
+            # old intermediate
+            nix0 : Float = ix
+            niy0 : Float = iy
+            niz0 : Float = iz
 
-            x_1 : Float = x
-            y_1 : Float = y
+            niux0 : Float = iux
+            niuy0 : Float = iuy
+            niuz0 : Float = iuz
 
-            c1_x : Float = counter_x
-            c1_y : Float = 0
+            # Pos
+            npx : Float = px
+            npy : Float = py
+            npz : Float = pz
 
-            c2_x : Float = counter_x
-            c2_y : Float = counter_y - 1
+            npux : Float = pux
+            npuy : Float = puy
+            npuz : Float = puz
 
-            x_2 : Float = x
-            y_2 : Float = y + 0.1
+            L : Float := HELP::distance(ix, iy, px, py)
 
-            cnx : Float = cx
-            cny : Float = cy
-            new_count : Float = prev_count + 1
+            #  new intermediate
+            x3_pos : Float := px - ((px - ix))/100
+            y3_pos : Float := py - ((py - iy))/100
+
+            # x3_pos : Float := px - 0.01
+            # y3_pos : Float := py - 0.01
+
+            nix1 : Float = x3_pos
+            niy1 : Float = y3_pos
+            niz1 : Float = iz
+
+            norm_dist : Float := HELP::distance(x3_pos, y3_pos, px, py)
+
+            # niux1 : Float = (x3_pos - px) / norm_dist
+            # niux1 : Float = (px - x3_pos) / norm_dist
+            # niuy1 : Float = (py - y3_pos) / norm_dist
+
+            niux1 : Float = (x3_pos - px) / norm_dist
+            niuy1 : Float = (y3_pos - py) / norm_dist
+            niuz1 : Float = iuz
+
+        }
+
+    # When a mt hits a 
+    boundary_catastrophe := (im0 : Intermediate) -- (pos : Positive)
+        (b0 : CellBoundary) -- (b1 : CellBoundary)
+        << ((ix,iy,iz), (iux,iuy, iuz)), ((px, py, pz), (pux, puy, puz)),
+            ( (bx0,by0,bz0), (bux0, buy0, buz0), (bcountx0, bcounty0)),
+            ( (bx1,by1,bz1), (bux1, buy1, buz1), (bcountx1, bcounty1))
+        >>  -> (im0 : Intermediate) -- (ret : Retraction)
+        (b0 : CellBoundary) -- (b1 : CellBoundary)
+        << ((nix,niy,niz), (niux,niuy, niuz)), ((npx, npy, npz), (npux, npuy, npuz)),
+            ( (nbx0,nby0,nbz0), (nbux0, nbuy0, nbuz0), (nbcountx0, nbcounty0))
+            ( (nbx1,nby1,nbz1), (nbux1, nbuy1, nbuz1), (nbcountx1, nbcounty1))
+        >>  
+    with (
+            indicator(HELP::minimum_distance_2d(px, py, bx0, by0, bx1, by1) <= 1.5) * boundary_cic
+    ) where {
+
+        ##
+        nix : Float = ix
+        niy : Float = iy
+        niz : Float = iz
+
+        niux : Float = iux
+        niuy : Float = iuy
+        niuz : Float = iuz
+
+        ##
+        npx : Float = px
+        npy : Float = py
+        npz : Float = pz
+
+        npux : Float = -pux
+        npuy : Float = -puy
+        npuz : Float = puz
+
+        ##
+        nbx0 : Float = bx0
+        nby0 : Float = by0
+        nbz0 : Float = bz0
+
+        nbux0 : Float = bux0
+        nbuy0 : Float = buy0
+        nbuz0 : Float = buz0
+
+        nbcountx0 : Float = bcountx0
+        nbcounty0 : Float = bcounty0
+
+        ##
+        nbx1 : Float = bx1
+        nby1 : Float = by1
+        nbz1 : Float = bz1
+
+        nbux1 : Float = bux1
+        nbuy1 : Float = buy1
+        nbuz1 : Float = buz1
+
+        nbcountx1 : Float = bcountx1
+        nbcounty1 : Float = bcounty1
+
     }
 
-    transform_rule := (counter : Counter) -- (p1 : NucleatorCreator) << (cx, cy, prev_count), (x, y, counter_x, counter_y) >> 
-        -> (new_counter : Counter) -- (p1 : Nucleator) << (ncx, ncy, new_count),
-                                                          (new_x, new_y) >> with ( indicator(counter_x == 0) * indicator(counter_y == 0) ) where {
+    retraction_shrink := (im : Intermediate) -- (ret : Retraction) << ((ix,iy,iz), (iux,iuy, iuz)), ((px, py, pz), (pux, puy, puz)) >>  ->
+        (new_im : Intermediate) -- (new_ret : Retraction) << ((nix,niy,niz), (niux,niuy, iuz)), ((dpx, dpy, dpz), (npux, npuy, npuz)) >>
+        solving (dpx := D(px,t),  dpy := D(py,t)) {
 
-            new_x : Float = x
-            new_y : Float = y
+            # TODO: Allow definition nodes and using setting parameters.
+            # NOTE: This currently does not handle when the function is dependent on dpx.
+            # dpx : ODE = 0.00883*pux * (HELP::distance(ix, iy, px, py)/L_min)
+            # dpy : ODE = 0.00883*puy * (HELP::distance(ix, iy, px, py)/L_min)
 
-            ncx : Float = cx
-            ncy : Float = cy
-            new_count : Float = prev_count - 1
-
-    }
-
-    creation_rule := (counter : Counter) -- (p1 : Nucleator) << (cx, cy, count), (x, y) >> ->
-            (ncounter : Counter) -- (p1 : Nucleator) (p2 : Retraction) -- (p3 : Intermediate) -- (p4 : Growing) 
-        << (ncx, ncy, ncount), (p1x, p1y), (p2x, p2y, u2x, u2y), (p3x, p3y, u3x, u3y),
-            (p4x, p4y, u4x, u4y) >> with ( indicator(count == 0) * rho_create) where {
-
-
-                ncx : Float := cx
-                ncy : Float := cy
-                ncount : Float := count
-
-                # d : Float := ~UniformDistribution(s_min, s_max)
-                d : Float := 0.027
-
-                # Probably pull from c++
-                pi : Float := 3.14159
-
-                theta_rotate : Float := ~UniformDistribution(0, 2*pi)
-
-                # Nucleator
-                # p1x : Float = x
-                # p1y : Float = y
-
-                # varepsilon is reaction distance length
-                # p3x : Float = x + ~UniformDistribution(-0.5*varepsilon, 0.5*varepsilon)
-                # p3y : Float = y + ~UniformDistribution(-0.5*varepsilon, 0.5*varepsilon)
-
-                # TODO: He is actually using a different equation to place the center.
-                # Right now the center is at (0,0) so that needs to change.
-
-                x_c : Float := x
-                y_c : Float := y
-
-                # Rotation matrix
-                # TODO: Handle unary operation on a group
-                x_r_t : Float := 0*cos(theta_rotate) + (d)*sin(theta_rotate)
-                y_r_t : Float := -1*0*sin(theta_rotate) + (d)*cos(theta_rotate)
-                x_r : Float := x_c + x_r_t
-                y_r : Float := y_c + y_r_t
-
-                x_l : Float := x_c - (x_r - x_c)
-                y_l : Float := y_c - (y_r - y_c)
-
-                # p4x : Float = x + x_r_t
-                # p4y : Float = y + y_r_t
-
-                # TODO: Handle exponentials
-                norm : Float := sqrt( (x_c - x_r)*(x_c - x_r) + (y_c - y_r)*(y_c - y_r) )
-
-                ux_tmp : Float := (x_r - x_c) / norm
-                uy_tmp : Float := (y_r - y_c) / norm
-
-                u4x : Float = ux_tmp
-                u4y : Float = uy_tmp
-
-                u3x : Float = ux_tmp
-                u3y : Float = uy_tmp
-
-                u2x : Float = ux_tmp
-                u2y : Float = uy_tmp
-
-                p1x : Float = x
-                p1y : Float = y
-
-                # P1 is done
-                p2x : Float = x_l / ux_tmp
-                p2y : Float = y_l / uy_tmp
-
-                # Retraction
-                p3x : Float = x_c / ux_tmp
-                p3y : Float = y_c / uy_tmp
-
-                # P4
-                p4x : Float = x_r / ux_tmp
-                p4y : Float = y_r / uy_tmp
+            dpx : ODE = (0.00883/2)*pux * (HELP::distance(ix, iy, px, py)/L_min)
+            dpy : ODE = (0.00883/2)*puy * (HELP::distance(ix, iy, px, py)/L_min)
 
     }
 
-    # growing_rule := (p1 : Intermediate) -- (p2 : Growing) << (p1x, p1y, u2x, u2y), (p2x, p2y, u2x, u2y) >> 
-            # -> (p1 : Intermediate) -- (p2 : Growing) << (dp1x, dp1y, du2x, du2y), (dp2x, dp2y, du2x, du2y) >> 
-            # solving ( dp2x := D(p1x,t), dp2y := D(p2y,t) ) {
-                # dp2x : ODE = 0.4 * 0.075
-                # dp2y : ODE = 0.3 * 0.075
-        # }
+    retraction_segment := (im0 : Intermediate) -- (im1 : Intermediate)
+    (im1 : Intermediate) -- (ret : Retraction) 
+        << ((ix,iy,iz), (iux,iuy, iuz)), ((ix1,iy1,iz1), (iux1,iuy1, iuz1)),
+            ((ix1,iy1,iz1), (iux1,iuy1, iuz1)), ((px, py, pz), (pux, puy, puz)) >>  ->
+        (im0 : Intermediate) -- (new_ret : Retraction) << ((nix0,niy0,niz0), (niux0,niuy0, niuz0)),
+                                                        ((npx, npy, npz), (npux, npuy, npuz)) >> with (
+            heaviside(HELP::distance(ix, iy, px, py), L_min) * rho_retract
+        ) where {
 
+            gamma : Float := 1
+
+            # old intermediate
+            nix0 : Float = ix
+            niy0 : Float = iy
+            niz0 : Float = iz
+
+            niux0 : Float = iux
+            niuy0 : Float = iuy
+            niuz0 : Float = iuz
+
+            # Pos
+            npx : Float = px
+            npy : Float = py
+            npz : Float = pz
+
+            npux : Float = pux
+            npuy : Float = puy
+            npuz : Float = puz
+        }
+
+    # Destroy rules
+
+    destroy_microtubule := 
+        (p2 : Retraction) -- (p3 : Intermediate)
+        (p3 : Intermediate) -- (p4 : Retraction) <<
+        ((nx,ny,nz), (nux,nuy, nuz)), ((ix,iy,iz), (iux,iuy, iuz)),
+        ((ix,iy,iz), (iux,iuy, iuz)), ((px, py, pz), (pux, puy, puz)) >> ->
+        (des : Destroyed) << ((dex,dey,dez), (deux,deuy, deuz)) >> with (
+             destruction_factor 
+             * indicator( HELP::distance(nx, ix, ny, iy) <= s_min ) 
+             * indicator( HELP::distance(ix, px, iy, py) <= s_min ) 
+        ) where { 
+
+            dex : Float = 0
+            dey : Float = 0
+            dez : Float = 0
+
+            deux : Float = 0
+            deuy : Float = 0
+            deuz : Float = 0
+
+        }
+
+    destroy_mt_im := 
+        (p2 : Retraction) -- (p3 : Intermediate)
+        (p3 : Intermediate) -- (p4 : Positive) (p5 : Intermediate) <<
+        ((nx,ny,nz), (nux,nuy, nuz)), ((ix,iy,iz), (iux,iuy, iuz)),
+        ((ix,iy,iz), (iux,iuy, iuz)), ((px, py, pz), (pux, puy, puz)), ((col_x, col_y, col_z), (col_ux, col_uy, col_uz)) >> ->
+        (np5 : Intermediate) << ((dex,dey,dez), (deux,deuy, deuz)) >> with (destruction_factor * indicator( HELP::distance(col_x, px, col_y, py) <= s_col ) ) where { 
+
+            dex : Float = 0
+            dey : Float = 0
+            dez : Float = 0
+
+            deux : Float = 0
+            deuy : Float = 0
+            deuz : Float = 0
+
+        }
+
+    # State change
+#     swap_state_0 := (p1 : Positive) << (x,y,z, ux, uy, uz) >> -> (p1 : Retraction) << (new_x, new_y, new_z, new_ux, new_uy, new_uz) >> with (gr_to_ret) where {
+# 
+#         new_x : Float = x
+#         new_y : Float = y
+#         new_z : Float = z
+# 
+#         new_ux : Float = -ux
+#         new_uy : Float = -uy
+#         new_uz : Float = -uz
+# 
+#     }
+# 
+#     swap_state_1 := (p1 : Retraction) << (x,y,z, ux, uy, uz) >> -> (p1 : Positive) << (new_x, new_y, new_z, new_ux, new_uy, new_uz) >> with (ret_to_gr) where {
+# 
+#         new_x : Float = x
+#         new_y : Float = y
+#         new_z : Float = z
+# 
+#         new_ux : Float = -ux
+#         new_uy : Float = -uy
+#         new_uz : Float = -uz
+# 
+#     }
+
+    # Collision
+    collision_int_cic :=
+    (p1 : Intermediate) -- (p2 : Positive)  (p3 : Intermediate) -- (p4 : Positive) 
+        << ((x_1,y_1,z_1), (ux_1,uy_1,uz_1)), ((x_2,y_2,z_2), (ux_2,uy_2,uz_2)),
+           ((x_3,y_3,z_3), (ux_3,uy_3,uz_3)), ((x_4,y_4,z_4), (ux_4,uy_4, uz_4))>>  -> 
+    (p1 : Intermediate) -- (p2 : Retraction)  (p3 : Intermediate) -- (p4 : Positive) 
+        << ((nx_1,ny_1,nz_1), (nux_1,nuy_1,nuz_1)), ((nx_2,ny_2,nz_2), (nux_2,nuy_2,nuz_2)),
+            ((nx_3,ny_3,nz_3), (nux_3,nuy_3,nuz_3)), ((nx_4,ny_4,nz_4), (nux_4,nuy_4,nuz_4)) >> with (
+             indicator(HELP::line_intersection_x( x_2, y_2, ux_2, uy_2, x_3, y_3, x_4, y_4) >= 0) 
+             * rho_int_cic * indicator(HELP::minimum_distance_2d(x_2, y_2, x_3, y_3, x_4, y_4) <= s_col) 
+             * indicator(HELP::calculate_angle( ux_2, uy_2, x_2, y_2, ux_3, uy_3) >= theta_cic) * 0.01
+    ) where {
+
+        nx_1 : Float = x_1
+        ny_1 : Float = y_1
+        nz_1 : Float = z_1
+
+        nux_1 : Float = ux_1
+        nuy_1 : Float = uy_1
+        nuz_1 : Float = uz_1
+
+        nx_2 : Float = x_2
+        ny_2 : Float = y_2
+        nz_2 : Float = z_2
+
+        nux_2 : Float = -ux_2
+        nuy_2 : Float = -uy_2
+        nuz_2 : Float = -uz_2
+
+        nx_3 : Float = x_3
+        ny_3 : Float = y_3
+        nz_3 : Float = z_3
+
+        nux_3 : Float = ux_3
+        nuy_3 : Float = uy_3
+        nuz_3 : Float = uz_3
+
+        nx_4 : Float = x_4
+        ny_4 : Float = y_4
+        nz_4 : Float = z_4
+
+        nux_4 : Float = ux_4
+        nuy_4 : Float = uy_4
+        nuz_4 : Float = uz_4
+
+    }
+
+collision_grow_cic :=
+    (p1 : Intermediate) -- (p2 : Positive)  (p3 : Intermediate) -- (p4 : Positive) 
+        << ((x_1,y_1,z_1), (ux_1,uy_1,uz_1)), ((x_2,y_2,z_2), (ux_2,uy_2,uz_2)),
+           ((x_3,y_3,z_3), (ux_3,uy_3,uz_3)), ((x_4,y_4,z_4), (ux_4,uy_4, uz_4))>>  -> 
+           (p1 : Intermediate) -- (p2 : Retraction)  (p3 : Intermediate) -- (p4 : Positive) 
+        << ((nx_1,ny_1,nz_1), (nux_1,nuy_1,nuz_1)), ((nx_2,ny_2,nz_2), (nux_2,nuy_2,nuz_2)),
+            ((nx_3,ny_3,nz_3), (nux_3,nuy_3,nuz_3)), ((nx_4,ny_4,nz_4), (nux_4,nuy_4,nuz_4)) >> with (
+                rho_grow_cic * indicator(HELP::minimum_distance_2d(x_2, y_2, x_3, y_3, x_4, y_4) <= ((s_col)/2 * 0.01) )
+            ) where {
+
+        nx_1 : Float = x_1
+        ny_1 : Float = y_1
+        nz_1 : Float = z_1
+
+        nux_1 : Float = ux_1
+        nuy_1 : Float = uy_1
+        nuz_1 : Float = uz_1
+
+        nx_2 : Float = x_2
+        ny_2 : Float = y_2
+        nz_2 : Float = z_2
+
+        nux_2 : Float = -ux_2
+        nuy_2 : Float = -uy_2
+        nuz_2 : Float = -uz_2
+
+        nx_3 : Float = x_3
+        ny_3 : Float = y_3
+        nz_3 : Float = z_3
+
+        nux_3 : Float = ux_3
+        nuy_3 : Float = uy_3
+        nuz_3 : Float = uz_3
+
+        nx_4 : Float = x_4
+        ny_4 : Float = y_4
+        nz_4 : Float = z_4
+
+        nux_4 : Float = ux_4
+        nuy_4 : Float = uy_4
+        nuz_4 : Float = uz_4
+
+    }
+
+collision_retract_cic :=
+    (p1 : Intermediate) -- (p2 : Positive)  (p3 : Intermediate) -- (p4 : Retraction)
+        << ((x_1,y_1,z_1), (ux_1,uy_1,uz_1)), ((x_2,y_2,z_2), (ux_2,uy_2,uz_2)),
+           ((x_3,y_3,z_3), (ux_3,uy_3,uz_3)), ((x_4,y_4,z_4), (ux_4,uy_4, uz_4))>>  -> 
+           (p1 : Intermediate) -- (p2 : Retraction)  (p3 : Intermediate) -- (p4 : Retraction) 
+        << ((nx_1,ny_1,nz_1), (nux_1,nuy_1,nuz_1)), ((nx_2,ny_2,nz_2), (nux_2,nuy_2,nuz_2)),
+            ((nx_3,ny_3,nz_3), (nux_3,nuy_3,nuz_3)), ((nx_4,ny_4,nz_4), (nux_4,nuy_4,nuz_4)) >> with (
+                rho_retract_cic * indicator(HELP::minimum_distance_2d(x_2, y_2 x_3, y_3, x_4, y_4) <= (s_col)/2 )
+            ) where {
+
+        nx_1 : Float = x_1
+        ny_1 : Float = y_1
+        nz_1 : Float = z_1
+
+        nux_1 : Float = ux_1
+        nuy_1 : Float = uy_1
+        nuz_1 : Float = uz_1
+
+        nx_2 : Float = x_2
+        ny_2 : Float = y_2
+        nz_2 : Float = z_2
+
+        nux_2 : Float = -ux_2
+        nuy_2 : Float = -uy_2
+        nuz_2 : Float = -uz_2
+
+        nx_3 : Float = x_3
+        ny_3 : Float = y_3
+        nz_3 : Float = z_3
+
+        nux_3 : Float = ux_3
+        nuy_3 : Float = uy_3
+        nuz_3 : Float = uz_3
+
+        nx_4 : Float = x_4
+        ny_4 : Float = y_4
+        nz_4 : Float = z_4
+
+        nux_4 : Float = ux_4
+        nuy_4 : Float = uy_4
+        nuz_4 : Float = uz_4
+    }
+
+    # Crossover rule
+    cross_junc := (p1 : Intermediate) -- (p2 : Positive)  (p3 : Intermediate) -- (p4 : Intermediate)
+        << ((x_1,y_1,z_1), (ux_1,uy_1,uz_1)), ((x_2,y_2,z_2), (ux_2,uy_2,uz_2)),
+           ((x_3,y_3,z_3), (ux_3,uy_3,uz_3)), ((x_4,y_4,z_4), (ux_4,uy_4, uz_4)) >>  -> 
+    (p1 : Intermediate) -- (p2 : Junction)  (p3 : Intermediate) -- (p2 : Junction)
+    (p2 : Junction) -- (p4 : Intermediate) (p2: Junction) -- (p5: Intermediate)
+    (p5 : Intermediate) -- (p6 : Positive) << 
+    ((new_x_1,new_y_1,new_z_1), (new_ux_1,new_uy_1,new_uz_1)), ((new_x_2,new_y_2,new_z_2), (new_ux_2,new_uy_2,new_uz_2)),
+    ((new_x_3,new_y_3,new_z_3), (new_ux_3,new_uy_3,new_uz_3)), ((new_x_2,new_y_2,new_z_2), (new_ux_2,new_uy_2,new_uz_2)), 
+    ((new_x_2,new_y_2,new_z_2), (new_ux_2,new_uy_2,new_uz_2)), ((new_x_4,new_y_4,new_z_4), (new_ux_4,new_uy_4, new_uz_4)),
+    ((new_x_2,new_y_2,new_z_2), (new_ux_2,new_uy_2,new_uz_2)), ((new_x_5,new_y_5,new_z_5), (new_ux_5,new_uy_5, new_uz_5)),
+    ((new_x_5,new_y_5,new_z_5), (new_ux_5,new_uy_5, new_uz_5)), ((new_x_6,new_y_6,new_z_6), (new_ux_6,new_uy_6, new_uz_6)) >> with (
+
+        rho_cross * indicator(HELP::line_intersection_x(x_2, y_2, ux_2, uy_2, x_3, y_3, x_4, y_4) >= 0)
+        *indicator(HELP::line_intersection_y(x_2, y_2, ux_2, uy_2, x_3, y_3, x_4, y_4) < 0)
+        *indicator(HELP::line_intersection_y(x_2, y_2, ux_2, uy_2, x_3, y_3, x_4, y_4) > 1)
+        * indicator(HELP::calculate_angle( ux_2, uy_2, x_2, y_2, ux_3, uy_3) >= theta_cic)
+        * indicator(HELP::minimum_distance_2d(x_2, y_2, x_3, y_3, x_4, y_4) <= s_col) 
+    ) where {
+
+        # Putting everything else the same for now, but can change this later.
+        # 2
+        new_x_1 : Float = x_1
+        new_y_1 : Float = y_1
+        new_z_1 : Float = z_1
+        new_ux_1 : Float = ux_1
+        new_uy_1 : Float = uy_1
+        new_uz_1 : Float = uz_1
+
+        # 3
+        new_x_3 : Float = x_3
+        new_y_3 : Float = y_3
+        new_z_3 : Float = z_3
+        new_ux_3 : Float = ux_3
+        new_uy_3 : Float = uy_3
+        new_uz_3 : Float = uz_3
+
+        # 4
+        new_x_4 : Float = x_4
+        new_y_4 : Float = y_4
+        new_z_4 : Float = z_4
+        new_ux_4 : Float = ux_4
+        new_uy_4 : Float = uy_4
+        new_uz_4 : Float = uz_4
+
+
+        # New information here
+        inter_x : Float := HELP::line_intersection_x( x_2, y_2, ux_2, uy_2, x_3, y_3, x_4, y_4)
+        inter_y : Float := HELP::line_intersection_y( x_2, y_2, ux_2, uy_2, x_3, y_3, x_4, y_4)
+
+        # 2
+        tmp_new_x_2 : Float := x_4 + inter_x*(x_3 - x_4)
+        tmp_new_y_2 : Float := y_4 + inter_y*(y_3 - y_4)
+
+        new_x_2 : Float = tmp_new_x_2
+        new_y_2 : Float = tmp_new_y_2
+        new_z_2 : Float = z_2
+
+        # FIXME: for some reason dependent variables are being emitted also in the denominator
+        den_ux_2 : Float := HELP::distance(tmp_new_x_2, tmp_new_y_2, x_1, y_1)
+        new_ux_2 : Float = (tmp_new_x_2 - x_1) / den_ux_2
+        new_uy_2 : Float = (tmp_new_y_2 - y_1) / den_ux_2
+        new_uz_2 : Float = 0
+
+        # 5
+        tmp_new_x_5 : Float := tmp_new_x_2 + 0.01 * tmp_new_x_2
+        tmp_new_y_5 : Float := tmp_new_y_2 + 0.01 * tmp_new_y_2
+
+        new_x_5 : Float = tmp_new_x_5
+        new_y_5 : Float = tmp_new_y_5
+        new_z_5 : Float = 0
+
+        den_ux_5 : Float := HELP::distance(tmp_new_x_5, tmp_new_y_5, tmp_new_x_2, tmp_new_y_2)
+        new_ux_5 : Float = (tmp_new_x_5 - tmp_new_x_2) / den_ux_5
+        new_uy_5 : Float = (tmp_new_y_5 - tmp_new_y_2) / den_ux_5
+        new_uz_5 : Float = 0
+
+        # 6
+        tmp_new_x_6 : Float := tmp_new_x_2 + 0.011 * tmp_new_x_2
+        tmp_new_y_6 : Float := tmp_new_y_2 + 0.011 * tmp_new_y_2
+        den_ux_6 : Float := HELP::distance(tmp_new_x_6, tmp_new_y_6, tmp_new_x_5, tmp_new_y_5)
+
+        new_x_6 : Float = tmp_new_x_6
+        new_y_6 : Float = tmp_new_y_6
+        new_z_6 : Float = 0
+        new_ux_6 : Float = (tmp_new_x_6 - tmp_new_x_5) / den_ux_6
+        new_uy_6 : Float = (tmp_new_y_6 - tmp_new_y_5) / den_ux_6
+        new_uz_6 : Float = 0
+
+    }
+
+    # Zippering rule
+#     zippering_rule := (p1 : Intermediate) -- (p2 : Positive)  (p3 : Intermediate) -- (p4 : Intermediate)
+#         << ((x_1,y_1,z_1), (ux_1,uy_1,uz_1)), ((x_2,y_2,z_2), (ux_2,uy_2,uz_2)),
+#            ((x_3,y_3,z_3), (ux_3,uy_3,uz_3)), ((x_4,y_4,z_4), (ux_4,uy_4, uz_4)) >>  -> 
+#         (p1 : Intermediate) -- (p2 : Zipper) 
+#         (p3 : Intermediate) -- (p4 : Intermediate)
+#         (p2 : Zipper) -- (p6 : Intermediate) 
+#         (p6: Intermediate) -- (p5: Intermediate) << 
+#             ((new_x_1,new_y_1,new_z_1), (new_ux_1,new_uy_1,new_uz_1)), ((new_x_2,new_y_2,new_z_2), (new_ux_2,new_uy_2,new_uz_2)),
+#             ((new_x_3,new_y_3,new_z_3), (new_ux_3,new_uy_3,new_uz_3)), ((new_x_4,new_y_4,new_z_4), (new_ux_4,new_uy_4,new_uz_4)), 
+#             ((new_x_2,new_y_2,new_z_2), (new_ux_2,new_uy_2,new_uz_2)), ((new_x_6,new_y_6,new_z_6), (new_ux_6,new_uy_6, new_uz_6)),
+#             ((new_x_6,new_y_6,new_z_6), (new_ux_6,new_uy_6, new_uz_6)), ((new_x_5,new_y_5,new_z_5), (new_ux_5,new_uy_5, new_uz_5))
+#         >> with (
+#         rho_cross * indicator(HELP::line_intersection_x(x_2, y_2, ux_2, uy_2, x_3, y_3, x_4, y_4) >= 0)
+#         * indicator(HELP::line_intersection_y(x_2, y_2, ux_2, uy_2, x_3, y_3, x_4, y_4) < 0)
+#         * indicator(HELP::line_intersection_y(x_2, y_2, ux_2, uy_2, x_3, y_3, x_4, y_4) > 1)
+#         * indicator(HELP::calculate_angle( ux_2, uy_2, x_2, y_2, ux_3, uy_3) >= theta_cic)
+#         * indicator(HELP::minimum_distance_2d(x_2, y_2, x_3, y_3, x_4, y_4) <= s_col) 
+#     ) where {
+#     }
+
+    # CLASP Rule
 }

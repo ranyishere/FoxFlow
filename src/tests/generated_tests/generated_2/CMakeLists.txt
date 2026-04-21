@@ -3,6 +3,9 @@ configure_file("settings.json" "settings.json" COPYONLY)
 
 # add_executable(main main.cpp ../../thirdparty/simdjson/simdjson.cpp)
 add_executable(main main.cpp ../include/DGGML/thirdparty/simdjson/simdjson.cpp)
+
+add_executable(neural_network neural_network.cpp)
+
 # add_executable(configuration_file_generator configuration_file_generator.cpp ../../thirdparty/simdjson/simdjson.cpp)
 
 # target_link_libraries(mt_dgg_simulator PRIVATE vtu11::vtu11)
@@ -12,3 +15,9 @@ target_link_libraries(main PUBLIC SUNDIALS::arkode SUNDIALS::nvecserial)
 
 # Adding cereal
 target_link_libraries(main PRIVATE cereal::cereal)
+
+# Adding pytorch
+target_link_libraries(main PRIVATE torch)
+target_compile_features(main PRIVATE cxx_std_17)
+
+target_link_libraries(neural_network PRIVATE torch)

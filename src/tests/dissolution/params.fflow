@@ -1,0 +1,82 @@
+parameters Dissolution {
+
+    # Simulate time in seconds
+    TOTAL_TIME : Float := 10.0
+
+    # How often the simulation is updated
+    DELTA : Float := 0.1
+
+    # 1 -> is 1 micrometer (um)
+    # MAXIMAL_REACTION_RADIUS : Float := 0.1
+    MAXIMAL_REACTION_RADIUS : Float := 0.4
+    # varepsilon : Float := MAXIMAL_REACTION_RADIUS * 0.01
+
+    # Number of steps in the simulation
+    NUM_STEPS : Integer := TOTAL_TIME / DELTA
+
+    MIN_DELTA_STEPS : Integer := 5
+    DELTA_DELTA_T : Float := DELTA / MIN_DELTA_STEPS
+
+    # Prevents solver from shrinking too much.
+    # The minimum allowable integration step.
+    DELTA_T_MIN : Float := DELTA_DELTA_T
+
+    # CELL_NX : Float := 4
+    # CELL_NY : Float := 4
+    # CELL_NZ : Float := 4
+
+
+    NX_MIN : Float := 8
+    DX : Float  := 3/NX_MIN
+
+    CELL_NX : Float := NX_MIN
+    CELL_NY : Float := NX_MIN
+    CELL_NZ : Float := NX_MIN
+
+    # CELL_DX : Float := 0.75
+    # CELL_DY : Float := 0.75
+    # CELL_DZ : Float := 0.75
+
+    CELL_DX : Float := DX
+    CELL_DY : Float := DX
+    CELL_DZ : Float := DX
+
+    # varepsilon : Float := 0.2
+    # we need gamma_epsilon > CELL_DX or
+    # 3.5 * varepsilon > CELL_DX to ensure that 
+    # the reaction radius is large enough to allow erosion of rock nodes that are adjacent to fluid nodes,
+    # otherwise the rock nodes will never erode and the simulation will be static. 
+    # This is because the reaction radius determines how far the dissolution effect can reach,
+    # and if it is too small compared to the cell size, it won't affect neighboring rock nodes effectively.
+    # 3.5 * varepsilon/CELL_DX < 0.5
+    # Need to set expansion factor in parameters
+    varepsilon : Float := 0.02
+
+    # NOTE: It is currently freezing at this value. Probably the ODE is failing again?
+    # Need to check.
+
+
+    # ---- Dissolution physics parameters ----
+    # Dissolution reaction rate constant
+    # k_r : Float := 5.0
+    # Equilibrium concentration (saturation)
+    # C_eq : Float := 1.0
+    # Effective diffusivity for concentration transport
+    # D_eff_over_dx2 : Float := 1.0   # D_eff / dx^2
+    # Density decrement per erosion event
+    # drho : Float := 0.1
+
+    # ---- Darcy flow physics parameters (for reference) ----
+    # These are inlined as constants in the solve rules since
+    # global param references aren't supported in solving blocks.
+    #
+    # permeability / viscosity ratio  k/mu = 1.0
+    # compressibility (capacity)      c    = 1.0
+    # fluid node spacing              dx   = 0.3
+    #
+    # Derived coefficients:
+    #   pressure diffusion:  k/(mu*c*dx^2) = 1.0/(1.0*0.09) = 11.11
+    #  NOTE: Allow kappa to change along the fracture
+    #   Darcy velocity:      k/(mu*dx)     = 1.0/0.3        =  3.33
+
+}

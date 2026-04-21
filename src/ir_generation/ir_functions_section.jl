@@ -1,7 +1,8 @@
 import ...AstNodes: RuleNode, IdentifierNode, TypeInstanceNode,
             UndirectedTypeEdgeNode, BinaryOpNode, ExpressionNode, ParameterNode,
             WithClauseNode, SolveClauseNode, UnaryOpNode, FunctionNode, GroupNode,
-            CallNode, LiteralNode, DefinitionNode
+            CallNode, LiteralNode, DefinitionNode, IndexAccessNode, ArrayLiteralNode,
+            ModelLoadNode, StringNode
 
 
 WHITE_SPACE = " "
@@ -14,6 +15,42 @@ SEMI_COLON = ";"
 RETURN = "return"
 EQUAL = "="
 NEW_LINE = "\n"
+
+# Registry of model-loaded functions: (name, filepath) pairs
+MODEL_REGISTRY = []
+
+"""
+    ir_array_literal(node::ArrayLiteralNode) -> String
+
+Recursively converts an ArrayLiteralNode into a C++ torch::tensor literal.
+"""
+function ir_array_literal(node)
+    inner = _ir_array_literal_inner(node)
+    return "torch::tensor($inner, torch::kFloat64)"
+end
+
+function _ir_array_literal_inner(node)
+    if node isa ArrayLiteralNode
+        parts = [_ir_array_literal_inner(el) for el in node.elements]
+        return "{" * join(parts, ", ") * "}"
+    elseif node isa LiteralNode
+        return string(get_value(node))
+    elseif node isa UnaryOpNode
+        op = node.expression.position.value
+        return op * string(get_value(node.operand))
+    elseif node isa IdentifierNode
+        return get_value(node)
+    elseif node isa BinaryOpNode
+        lhs = _ir_array_literal_inner(GroupNode(node))
+        return lhs
+    elseif node isa GroupNode
+        inner_expr = node.expression
+        lhs = _ir_array_literal_inner(inner_expr)
+        return lhs
+    else
+        return string(get_value(node))
+    end
+end
 
 function traverse_group_node_expr(group_node, variables=Set{String}())
     """
@@ -53,6 +90,14 @@ function traverse_group_node_expr(group_node, variables=Set{String}())
                 return traverse_group_node_expr(GroupNode(arg), variables)
             elseif arg isa UnaryOpNode
                 return traverse_group_node_expr(GroupNode(arg), variables)
+            elseif arg isa IdentifierNode
+                var_name = get_value(arg)
+                push!(variables, var_name)
+                return var_name
+            elseif arg isa IndexAccessNode
+                return traverse_group_node_expr(GroupNode(arg), variables)
+            elseif arg isa ArrayLiteralNode
+                return ir_array_literal(arg)
             else
                 return arg.token
             end
@@ -67,6 +112,19 @@ function traverse_group_node_expr(group_node, variables=Set{String}())
         var_name = get_value(group_node.expression)
         push!(variables, var_name)
         return get_value(group_node.expression)
+
+    elseif group_node.expression isa IndexAccessNode
+        idx_node = group_node.expression
+        obj_str = traverse_group_node_expr(GroupNode(idx_node.object), variables)
+        idx_strs = map(idx -> traverse_group_node_expr(GroupNode(idx), variables), idx_node.indices)
+        if length(idx_strs) == 1
+            return "$(obj_str)[$(idx_strs[1])].template item<double>()"
+        else
+            return "$(obj_str).index({$(join(idx_strs, ", "))}).template item<double>()"
+        end
+
+    elseif group_node.expression isa ArrayLiteralNode
+        return ir_array_literal(group_node.expression)
 
     elseif group_node isa GroupNode
         return traverse_group_node_expr(group_node.expression, variables)
@@ -99,6 +157,10 @@ function ir_expr_builtin_func!(func_name, args, ir_builder, scope)
             return var_name
         elseif arg isa LiteralNode
             return string(get_value(arg))
+        elseif arg isa IndexAccessNode
+            return traverse_group_node_expr(GroupNode(arg), variables)
+        elseif arg isa ArrayLiteralNode
+            return ir_array_literal(arg)
         else
             return arg.token
         end
@@ -227,6 +289,24 @@ function ir_func_expr!(expr_value, scope, ir_builder)
 
     elseif function_node isa LiteralNode
         emit(ir_builder, get_value(function_node))
+    elseif function_node isa IndexAccessNode
+        # Tensor index access in function expression
+        ir_func_expr!(function_node.object, scope, ir_builder)
+        indices_ir = []
+        for idx in function_node.indices
+            idx_builder = IRBuilder([])
+            ir_func_expr!(idx, scope, idx_builder)
+            push!(indices_ir, build_sameline(idx_builder))
+        end
+        if length(indices_ir) == 1
+            emit(ir_builder, "[" * indices_ir[1] * "].template item<double>()")
+        else
+            emit(ir_builder, ".index({" * join(indices_ir, ", ") * "}).template item<double>()")
+        end
+
+    elseif function_node isa ArrayLiteralNode
+        emit(ir_builder, ir_array_literal(function_node))
+
     elseif function_node isa UnaryOpNode
 
         operation = function_node.expression
@@ -251,6 +331,95 @@ function ir_function!(ast, functions_table, ir_builder_func)
     """
     Handles Single Function Definition
     """
+
+    name = ast.name
+    name = get_value(name)
+
+    signature = ast.signature
+
+    functions_table[name] = Dict()
+
+    output_type = convert_type_name(get_value(signature.output.name))
+
+    # Check if this is a model-loaded function
+    if ast.model_load !== nothing
+        model_path = ast.model_load.filepath.token.position.value
+
+        # Register the model for load_models() generation
+        push!(MODEL_REGISTRY, (name, model_path))
+
+        # Mark this function as a model in the functions_table
+        functions_table[name]["__is_model__"] = true
+        functions_table[name]["__model_path__"] = model_path
+
+        # Emit static torch::jit::Module declaration
+        emit(ir_builder_func, "static torch::jit::Module $(name)_module;")
+        emit(ir_builder_func, NEW_LINE)
+
+        # Emit wrapper function
+        emit(ir_builder_func, output_type)
+        emit(ir_builder_func, WHITE_SPACE)
+        emit(ir_builder_func, name)
+
+        # Function arguments
+        emit(ir_builder_func, LEFT_PAREN)
+        arg_names = []
+        sig_copy = deepcopy(signature)
+        while length(sig_copy.args) > 0
+            current_arg = popfirst!(sig_copy.args)
+            arg_name = get_value(current_arg.name)
+            arg_type = convert_type_name(get_value(current_arg.type.name))
+
+            functions_table[name][arg_name] = arg_type
+            push!(arg_names, (arg_name, arg_type))
+
+            emit(ir_builder_func, arg_type)
+            emit(ir_builder_func, WHITE_SPACE)
+            emit(ir_builder_func, arg_name)
+
+            if length(sig_copy.args) > 0
+                emit(ir_builder_func, COMMA)
+                emit(ir_builder_func, WHITE_SPACE)
+            end
+        end
+
+        emit(ir_builder_func, RIGHT_PAREN)
+        emit(ir_builder_func, LEFT_CURLY)
+
+        # Build the forward call body
+        # Pack inputs into a vector of IValues
+        emit(ir_builder_func, "std::vector<torch::jit::IValue> inputs;")
+
+        for (arg_name, arg_type) in arg_names
+            if arg_type == "torch::Tensor"
+                emit(ir_builder_func, "inputs.push_back($(arg_name));")
+            else
+                # Wrap scalar as a tensor
+                emit(ir_builder_func, "inputs.push_back(torch::tensor($(arg_name)));")
+            end
+        end
+
+        # Call forward and return
+        if output_type == "torch::Tensor"
+            emit(ir_builder_func, "return $(name)_module.forward(inputs).toTensor();")
+        elseif output_type == "double"
+            emit(ir_builder_func, "return $(name)_module.forward(inputs).toTensor().item<double>();")
+        elseif output_type == "int"
+            emit(ir_builder_func, "return $(name)_module.forward(inputs).toTensor().item<int>();")
+        else
+            # Fallback: assume tensor output
+            emit(ir_builder_func, "return $(name)_module.forward(inputs).toTensor();")
+        end
+
+        emit(ir_builder_func, RIGHT_CURLY)
+
+        check = build_sameline(ir_builder_func)
+        return check
+    end
+
+    # Regular function definition (not model-loaded)
+    body = ast.body
+    ret = ast.fun_return
 
     function ir_function_body!(ast, func_scope, ir_builder)
         """
@@ -289,21 +458,14 @@ function ir_function!(ast, functions_table, ir_builder_func)
 
     end
 
-    name = ast.name
-    signature = ast.signature
-    body = ast.body
-    ret = ast.fun_return
-
-    functions_table[name] = Dict()
-
-    output_type = convert_type_name(get_value(signature.output.name))
+    output_type_reg = convert_type_name(get_value(ast.signature.output.name))
 
     # Output Type
-    emit(ir_builder_func, output_type)
+    emit(ir_builder_func, output_type_reg)
     emit(ir_builder_func, WHITE_SPACE)
 
     # Function Name
-    emit(ir_builder_func, get_value(name))
+    emit(ir_builder_func, name)
 
     # Adding function arguments
     emit(ir_builder_func, LEFT_PAREN)
@@ -366,12 +528,12 @@ function ir_function_list!(ast, functions_table, ir_builder)
     emit(ir_builder, build(ir_total_functions))
 end
 
-function ir_func_sec_hdr!(ir_builder)
+function ir_func_sec_hdr!(ir_builder, section_name)
     """
-    Adds ir function section header informatoin
+    Adds ir function section header information
     """
 
-    hdr = "#ifndef DGGML_FUNCTIONS_HPP\n#define DGGML_FUNCTIONS_HPP\n#include<cmath>\n namespace FractureNetwork {\n"
+    hdr = "#ifndef DGGML_FUNCTIONS_$(section_name)_HPP\n#define DGGML_FUNCTIONS_$(section_name)_HPP\n#include<cmath>\n#include <torch/script.h>\n namespace $section_name {\n"
     emit(ir_builder, hdr)
     return ir_builder
 end
@@ -382,20 +544,50 @@ function ir_func_sec_foot!(ir_builder)
     return ir_builder
 end
 
+function ir_load_models!(ir_builder)
+    """
+    Generates a load_models() function that initializes all
+    torch::jit::Module static variables from their file paths.
+    """
+
+    if isempty(MODEL_REGISTRY)
+        return
+    end
+
+    emit(ir_builder, "void load_models() {")
+    for (model_name, model_path) in MODEL_REGISTRY
+        emit(ir_builder, "    $(model_name)_module = torch::jit::load(\"$(model_path)\");")
+        emit(ir_builder, "    $(model_name)_module.eval();")
+    end
+    emit(ir_builder, "}")
+    emit(ir_builder, NEW_LINE)
+end
+
 function ir_function_section(ast, functions_table)
     """
     Handles Function Section
     """
 
-    ir_builder = IRBuilder([])
-    ir_func_sec_hdr!(ir_builder)
+    # Clear model registry for this section
+    empty!(MODEL_REGISTRY)
 
+    ir_builder = IRBuilder([])
     section_name = get_value(ast.name)
+
+    ir_func_sec_hdr!(ir_builder, section_name)
 
     functions_table[section_name] = Dict()
 
     ir_function_list!(ast.functions, functions_table, ir_builder)
-    # functions_table[]
+
+    # Generate load_models() if any model-loaded functions were found
+    ir_load_models!(ir_builder)
+
+    # Store namespace metadata if models were registered
+    if !isempty(MODEL_REGISTRY)
+        functions_table["__func_namespace__"] = section_name
+    end
+
     ir_func_sec_foot!(ir_builder)
     build(ir_builder)
 end

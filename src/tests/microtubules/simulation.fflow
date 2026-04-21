@@ -1,0 +1,24 @@
+simulations Test {
+
+    # Loading parameters
+    params : SimulationParameters := load("params.fflow")
+    
+    # Load saved state
+    initialState : State := load("mtub_grid.bin")
+
+    # What rules to use.
+    simRules : SimulationRules := load("rules.fflow")
+
+    # Types
+    simTypes : SimulationTypes := load("types.fflow")
+
+    # Number of iterations
+    iterations : Float := 3
+
+    # TODO: Where to save results
+    # Where to save results
+    # This executes. the simulation
+    test : Simulation := RunSimulation(initialState, params,
+                simRules, simTypes, iterations)
+
+}

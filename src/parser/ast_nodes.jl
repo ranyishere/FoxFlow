@@ -6,7 +6,7 @@ module AstNodes
 
     import ..Tokens: Token, OperatorToken, MinusToken,
                     PlusToken, AsteriskToken,
-                    SlashToken, NotToken, SampleToken
+                    SlashToken, NotToken, SampleToken, StringToken
 
     abstract type Node end
     abstract type LiteralNode <: Node end
@@ -20,8 +20,14 @@ module AstNodes
         token::Token
     end
 
-    struct IdentifierNode <: Node
+    Base.@kwdef struct IdentifierNode <: Node
         token::Token
+        namespace::Union{Token, Nothing} = nothing
+    end
+    IdentifierNode(token::Token) = IdentifierNode(token, nothing)
+
+    struct StringNode <: Node
+        token :: StringToken
     end
 
     struct SymbolNode <: Node
@@ -34,13 +40,22 @@ module AstNodes
         parameters::Array{Node}
     end
 
+    struct NamedParameterNode <: Node
+        name::IdentifierNode
+        parameter::Node
+    end
+
     struct ParameterNode <: Node
         token:: Union{Array{Node}, Nothing} # Can be a ParameterNode or a IdentifierNode
     end
-
     
     struct IntegerNode <: LiteralNode
         token::Token
+    end
+
+    struct TypeClassNode <: Node
+        name :: Union{IdentifierNode, FloatNode, IntegerNode}
+        parameter :: ParameterNode
     end
 
     struct BinaryOpNode <: Node
@@ -58,14 +73,46 @@ module AstNodes
         operand :: Node
     end
 
+    # Represents an inline array/tensor literal, e.g. [1,2,3] or [[1,2],[3,4]]
+    struct ArrayLiteralNode <: Node
+        elements :: Array{Node}
+    end
+
+    # Represents an index access operation, e.g. tensor[i] or tensor[i, j]
+    struct IndexAccessNode <: Node
+        object :: Node
+        indices :: Array{Node}
+    end
+
+    # Represents a slice expression inside an index, e.g. 0:3, ::2, :, 1:5:2
+    # Any of start, stop, step can be `nothing` to indicate omission.
+    # Examples:
+    #   :       -> SliceNode(nothing, nothing, nothing)  -- select all
+    #   0:3     -> SliceNode(0, 3, nothing)               -- range [0, 3)
+    #   ::2     -> SliceNode(nothing, nothing, 2)          -- every 2nd element
+    #   1:5:2   -> SliceNode(1, 5, 2)                      -- range [1,5) step 2
+    struct SliceNode <: Node
+        start :: Union{Node, Nothing}
+        stop  :: Union{Node, Nothing}
+        step  :: Union{Node, Nothing}
+    end
+
     struct CallNode <: Node
         function_node :: IdentifierNode
         args :: Array{
                       Union{Token, IntegerNode, FloatNode,
                             IdentifierNode, BinaryOpNode, GroupNode,
-                            UnaryOpNode, CallNode
+                            UnaryOpNode, CallNode, IndexAccessNode,
+                            ArrayLiteralNode
                            }
                      }
+    end
+
+    # Encapsulates any node in a namespace.
+    # This is used to allow for nested namespaces and to allow for namespaces to contain any type of node.
+    struct NamespaceNode <: Node
+        name :: IdentifierNode
+        value :: Node
     end
 
     struct FunctionNode <: Node
@@ -73,7 +120,8 @@ module AstNodes
         args::Array{Union{
                           Token, IntegerNode, FloatNode,
                           IdentifierNode, BinaryOpNode,
-                          GroupNode, UnaryOpNode
+                          GroupNode, UnaryOpNode, IndexAccessNode,
+                          ArrayLiteralNode
                          }}
     end
 
@@ -81,26 +129,32 @@ module AstNodes
         token::Array{Token}
     end
 
-    
     struct BindingVariableNode <: Node
-        name::IdentifierNode
+        name::Union{IdentifierNode, IndexAccessNode}
         # What the derivative is in respect to.
         value::Array{Any}
     end
 
     struct ODENode <: Node
-        name :: IdentifierNode
+        name :: Union{IdentifierNode, IndexAccessNode}
         value :: Union{BinaryOpNode,
                        IdentifierNode,
                         IntegerNode,
                         FloatNode,
-                        GroupNode
+                        GroupNode, CallNode,
+                        ArrayLiteralNode
                       }
+    end
+
+    struct DefinitionNode <: Node
+        name :: IdentifierNode
+        type  :: TypeClassNode
+        value :: Node
     end
 
     struct SolveClauseNode <: ModifyClauseNode
         variables::Array{BindingVariableNode}
-        clause::Array{ODENode}
+        clause::Array{Union{ODENode, DefinitionNode}}
     end
 
     struct WhereClauseNode <: ModifyClauseNode
@@ -120,22 +174,19 @@ module AstNodes
         where_clause::WhereClauseNode
     end
 
-    struct TypeClassNode <: Node
-        name :: Union{IdentifierNode, FloatNode, IntegerNode}
-        parameter :: ParameterNode
-    end
-
-    struct DefinitionNode <: Node
-        name :: IdentifierNode
-        type  :: TypeClassNode
-        value :: Node
-    end
-
     struct TypeInstanceNode <: Node
         name  :: IdentifierNode
         parameter :: ParameterNode
-        type  :: TypeClassNode
+        type  :: Union{TypeClassNode, Nothing}
          # Value can be a list of types or a single value.
+        value :: Union{
+                        Token, Nothing,
+                        Array, Node
+                       }
+    end
+
+    struct TypeInstanceUpdateNode <: Node
+        name :: Union{IdentifierNode, IndexAccessNode}
         value :: Union{
                         Token, Nothing,
                         Array, Node
@@ -280,11 +331,17 @@ module AstNodes
         expressions :: Array{FunctionDefinitionExpressionNode}
     end
 
+    # Represents a model loaded from a file path, e.g. load("policy_net.pt")
+    struct ModelLoadNode <: Node
+        filepath :: StringNode
+    end
+
     struct FunctionDefinitionNode <: Node
         name :: IdentifierNode
         signature :: FunctionSignatureNode
-        body :: FunctionBodyExpressionNode
-        fun_return :: Node
+        body :: Union{FunctionBodyExpressionNode, Nothing}
+        fun_return :: Union{Node, Nothing}
+        model_load :: Union{ModelLoadNode, Nothing}
     end
 
     struct FunctionSectionNode <: Node
@@ -295,7 +352,6 @@ module AstNodes
     struct GrammarNode <: Node
         type_section :: TypeSectionNode
         parameter_section :: ParameterSectionNode
-        # Helper function Section
         function_section :: FunctionSectionNode
         rule_section :: RuleSectionNode
         observable_section :: ObservableSectionNode
@@ -304,6 +360,54 @@ module AstNodes
     struct FoxFlowNode <: Node
         grammars :: Array{GrammarNode}
         parameters :: ParameterSectionNode
+    end
+
+    struct LoadNode <: Node
+        filepath :: StringNode
+    end
+
+    struct SimulationNode <: Node
+        name :: IdentifierNode
+        # rules :: Array{RuleNode}
+        # types :: Array{TypeInstanceNode}
+    end
+
+    struct SimulationParametersNode <: Node
+        value :: LoadNode
+    end
+
+    struct SimulationRulesNode <: Node
+        value :: LoadNode
+    end
+
+    struct SimulationTypesNode <: Node
+        value :: LoadNode
+    end
+
+    struct SimulationStateNode <: Node
+        value :: LoadNode
+    end
+
+    struct RunSimulationNode <: Node
+        initialState :: IdentifierNode
+        parameters :: IdentifierNode
+        rules :: IdentifierNode
+        types :: IdentifierNode
+        steps :: Union{IntegerNode, FloatNode, IdentifierNode}
+	# TODO: Make saving path optional its on by default right now.
+	# savePath :: StringNode
+    end
+
+    struct SimDeclarationNode <: Node 
+        name :: IdentifierNode
+        value :: Union{FloatNode, IntegerNode, SimulationParametersNode,
+              SimulationNode, SimulationRulesNode, SimulationTypesNode,
+              SimulationStateNode, StringNode, RunSimulationNode}
+    end
+
+    struct SimulationSectionNode <: Node
+        name :: IdentifierNode
+        declarations :: Array{SimDeclarationNode}
     end
     
 end

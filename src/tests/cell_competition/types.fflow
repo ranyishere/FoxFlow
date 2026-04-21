@@ -1,0 +1,15 @@
+types Microtubule {
+
+    # X, Y, Z, age, V_x, V_y, V_z, identity, Direction
+    WildType << FixedList<<3, Float>>, FixedList<<3,Float>, Float, Float, FixedList<<3, Float>>  >> : Type
+
+    # X, Y, Z, V_x, V_y, V_z, age, identity, Direction
+    HiddenMutant << FixedList<<3, Float>>, FixedList<<3,Float>, Float, Float, FixedList<<3, Float>>  >> : Type
+
+    # X, Y, Z, V_x, V_y, V_z,age, identity, Direction
+    Mutant << FixedList<<3, Float>>, FixedList<<3,Float>, Float, Float, FixedList<<3, Float>> >> : Type
+
+    # X, Y, Z, V_x, V_y, V_z, age, identity, Direction
+    HiddenMutant << FixedList<<3, Float>>, FixedList<<3,Float>, Float, Float, FixedList<<3, Float>> >> : Type
+
+}

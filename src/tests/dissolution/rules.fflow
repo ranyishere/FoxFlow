@@ -1,0 +1,242 @@
+# DFNWork styled data
+# GEOS
+rules Dissolution {
+
+    # 1. Initial source placement
+    # start_node_up := (start : StartType) << (start_pos : FixedList<<3, Float>>) >> -> 
+        # (s : PressureSource) -- (p2 : PressureSource)
+        # << (ps_pos : FixedList<<3, Float>>, pressure : Float, u : FixedList<<3, Float>>),
+           # (ps2_pos : FixedList<<3, Float>>, pressure2 : Float, u2 : FixedList<<3, Float>>) >> 
+        # with (10.0 * s_min) where {
+
+        # ps_pos = [1.5, 1.5, 3.0]
+        # u = [1.0, 1.0, -1.0]
+        # ps2_pos = [1.5, 1.5, 2.9]
+        # u2 = [1.0, 1.0, -1.0]
+    # }
+
+    # 2. Start the rock grid generation
+    start_rock_prop := (start : StartType) << (start_pos : FixedList<<3, Float>>) >> -> 
+        (start_fluid : FluidSource) (rock : RockStart) << 
+            (fpos : FixedList<<3, Float>>, funit : FixedList<<3, Float>>, fc : FixedList<<1, Integer>>, fP : Float),
+            (pos : FixedList<<3, Float>>, c_count : FixedList<<3, Integer>>, dir : FixedList<<3, Integer>>)
+        >> 
+        with (10000.0) where {
+
+            # fpos = [1.35, 1.35, 0.15]
+            fpos = [1.35, 1.35, 0.0]
+            funit = [0.0, 0.0, 1.0]
+            fc = [10]
+            fP = 1.0
+
+            pos = [0.0, 0.0, 0.0]
+            c_count = [10, 10, 10]
+            dir = [0, 0, 0]
+    }
+
+    # 3. PHASE 1: Grow the X-axis lines (edge created on propagation)
+    propagate_rock_x := (rock0 : RockStart) << (pos0 : FixedList<<3, Float>>, c_count0 : FixedList<<3, Integer>>, dir0 : FixedList<<3, Integer>>) >> -> 
+        (rock0 : RockStart) (Rock1 : RockStart)
+        << (pos0n : FixedList<<3, Float>>, c_count0n : FixedList<<3, Integer>>, dir0n : FixedList<<3, Integer>>), 
+           (pos1n : FixedList<<3, Float>>, c_count1n : FixedList<<3, Integer>>, dir1n : FixedList<<3, Integer>>) >> 
+        with ( 10000.0 * indicator( c_count0[0] > 0 ) ) where {
+
+        offset_distance : Float := 0.3
+
+        pos0n = pos0
+        c_count0n = [0, c_count0[1], c_count0[2]]
+        dir0n = [1, 0, 0]
+
+        pos1n = [pos0[0] + offset_distance, pos0[1], pos0[2]]
+        c_count1n = [c_count0[0] - 1, c_count0[1], c_count0[2]]
+        dir1n = [1, 0, 0]
+    }
+
+    # 4. PHASE 2: Grow Y-axis lines off the completed X-nodes (edge created on propagation)
+    propagate_rock_y := (rock0 : RockStart) << (pos0 : FixedList<<3, Float>>, c_count0 : FixedList<<3, Integer>>, dir0 : FixedList<<3, Integer>>) >> -> 
+        (rock0 : RockStart) (Rock1 : RockStart)
+        << (pos0n : FixedList<<3, Float>>, c_count0n : FixedList<<3, Integer>>, dir0n : FixedList<<3, Integer>>), 
+           (pos1n : FixedList<<3, Float>>, c_count1n : FixedList<<3, Integer>>, dir1n : FixedList<<3, Integer>>) >> 
+        with ( 10000.0 * indicator( c_count0[0] == 0) * indicator(c_count0[1] > 0 ) ) where {
+
+        offset_distance : Float := 0.3
+
+        pos0n = pos0
+        c_count0n = [c_count0[0], 0, c_count0[2]]
+        dir0n = [0, 1, 0]
+
+        pos1n = [pos0[0], pos0[1] + offset_distance, pos0[2]]
+        c_count1n = [c_count0[0], c_count0[1] - 1, c_count0[2]]
+        dir1n = [0, 1, 0]
+    }
+
+    # 5. PHASE 3: Grow Z-axis lines off the completed XY-plane (edge created on propagation)
+    propagate_rock_z := (rock0 : RockStart) << (pos0 : FixedList<<3, Float>>, c_count0 : FixedList<<3, Integer>>, dir0 : FixedList<<3, Integer>>) >> -> 
+        (rock0 : RockStart) (Rock1 : RockStart)
+        << (pos0n : FixedList<<3, Float>>, c_count0n : FixedList<<3, Integer>>, dir0n : FixedList<<3, Integer>>), 
+           (pos1n : FixedList<<3, Float>>, c_count1n : FixedList<<3, Integer>>, dir1n : FixedList<<3, Integer>>) >> 
+        with ( 10000.0 * indicator( c_count0[0] == 0) * indicator(c_count0[1] == 0) * indicator(c_count0[2] > 0 ) ) where {
+
+        offset_distance : Float := 0.3
+
+        pos0n = pos0
+        c_count0n = [c_count0[0], c_count0[1], 0]
+        dir0n = [0, 0, 1]
+
+        pos1n = [pos0[0], pos0[1], pos0[2] + offset_distance]
+        c_count1n = [c_count0[0], c_count0[1], c_count0[2] - 1]
+        dir1n = [0, 0, 1]
+    }
+
+    # =============================================
+    # FLUID: A line of fluid nodes through the center of the rock grid
+    # =============================================
+
+    # 6. Seed the FluidSource at the entry point (center of grid, z=0)
+#     start_fluid := (start : StartType) << (start_pos : FixedList<<3, Float>>) >> ->
+#         (f : FluidSource) << (fpos : FixedList<<3, Float>>, funit : FixedList<<3, Float>>, fvel : FixedList<<3, Float>>, fc : FixedList<<1, Integer>>) >>
+#         with (10000.0) where {
+#         fpos = [1.5, 1.5, 0.0]
+#         funit = [0.0, 0.0, 1.0]
+#         fvel = [0.0, 0.0, 0.1]
+#         fc = [10]
+#     }
+
+    # 7. Source propagates its first child (count > 1 means more Fluid nodes to come)
+    propagate_from_source := (f0 : FluidSource) << (fp0 : FixedList<<3, Float>>, fu0 : FixedList<<3, Float>>, fc0 : FixedList<<1, Integer>>, fP0 : Float) >> ->
+        (f0 : FluidSource) -- (f1 : Fluid)
+        << (fp0n : FixedList<<3, Float>>, fu0n : FixedList<<3, Float>>, fc0n : FixedList<<1, Integer>>, fP0n : Float),
+           (fp1n : FixedList<<3, Float>>, fu1n : FixedList<<3, Float>>, fc1n : FixedList<<1, Integer>>, fP1n : Float) >>
+        with ( 10000.0 * indicator(fc0[0] > 1) ) where {
+
+        fluid_spacing : Float := 0.3
+
+        fp0n = fp0
+        fu0n = fu0
+        fc0n = [0]
+        fP0n = fP0
+
+        fp1n = [fp0[0] + fu0[0] * fluid_spacing, fp0[1] + fu0[1] * fluid_spacing, fp0[2] + fu0[2] * fluid_spacing]
+        fu1n = fu0
+        fc1n = [fc0[0] - 1]
+        fP1n = 0.0
+    }
+
+    # 8. Source propagates its only child directly to a sink (count == 1)
+    propagate_source_to_sink := (f0 : FluidSource) << (fp0 : FixedList<<3, Float>>, fu0 : FixedList<<3, Float>>, fc0 : FixedList<<1, Integer>>, fP0 : Float) >> ->
+        (f0 : FluidSource) -- (f1 : FluidSink)
+        << (fp0n : FixedList<<3, Float>>, fu0n : FixedList<<3, Float>>, fc0n : FixedList<<1, Integer>>, fP0n : Float),
+           (fp1n : FixedList<<3, Float>>, fu1n : FixedList<<3, Float>>, fc1n : FixedList<<1, Integer>>, fP1n : Float) >>
+        with ( 10000.0 * indicator(fc0[0] == 1) ) where {
+
+        fluid_spacing : Float := 0.3
+
+        fp0n = fp0
+        fu0n = fu0
+        fc0n = [0]
+        fP0n = fP0
+
+        fp1n = [fp0[0] + fu0[0] * fluid_spacing, fp0[1] + fu0[1] * fluid_spacing, fp0[2] + fu0[2] * fluid_spacing]
+        fu1n = fu0
+        fc1n = [0]
+        fP1n = 0.0
+    }
+
+    # 9. Fluid propagates along the line (count > 1 means more nodes to come)
+    propagate_initial_fluid := (f0 : Fluid) << (fp0 : FixedList<<3, Float>>, fu0 : FixedList<<3, Float>>, fc0 : FixedList<<1, Integer>>, fP0 : Float) >> ->
+        (f0 : Fluid)--(f1 : Fluid)
+        << (fp0n : FixedList<<3, Float>>, fu0n : FixedList<<3, Float>>, fc0n : FixedList<<1, Integer>>, fP0n : Float),
+           (fp1n : FixedList<<3, Float>>, fu1n : FixedList<<3, Float>>, fc1n : FixedList<<1, Integer>>, fP1n : Float) >>
+        with ( 10000.0 * indicator(fc0[0] > 1) ) where {
+
+        fluid_spacing : Float := 0.3
+
+        fp0n = fp0
+        fu0n = fu0
+        fc0n = [0]
+        fP0n = fP0
+
+        fp1n = [fp0[0] + fu0[0] * fluid_spacing, fp0[1] + fu0[1] * fluid_spacing, fp0[2] + fu0[2] * fluid_spacing]
+        fu1n = fu0
+        fc1n = [fc0[0] - 1]
+        fP1n = 0.0
+    }
+
+    # 10. Last fluid node becomes a FluidSink (count == 1)
+    propagate_final_fluid := (f0 : Fluid) << (fp0 : FixedList<<3, Float>>, fu0 : FixedList<<3, Float>>, fc0 : FixedList<<1, Integer>>, fP0 : Float) >> ->
+        (f0 : Fluid)--(f1 : FluidSink)
+        << (fp0n : FixedList<<3, Float>>, fu0n : FixedList<<3, Float>>, fc0n : FixedList<<1, Integer>>, fP0n : Float),
+           (fp1n : FixedList<<3, Float>>, fu1n : FixedList<<3, Float>>, fc1n : FixedList<<1, Integer>>, fP1n : Float) >>
+        with ( 10000.0 * indicator(fc0[0] == 1) ) where {
+
+        fluid_spacing : Float := 0.3
+
+        fp0n = fp0
+        fu0n = fu0
+        fc0n = [0]
+        fP0n = fP0
+
+        fp1n = [fp0[0] + fu0[0] * fluid_spacing, fp0[1] + fu0[1] * fluid_spacing, fp0[2] + fu0[2] * fluid_spacing]
+        fu1n = fu0
+        fc1n = [0]
+        fP1n = 0.0
+    }
+
+    # =============================================
+    # FLUID FLOW ODE RULES: Pressure-driven flow from Source to Sink
+    # =============================================
+
+    # 11. Source boundary: fixed high pressure drives adjacent fluid node
+    source_flow := (f0 : FluidSource) -- (f1 : Fluid)
+        << (fp0 : FixedList<<3, Float>>, fu0 : FixedList<<3, Float>>, fc0 : FixedList<<1, Integer>>, P0 : Float),
+           (fp1 : FixedList<<3, Float>>, fu1 : FixedList<<3, Float>>, fc1 : FixedList<<1, Integer>>, P1 : Float) >> ->
+        (f0 : FluidSource) -- (f1 : Fluid)
+        << (fp0 : FixedList<<3, Float>>, fu0 : FixedList<<3, Float>>, fc0 : FixedList<<1, Integer>>, P0 : Float),
+           (fp1 : FixedList<<3, Float>>, fu1 : FixedList<<3, Float>>, fc1 : FixedList<<1, Integer>>, dP1 : Float) >>
+        solving (dP1 := D(P1, t)) {
+
+            # Pressure diffusion with compressibility:
+            # c * dP/dt = (k/mu) * d2P/dx2  =>  dP/dt = (k/(mu*c*dx^2))*(Pneighbor - P)
+            # = (1.0 / (1.0 * 0.09)) * (P0 - P1) = 11.11 * (P0 - P1)
+            dP1 : ODE = 11.11 * (P0 - P1)
+
+            # Velocity is algebraic, not an ODE: v = -(k/mu/dx)*(P1 - P0) = 3.33*(P0 - P1)
+            # Computed as post-processing or in a separate assignment rule.
+
+    }
+
+# 
+    # 12. Interior fluid: pressure diffusion + velocity between connected fluid nodes
+    fluid_flow := (f0 : Fluid) -- (f1 : Fluid)
+        << (fp0 : FixedList<<3, Float>>, fu0 : FixedList<<3, Float>>, fc0 : FixedList<<1, Integer>>, P0 : Float),
+           (fp1 : FixedList<<3, Float>>, fu1 : FixedList<<3, Float>>, fc1 : FixedList<<1, Integer>>, P1 : Float) >> ->
+        (f0 : Fluid) -- (f1 : Fluid)
+        << (fp0 : FixedList<<3, Float>>, fu0 : FixedList<<3, Float>>, fc0 : FixedList<<1, Integer>>, dP0 : Float),
+           (fp1 : FixedList<<3, Float>>, fu1 : FixedList<<3, Float>>, fc1 : FixedList<<1, Integer>>, dP1 : Float) >>
+        solving (dP1 := D(P1, t)) {
+
+            # Pressure diffusion with compressibility: dP/dt = (k/(mu*c*dx^2))*(Pneighbor - P)
+            # Only solving P1 to avoid overlapping SUNDIALS variable registration.
+            # The left neighbor's contribution comes from the adjacent match where this node is P1.
+            dP1 : ODE = 11.11 * (P0 - P1)
+
+            # Velocity is algebraic: v = 3.33*(P0 - P1), not an ODE state variable.
+    }
+
+    # 13. Sink boundary: fixed low pressure drains last fluid node
+    sink_flow := (f0 : Fluid) -- (f1 : FluidSink)
+        << (fp0 : FixedList<<3, Float>>, fu0 : FixedList<<3, Float>>, fc0 : FixedList<<1, Integer>>, P0 : Float),
+           (fp1 : FixedList<<3, Float>>, fu1 : FixedList<<3, Float>>, fc1 : FixedList<<1, Integer>>, P1 : Float) >> ->
+        (f0 : Fluid) -- (f1 : FluidSink)
+        << (fp0 : FixedList<<3, Float>>, fu0 : FixedList<<3, Float>>, fc0 : FixedList<<1, Integer>>, dP0 : Float),
+           (fp1 : FixedList<<3, Float>>, fu1 : FixedList<<3, Float>>, fc1 : FixedList<<1, Integer>>, P1 : Float) >>
+        solving (dP0 := D(P0, t)) {
+
+            # Pressure diffusion: dP/dt = (k/(mu*c*dx^2))*(Pneighbor - P)
+            # Sink has fixed P1=0, so this drains pressure from the last Fluid node
+            dP0 : ODE = 11.11 * (P1 - P0)
+
+            # Velocity is algebraic: v = 3.33*(P1 - P0), not an ODE state variable.
+    }
+
+}

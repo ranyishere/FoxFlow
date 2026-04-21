@@ -1,0 +1,440 @@
+
+rules Microtubule {
+
+#     start_to_node := (start : StartType) << (start_x, start_y, start_z) >> 
+#             -> (p1 : Nucleator) (b0 : CellBoundary) << (x, y, z, countx, county),
+#         ( (bx, by, bz), (ux, uy, uz), (bcountx, bcounty)) >> with (heaviside(10,1)) where {
+# 
+#         x : Float = 0 + buffer
+#         y : Float = 0 + buffer
+#         z : Float = 0
+# 
+#         countx : Integer = 10
+#         county : Integer = 10
+# 
+#         bx : Float = 0.0
+#         by : Float = 0.0
+#         bz : Float = 0.0
+# 
+#         ux : Float = 1.0
+#         uy : Float = 1.0
+#         uz : Float = 1.0
+# 
+#         # FIXME: If there is a type mismatch there should be an error. At the moment that does no give an error.
+#         bcountx : Integer = 1
+#         bcounty : Integer = 1
+# 
+#     }
+
+    # FIXME: if a user doesnt define everything on the lhs it still works... It should given an error instead.
+#     make_boundary_bottom := (b0 : CellBoundary) << ( (x,y,z), (ux, uy, uz), (countx, county)) >> ->
+#         (b0 : CellBoundary) -- (b1 : CellBoundary) << ( (nx,ny,nz), (nux0, nuy0, nuz0), (ncountx0, ncounty0)),
+#         ( (nx1,ny1,nz1), (nux1, nuy1, nuz1), (ncountx1, ncounty1) ) >> with (
+#             indicator(countx != 0) * indicator(countx != boundary_pts) * indicator(ux == 1)
+#             * indicator(countx <= boundary_pts)
+#         ) where {
+# 
+#         nx : Float = x
+#         ny : Float = y
+#         nz : Float = z
+# 
+#         ncountx0 : Float = 0
+#         ncounty0 : Float = county
+# 
+#         nux0 : Float = ux
+#         nuy0 : Float = uy
+#         nuz0 : Float = uz
+# 
+#         nx1 : Float = x + boundary_offset
+#         ny1 : Float = y 
+#         nz1 : Float = z
+# 
+#         nux1 : Float = ux
+#         nuy1 : Float = uy
+#         nuz1 : Float = uz
+# 
+#         ncountx1 : Integer = countx + 1
+#         ncounty1 : Integer = county
+# 
+#     }
+
+#     make_boundary_right := (b0 : CellBoundary) << ( (x,y,z), (ux, uy, uz), (countx, county)) >> ->
+#        (b0 : CellBoundary) -- (b1 : CellBoundary) << ( (nx,ny,nz), (nux0, nuy0, nuz0), (ncountx0, ncounty0)),
+#         ( (nx1,ny1,nz1), (nux1, nuy1, nuz1), (ncountx1, ncounty1) ) >> with (
+#             indicator(countx >= boundary_pts) * indicator(county != 0) * indicator(county != boundary_pts) 
+#             * indicator(uy == 1)
+#         ) where {
+# 
+#         nx : Float = x
+#         ny : Float = y
+#         nz : Float = z
+# 
+#         ncountx0 : Float = countx
+#         ncounty0 : Float = 0
+# 
+#         nux0 : Float = 1
+#         nuy0 : Float = uy
+#         nuz0 : Float = uz
+# 
+#         nx1 : Float = x 
+#         ny1 : Float = y + boundary_offset
+#         nz1 : Float = z
+# 
+#         nux1 : Float = -1
+#         nuy1 : Float = uy
+#         nuz1 : Float = uz
+# 
+#         ncountx1 : Integer = countx
+#         ncounty1 : Integer = county + 1
+# 
+#     }
+
+#     make_boundary_top := (b0 : CellBoundary) << ( (x,y,z), (ux, uy, uz), (countx, county)) >> ->
+#         (b0 : CellBoundary) -- (b1 : CellBoundary) << ( (nx,ny,nz), (nux0, nuy0, nuz0), (ncountx0, ncounty0)),
+#         ( (nx1,ny1,nz1), (nux1, nuy1, nuz1), (ncountx1, ncounty1) ) >> with (
+#             indicator( (countx) <= (2*boundary_pts - 2) ) * indicator( (countx) >= boundary_pts )
+#             * indicator( county >= boundary_pts )
+#             * indicator(ux == -1) * indicator(uy == 1)
+#             ) where {
+# 
+#         nx : Float = x
+#         ny : Float = y
+#         nz : Float = z
+# 
+#         ncountx0 : Float = countx
+#         ncounty0 : Float = county
+# 
+#         nux0 : Float = 1
+#         nuy0 : Float = uy
+#         nuz0 : Float = uz
+# 
+#         nx1 : Float = x - boundary_offset
+#         ny1 : Float = y
+#         nz1 : Float = z
+# 
+#         nux1 : Float = -1
+#         nuy1 : Float = uy
+#         nuz1 : Float = uz
+# 
+#         ncountx1 : Integer = countx + 1
+#         ncounty1 : Integer = county
+# 
+#     }
+
+#     make_boundary_left := (b0 : CellBoundary) << ( (x,y,z), (ux, uy, uz), (countx, county)) >> ->
+#         (b0 : CellBoundary) -- (b1 : CellBoundary) << ( (nx,ny,nz), (nux0, nuy0, nuz0), (ncountx0, ncounty0)),
+#         ( (nx1,ny1,nz1), (nux1, nuy1, nuz1), (ncountx1, ncounty1) ) >> with (
+#             indicator( (countx) > (2*boundary_pts - 2) ) * indicator( county >= boundary_pts )
+#             * indicator(county <= (2*boundary_pts - 2))
+#         ) where {
+# 
+#         nx : Float = x
+#         ny : Float = y
+#         nz : Float = z
+# 
+#         ncountx0 : Float = countx
+#         ncounty0 : Float = county
+# 
+#         nux0 : Float = 1
+#         nuy0 : Float = uy
+#         nuz0 : Float = uz
+# 
+#         nx1 : Float = x
+#         ny1 : Float = y - boundary_offset
+#         nz1 : Float = z
+# 
+#         nux1 : Float = -1
+#         nuy1 : Float = -1
+#         nuz1 : Float = uz
+# 
+#         ncountx1 : Integer = countx
+#         ncounty1 : Integer = county + 1
+# 
+#     }
+
+
+
+#     create_nucleator_grid_x := (p1 : Nucleator) << (x,y,z, countx, county) >> ->
+#         (p1 : Nucleator) (p2 : Nucleator) << (nx, ny, nz, ncountx, ncounty),
+#         (nx2, ny2, nz2, ncountx2, ncounty2) >> with (indicator( 0 != countx)) where {
+# 
+#         nx : Float = x
+#         ny : Float = y
+#         nz : Float = z
+# 
+#         ncountx : Float = 0
+#         ncounty : Float = county
+# 
+#         nx2 : Float = x + offset
+#         ny2 : Float = y
+#         nz2 : Float = 0
+# 
+#         ncountx2 : Float = countx - 1
+#         ncounty2 : Float = county
+#     }
+
+#     create_nucleator_grid_y := (p1 : Nucleator) << (x,y,z, countx, county) >> ->
+#         (p1 : Nucleator) (p2 : Nucleator) << (nx, ny, nz, ncountx, ncounty),
+#         (nx2, ny2, nz2, ncountx2, ncounty2) >> with (indicator( 0 != county)) where {
+# 
+#         nx : Float = x
+#         ny : Float = y
+#         nz : Float = z
+# 
+#         ncountx : Float = countx
+#         ncounty : Float = 0
+# 
+#         nx2 : Float = x
+#         ny2 : Float = y + offset
+#         nz2 : Float = 0
+# 
+#         ncountx2 : Float = countx
+#         ncounty2 : Float = county - 1
+# 
+#     }
+
+
+    create_microtubule := (p1 : Nucleator) << (x,y,z, countx, county) >> -> 
+        (p1 : Nucleator)
+        (p2 : Negative) -- (p3 : Intermediate)
+        (p3 : Intermediate) -- (p4 : Positive) << ((nuc_x,nuc_y,nuc_z), (nuc_countx, nuc_county)),
+        ((nx,ny,nz), (nux,nuy nuz)), ((ix,iy,iz), (iux,iuy, iuz)),
+        ((ix,iy,iz), (iux,iuy iuz)), ((px, py, pz), (pux, puy, puz)) >> with (creation_factor * creation_rate) where { 
+
+        mt_seg_len : Float := ~UniformDistribution(mt_min_segment_init, mt_max_segment_init)
+        mt_orientation : Float := ~UniformDistribution(0.0, 2.0 * 3.1415)
+
+        x_im : Float := ~UniformDistribution(x-varepsilon, x+varepsilon)
+        y_im : Float := ~UniformDistribution(y-varepsilon, y+varepsilon)
+
+        nuc_x : Float = x
+        nuc_y : Float = y
+        nuc_z : Float = z
+        nuc_countx : Float = countx
+        nuc_county : Float = county
+
+        x_c : Float := x
+        y_c : Float := y
+        z_c : Float := z
+
+        x_s : Float := 0.0
+        y_s : Float := mt_seg_len
+
+        x_r_t : Float := x_s * cos(mt_orientation) + y_s * sin(mt_orientation)
+        y_r_t : Float := -x_s * sin(mt_orientation) + y_s * cos(mt_orientation)
+
+        x_r : Float := x_c + x_r_t
+        y_r : Float := y_c + y_r_t
+        z_r : Float := 0
+
+        # x_l : Float := x_c - (x_r - x_c)
+        # y_l : Float := y_c - (y_r - y_c)
+
+        x_l : Float := x_r - 2 * mt_seg_len
+        y_l : Float := y_r - 2 * mt_seg_len
+
+        z_l : Float := 0
+
+        nx : Float = x_l
+        ny : Float = y_l
+        nz : Float = z_l
+
+        # ix : Float = x_c
+        # iy : Float = y_c
+        # iz : Float = z_c
+
+        ix : Float = x_im
+        iy : Float = y_im
+        iz : Float = z_c
+
+        px : Float = x_r
+        py : Float = y_r
+        pz : Float = z_r
+
+        tmp_x : Float := (x_im - x_r)/HELP::distance(x_im, y_im, x_r, y_r)
+        tmp_y : Float := (y_im - y_r)/HELP::distance(x_im, y_im, x_r, y_r)
+
+        # Setting unit vectors
+        nux : Float = tmp_x
+        nuy : Float = tmp_y
+        nuz : Float = 0
+
+        iux : Float = 1
+        iuy : Float = 1
+        iuz : Float = 1
+
+        pux : Float = tmp_x
+        puy : Float = tmp_y
+        puz : Float = 0
+    
+    }
+    
+
+    # grow microtubule by stretching.
+    growing_rule_stretch := (im : Intermediate) -- (pos : Positive) << ((ix,iy,iz), (iux,iuy, iuz)), ((px, py, pz), (pux, puy, puz)) >>  ->
+        (new_im : Intermediate) -- (new_pos : Positive) << ((nix,niy,niz), (niux,niuy, iuz)), ((dpx, dpy, dpz), (npux, npuy, npuz)) >>
+        solving (dpx := D(px,t),  dpy := D(py,t)) {
+
+
+            check : Float := HELP::distance(ix, iy, px, py)
+
+            # TODO: Allow definition nodes and using setting parameters.
+            dpx : ODE = px + 0.0615*pux
+            dpy : ODE = py + 0.0615*puy
+
+        }
+
+    # Adds a segment
+    # TODO: Allow namespace
+    growing_rule_segment := (im0 : Intermediate) -- (pos : Positive) << ((ix,iy,iz), (iux,iuy, iuz)),
+    ((px, py, pz), (pux, puy, puz)) >>  ->
+        (im0 : Intermediate) -- (im1 : Intermediate) 
+        (im1 : Intermediate) -- (new_pos : Positive) << ((nix0,niy0,niz0), (niux0,niuy0, niuz0)), ((nix1,niy1,niz1), (niux1,niuy1, iuz1)),
+            ((nix1,niy1,niz1), (niux1,niuy1, niuz1)), ((npx, npy, npz), (npux, npuy, npuz)) >> with (
+            heaviside(HELP::distance(ix, iy, px, py), L_DIV) * rho_grow
+        ) where {
+
+            gamma : Float := 1
+
+            # old intermediate
+            nix0 : Float = ix
+            niy0 : Float = iy
+            niz0 : Float = iz
+
+            niux0 : Float = iux
+            niuy0 : Float = iuy
+            niuz0 : Float = iuz
+
+            # Pos
+            npx : Float = px
+            npy : Float = py
+            npz : Float = pz
+
+            npux : Float = pux
+            npuy : Float = puy
+            npuz : Float = puz
+
+            #  new intermediate
+            x3_pos : Float := px - (px - ix) * gamma
+            y3_pos : Float := py - (py - iy) * gamma
+
+            nix1 : Float = x3_pos
+            niy1 : Float = y3_pos
+            niz1 : Float = iz
+
+            norm_dist : Float := HELP::distance(x3_pos, y3_pos, px, py)
+
+            niux1 : Float = (x3_pos - px) / norm_dist
+            niuy1 : Float = (y3_pos - py) / norm_dist
+            niuz1 : Float = iuz
+
+        }
+
+
+    # When a mt hits a 
+    boundary_catastrophe := (im0 : Intermediate) -- (pos : Positive)
+        (b0 : CellBoundary) -- (b1 : CellBoundary)
+        << ((ix,iy,iz), (iux,iuy, iuz)), ((px, py, pz), (pux, puy, puz)),
+            ( (bx0,by0,bz0), (bux0, buy0, buz0), (bcountx0, bcounty0)),
+            ( (bx1,by1,bz1), (bux1, buy1, buz1), (bcountx1, bcounty1))
+        >>  -> (im0 : Intermediate) -- (ret : Retraction)
+        (b0 : CellBoundary) -- (b1 : CellBoundary)
+        << ((nix,niy,niz), (niux,niuy, niuz)), ((npx, npy, npz), (npux, npuy, npuz)),
+            ( (nbx0,nby0,nbz0), (nbux0, nbuy0, nbuz0), (nbcountx0, nbcounty0))
+            ( (nbx1,nby1,nbz1), (nbux1, nbuy1, nbuz1), (nbcountx1, nbcounty1))
+        >>  
+    with (
+            indicator(HELP::minimum_distance_2d(px, py, bx0, by0, bx1, by1) <= 1.0) * boundary_cic
+    ) where {
+
+
+        ##
+        nix : Float = ix
+        niy : Float = iy
+        niz : Float = iz
+
+        niux : Float = iux
+        niuy : Float = iuy
+        niuz : Float = iuz
+
+        ##
+        npx : Float = px
+        npy : Float = py
+        npz : Float = pz
+
+        npux : Float = -pux
+        npuy : Float = -puy
+        npuz : Float = puz
+
+        ##
+
+        nbx0 : Float = bx0
+        nby0 : Float = by0
+        nbz0 : Float = bz0
+
+        nbux0 : Float = bux0
+        nbuy0 : Float = buy0
+        nbuz0 : Float = buz0
+
+        nbcountx0 : Float = bcountx0
+        nbcounty0 : Float = bcounty0
+
+        ##
+
+        nbx1 : Float = bx1
+        nby1 : Float = by1
+        nbz1 : Float = bz1
+
+        nbux1 : Float = bux1
+        nbuy1 : Float = buy1
+        nbuz1 : Float = buz1
+
+        nbcountx1 : Float = bcountx1
+        nbcounty1 : Float = bcounty1
+
+    }
+
+
+    retraction_shrink := (im : Intermediate) -- (ret : Retraction) << ((ix,iy,iz), (iux,iuy, iuz)), ((px, py, pz), (pux, puy, puz)) >>  ->
+        (new_im : Intermediate) -- (new_ret : Retraction) << ((nix,niy,niz), (niux,niuy, iuz)), ((dpx, dpy, dpz), (npux, npuy, npuz)) >>
+        solving (dpx := D(px,t),  dpy := D(py,t)) {
+
+            # TODO: Allow definition nodes and using setting parameters.
+            # NOTE: This currently does not handle when the function is dependent on dpx.
+            dpx : ODE = px + 0.00883*pux * (HELP::distance(ix, iy, px, py)/L_min)
+            dpy : ODE = py + 0.00883*puy * (HELP::distance(ix, iy, px, py)/L_min)
+
+        }
+
+    retraction_segment := (im0 : Intermediate) -- (im1 : Intermediate)
+    (im1 : Intermediate) -- (ret : Retraction) 
+        << ((ix,iy,iz), (iux,iuy, iuz)), ((ix1,iy1,iz1), (iux1,iuy1, iuz1)),
+            ((ix1,iy1,iz1), (iux1,iuy1, iuz1)), ((px, py, pz), (pux, puy, puz)) >>  ->
+        (im0 : Intermediate) -- (new_ret : Retraction) << ((nix0,niy0,niz0), (niux0,niuy0, niuz0)),
+                                                        ((npx, npy, npz), (npux, npuy, npuz)) >> with (
+            heaviside(HELP::distance(ix, iy, px, py), L_min) * rho_retract
+        ) where {
+
+            gamma : Float := 1
+
+            # old intermediate
+            nix0 : Float = ix
+            niy0 : Float = iy
+            niz0 : Float = iz
+
+            niux0 : Float = iux
+            niuy0 : Float = iuy
+            niuz0 : Float = iuz
+
+            # Pos
+            npx : Float = px
+            npy : Float = py
+            npz : Float = pz
+
+            npux : Float = pux
+            npuy : Float = puy
+            npuz : Float = puz
+        }
+
+
+}

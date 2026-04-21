@@ -1,0 +1,47 @@
+parameters Microtubule {
+
+    # Simulate time in seconds
+    TOTAL_TIME : Float := 1000
+
+    # How often the simulation is updated
+    DELTA : Float := 0.1
+
+    MAXIMAL_REACTION_RADIUS : Float := 0.1
+    varepsilon : Float := MAXIMAL_REACTION_RADIUS
+
+    # Number of steps in the simulation
+    NUM_STEPS : Integer := TOTAL_TIME / DELTA
+
+    MIN_DELTA_STEPS : Integer := 1
+    DELTA_DELTA_T : Float := DELTA / MIN_DELTA_STEPS
+
+    # Prevents solver from shrinking too much.
+    # The minimum allowable integration step.
+    DELTA_T_MIN : Float := DELTA_DELTA_T
+
+    CELL_NX : Float := 3
+    CELL_NY : Float := 3
+    CELL_DX : Float := 1
+    CELL_DY : Float := 1
+
+    # Creation Propensity Rate
+    rho_create : Float := 0.026
+
+    L_DIV : Float := 0.075
+
+    # Minimum Segment Length
+    s_min : Float := 0.1
+    # Maximum Segment Length
+    s_max : Float := 0.2
+
+    # Aperture of fracture
+    aperture : Float := 0.01
+
+    divide_scale : Float := 0.1
+
+    divide_distance : Float := 0.1
+
+    cell_division_scale : Float := 100
+
+    
+}

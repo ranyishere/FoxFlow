@@ -84,6 +84,47 @@ if(NOT CEREAL_FOUND)
     FetchContent_MakeAvailable(cereal)
 endif()
 
+# Try to find LibTorch first
+find_package(Torch QUIET)
+
+if(NOT Torch_FOUND)
+
+    message(STATUS "LibTorch not found, fetching with FetchContent...")
+    set(FETCHCONTENT_QUIET FALSE)
+    include(FetchContent)
+
+    message(STATUS "Downloading LibTorch (this may take several minutes)...")
+
+    # ---- Choose ONE LibTorch variant ----
+    # CPU-only (recommended unless you need CUDA)
+    set(LIBTORCH_URL
+    https://download.pytorch.org/libtorch/cpu/libtorch-cxx11-abi-shared-with-deps-2.2.0%2Bcpu.zip
+    )
+
+    # CUDA example (comment CPU and uncomment this if needed)
+    # set(LIBTORCH_URL
+    # https://download.pytorch.org/libtorch/cu121/libtorch-cxx11-abi-shared-with-deps-2.2.0%2Bcu121.zip
+    # )
+
+    FetchContent_Declare(
+        libtorch
+        URL ${LIBTORCH_URL}
+    )
+
+    FetchContent_MakeAvailable(libtorch)
+
+    # Tell CMake where TorchConfig.cmake lives
+    set(Torch_DIR
+        ${libtorch_SOURCE_DIR}/share/cmake/Torch
+        CACHE PATH "Torch CMake config directory" FORCE
+    )
+
+    find_package(Torch REQUIRED)
+
+endif()
+
+
+
 # TODO: see if there is a better way than include_directories command
 include_directories(include/FoxFlowDGGML3D/FoxFlowDGGML/dependencies/YAGL/include)
 include_directories(include/FoxFlowDGGML3D/FoxFlowDGGML/thirdparty/simdjson)

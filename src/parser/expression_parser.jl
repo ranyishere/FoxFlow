@@ -1,5 +1,3 @@
-
-
 function parse_expression!(tokens)
     return parse_assignment!(tokens)
 end
@@ -10,6 +8,7 @@ function parse_assignment!(tokens)  # lowest precedence, right-assoc
         skip_eol!(tokens)
         op = popfirst!(tokens)               # '=' or compound like PlusEqToken if you add them
         right = parse_assignment!(tokens)    # right-associative
+        skip_eol!(tokens)
         return AssignNode(op, left, right)
     end
     return left
@@ -21,6 +20,8 @@ function parse_logical_or!(tokens)
         skip_eol!(tokens)
         op = popfirst!(tokens)
         right = parse_logical_and!(tokens)
+
+        skip_eol!(tokens)
         left = BinaryOpNode(op, left, right)  # keep a distinct node type if you need short-circuit codegen
     end
     return left
@@ -32,6 +33,7 @@ function parse_logical_and!(tokens)
         skip_eol!(tokens)
         op = popfirst!(tokens)
         right = parse_equality!(tokens)
+        skip_eol!(tokens)
         left = BinaryOpNode(op, left, right)
     end
     return left
@@ -43,6 +45,7 @@ function parse_equality!(tokens)  # ==, !=
         skip_eol!(tokens)
         op = popfirst!(tokens)
         right = parse_relational!(tokens)
+        skip_eol!(tokens)
         left = BinaryOpNode(op, left, right)
     end
     return left
@@ -57,6 +60,7 @@ function parse_relational!(tokens)  # <, <=, >, >=
         skip_eol!(tokens)
         op = popfirst!(tokens)
         right = parse_additive!(tokens)
+        skip_eol!(tokens)
         left = BinaryOpNode(op, left, right)
     end
     return left
@@ -69,6 +73,7 @@ function parse_additive!(tokens)    # +, -
         skip_eol!(tokens)
         op = popfirst!(tokens)
         right = parse_multiplicative!(tokens)
+        skip_eol!(tokens)
         left = BinaryOpNode(op, left, right)
     end
     return left
@@ -81,6 +86,7 @@ function parse_exponential!(tokens)
         op = popfirst!(tokens)
         # Right-associative, so we recursively call parse_exponential!
         right = parse_exponential!(tokens)
+        skip_eol!(tokens)
         left = BinaryOpNode(op, left, right)
     end
     return left
@@ -93,6 +99,7 @@ function parse_multiplicative!(tokens)   # *, /
         skip_eol!(tokens)
         op = popfirst!(tokens)
         right = parse_factor!(tokens)
+        skip_eol!(tokens)
         left = BinaryOpNode(op, left, right)
     end
     return left

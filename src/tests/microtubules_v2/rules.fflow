@@ -1,0 +1,190 @@
+rules Microtubule {
+
+    start_to_node := (start : StartType) << (start_pos : FixedList <<3, Float>> ) >> 
+            -> (p1 : Nucleator) (b0 : CellBoundary) << (nuc_pos : FixedList <<3, Float>>, nuc_count : FixedList <<2, Integer >>),
+        ( b_pos : FixedList <<3, Float >>, b_unit : FixedList <<3, Float >>, b_count : FixedList <<2, Float>> ) >> with (heaviside(10,1)) where {
+
+        nuc_pos[0] = 0 + buffer
+        nuc_pos[1] = 0 + buffer
+        nuc_pos[2] = 0
+
+        nuc_count = [10, 10]
+
+        b_pos = [0.0, 0.0, 0.0]
+        b_unit = [1.0, 1.0, 1.0]
+
+        b_count = [1, 1]
+
+    }
+
+    #### Creates nuclear grid ####
+#     create_nucleator_grid_x := (p1 : Nucleator) << ( nuc_pos : FixedList <<3, Float>>, nuc_count : FixedList <<2, Integer>> ) >> ->
+#         (p1 : Nucleator) (p2 : Nucleator) << (nuc_pos : FixedList <<3, Float>>, nuc_count_1 : FixedList <<2, Float >> ),
+#         (nuc_pos_2 : FixedList <<3, Float>>, nuc_count_2 : FixedList <<2, Integer >>) >> with (indicator( 0 != nuc_count[0])) where {
+# 
+#         nuc_count_1 = [ 0, nuc_count[1] ]
+# 
+#         nuc_pos_2 = [ nuc_pos[0] + offset, nuc_pos[1], 0]
+#         nuc_count_2 = [ nuc_count[0] - 1, nuc_count[1] ]
+#     }
+# 
+#     create_nucleator_grid_y := (p1 : Nucleator) << ( nuc_pos : FixedList <<3, Float>>, nuc_count : FixedList <<2, Integer>> ) >> ->
+#         (p1 : Nucleator) (p2 : Nucleator) << (nuc_pos : FixedList <<3, Float>>, nuc_count_1 : FixedList <<2, Float >> ),
+#         (nuc_pos_2 : FixedList <<3, Float>>, nuc_count_2 : FixedList <<2, Integer >>) >> with (indicator( 0 != nuc_count[1])) where {
+# 
+#         nuc_count_1 = [ nuc_count[0], 0 ]
+# 
+#         nuc_pos_2 = [ nuc_pos[0] , nuc_pos[1] + offset, 0]
+#         nuc_count_2 = [ nuc_count[0], nuc_count[1] - 1]
+#     }
+
+    #### Creates nuclear grid end ####
+
+
+#     make_boundary_bottom := (b0 : CellBoundary) << (cb_pos : FixedList <<3, Float>>, cb_unit : FixedList << 3, Float>>, cb_count : FixedList << 2, Float >> ) >> ->
+#         (b0 : CellBoundary) -- (b1 : CellBoundary) << ( cb_pos : FixedList <<3, Float>>, cb_unit : FixedList << 3, Float>>, cb0_count : FixedList << 2, Integer >> ),
+#         ( cb_pos_1 : FixedList <<3, Float>>, cb_unit : FixedList <<3, Float >>, cb_count_1 : FixedList <<2, Float >> ) >> with (
+#             indicator(cb_count[0] != 0) * indicator(cb_count[0] != boundary_pts) * indicator(cb_unit[0] == 1)
+#             * indicator(cb_count[0] <= boundary_pts) * 1.1
+#         ) where {
+# 
+#         cb0_count = [ 0, cb_count[1] ]
+#         cb_pos_1 = [ cb_pos[0] + boundary_offset, cb_pos[1], cb_pos[2] ]
+#         cb_count_1 = [ cb_count[0] + 1, cb_count[1] ]
+# 
+#     }
+# 
+#     make_boundary_right := (b0 : CellBoundary) << (cb_pos : FixedList <<3, Float>>, cb_unit : FixedList << 3, Float>>, cb_count : FixedList << 2, Float >> ) >> ->
+#         (b0 : CellBoundary) -- (b1 : CellBoundary) << ( cb_pos : FixedList <<3, Float>>, cb_unit : FixedList << 3, Float>>, cb0_count : FixedList << 2, Integer >> ),
+#         ( cb_pos_1 : FixedList <<3, Float>>, cb_unit_1 : FixedList <<3, Float >>, cb_count_1 : FixedList <<2, Float >> ) >> with (
+# 
+#             indicator(cb_count[0] >= boundary_pts) * indicator(cb_count[1] != 0) * indicator(cb_count[1] != boundary_pts) 
+#             * indicator(cb_unit[1] == 1) * 1.1
+# 
+#         ) where {
+# 
+#         cb0_count = [ cb_count[0], 0 ]
+#         cb_pos_1 = [ cb_pos[0], cb_pos[1] + boundary_offset, cb_pos[2] ]
+#         cb_unit_1 = [ -1, cb_unit[1], cb_unit[2] ]
+#         cb_count_1 = [ cb_count[0], cb_count[1] + 1]
+# 
+#     }
+# 
+# 
+#     make_boundary_top := (b0 : CellBoundary) << (cb_pos : FixedList <<3, Float>>, cb_unit : FixedList << 3, Float>>, cb_count : FixedList << 2, Float >> ) >> ->
+#         (b0 : CellBoundary) -- (b1 : CellBoundary) << ( cb_pos : FixedList <<3, Float>>, cb_unit_0 : FixedList << 3, Float>>, cb_count : FixedList << 2, Integer >> ),
+#         ( cb_pos_1 : FixedList <<3, Float>>, cb_unit_1 : FixedList <<3, Float >>, cb_count_1 : FixedList <<2, Float >> ) >> with (
+# 
+#             indicator( (cb_count[0]) <= (2*boundary_pts - 2) ) * indicator( (cb_count[0]) >= boundary_pts )
+#             * indicator( cb_count[1] >= boundary_pts )
+#             * indicator(cb_unit[0] == -1) * indicator(cb_unit[1] == 1) * 1.1
+# 
+#         ) where {
+# 
+#         cb_unit_0 = [ 1, cb_unit[1], cb_unit[2] ]
+# 
+#         cb_pos_1 = [ cb_pos[0] - boundary_offset, cb_pos[1], cb_pos[2] ]
+#         cb_unit_1 = [ -1, cb_unit[1], cb_unit[2] ]
+#         cb_count_1 = [ cb_count[0] + 1, cb_count[1] ]
+# 
+#     }
+# 
+#     make_boundary_left := (b0 : CellBoundary) << (cb_pos : FixedList <<3, Float>>, cb_unit : FixedList << 3, Float>>, cb_count : FixedList << 2, Float >> ) >> ->
+#         (b0 : CellBoundary) -- (b1 : CellBoundary) << ( cb_pos : FixedList <<3, Float>>, cb_unit_0 : FixedList << 3, Float>>, cb_count : FixedList << 2, Integer >> ),
+#         ( cb_pos_1 : FixedList <<3, Float>>, cb_unit_1 : FixedList <<3, Float >>, cb_count_1 : FixedList <<2, Float >> ) >> with (
+# 
+#             indicator( (cb_count[0]) > (2*boundary_pts - 2) ) * indicator( cb_count[1] >= boundary_pts )
+#             * indicator(cb_count[1] <= (2*boundary_pts - 2)) * 1.1
+# 
+#         ) where {
+# 
+#         cb_unit_0 = [ 1, cb_unit[1], cb_unit[2] ]
+# 
+#         cb_pos_1 = [ cb_pos[0], cb_pos[1] - boundary_offset, cb_pos[2] ]
+# 
+#         cb_unit_1 = [ -1, -1, cb_unit[2] ]
+#         cb_count_1 = [ cb_count[0], cb_count[1] + 1 ]
+# 
+#     }
+
+    create_microtubule := (p1 : Nucleator) << ( nuc_pos : FixedList <<3, Float>>, nuc_count : FixedList<<2, Integer >> ) >> -> 
+        (p1 : Nucleator)
+        (p2 : Retraction) -- (p3 : Intermediate)
+        (p3 : Intermediate) -- (p4 : Positive) << (nuc_pos : FixedList <<3, Float>>, nuc_count : FixedList<<2, Integer >> ),
+        (ret_pos : FixedList<<3, Float>>, ret_unit : FixedList<<3, Float>> ), (im_pos : FixedList<<3, Float>> , im_unit : FixedList <<3, Float>> ),
+        (im_pos : FixedList<<3, Float>> , im_unit : FixedList <<3, Float>> ), (p_pos : FixedList<<3, Float>>, p_unit : FixedList<<3, Float>> ) >> with (creation_factor * creation_rate*100) where { 
+
+        mt_seg_len : Float := ~UniformDistribution(mt_min_segment_init, mt_max_segment_init)
+        mt_orientation : Float := ~UniformDistribution(0.0, 2.0 * 3.1415)
+
+        x_im : Float := nuc_pos[0] + ~UniformDistribution(-1*varepsilon, varepsilon)
+        y_im : Float := nuc_pos[1] + ~UniformDistribution(-1*varepsilon, varepsilon)
+
+        x_c : Float := x_im
+        y_c : Float := y_im
+        z_c : Float := nuc_pos[2]
+
+        x_s : Float := 0
+        y_s : Float := mt_seg_len
+
+        x_r_t : Float := x_s * cos(mt_orientation) + y_s * sin(mt_orientation)
+        y_r_t : Float := -x_s * sin(mt_orientation) + y_s * cos(mt_orientation)
+
+        x_r : Float := x_c + x_r_t
+        y_r : Float := y_c + y_r_t
+        z_r : Float := 0
+
+        x_l : Float := x_c - x_r_t
+        y_l : Float := y_c - y_r_t
+        z_l : Float := 0
+
+        ret_pos = [x_l, y_l, z_l]
+        im_pos = [x_c, y_c, z_c]
+        p_pos = [x_r, y_r, z_r]
+
+        tmp_x : Float := (x_r - x_im)/HELP::distance(x_im, y_im, x_r, y_r)
+        tmp_y : Float := (y_r - y_im)/HELP::distance(x_im, y_im, x_r, y_r)
+
+        # Setting unit vectors
+        ret_unit = [tmp_x, tmp_y, 0]
+        im_unit = [tmp_x, tmp_y, 0]
+        p_unit = [tmp_x, tmp_y, 0]
+
+    }
+
+    # grow microtubule by stretching.
+    growing_rule_stretch := (im : Intermediate) -- (pos : Positive) << ( im_pos : FixedList<<3, Float>> , im_unit : FixedList<<3, Float>> ),
+        ( p_pos : FixedList<<3, Float>>, p_unit : FixedList<<3, Float>> ) >>  ->
+        (new_im : Intermediate) -- (new_pos : Positive) << (im_pos : FixedList<<3, Float>>, im_unit : FixedList<<3, Float>>),
+                                                           (dpos : FixedList<<3, Float>>, p_unit : FixedList<<3, Float>>) >>
+        solving (dpos[0] := D(im_pos[0],t),  dpos[1] := D(im_pos[1], t)) {
+
+            check : Float := HELP::distance(im_pos[0], im_pos[1], p_pos[0], p_pos[1])
+
+            # TODO: Allow definition nodes and using setting parameters.
+            dpos[0] : ODE = 0.0615 * p_unit[0] * 4
+            dpos[1] : ODE = 0.0615 * p_unit[1] * 4
+
+    }
+
+    boundary_catastrophe := (im0 : Intermediate) -- (pos : Positive)
+        (b0 : CellBoundary) -- (b1 : CellBoundary)
+        << (im_pos : FixedList<<3, Float>> , im_unit : FixedList<<3, Float>> ), (p_pos : FixedList<<3, Float>>, p_unit : FixedList <<3, Float>> ),
+            ( b0_pos : FixedList<<3, Float>>, b0_unit : FixedList<<3, Float>> , b0_count : FixedList<<2, Integer>> ),
+            ( b1_pos : FixedList<<3, Float>>, b1_unit : FixedList<<3, Float>> , b1_count : FixedList<<2, Integer>> )
+        >>  -> (im0 : Intermediate) -- (ret : Retraction)
+        (b0 : CellBoundary) -- (b1 : CellBoundary)
+        << (im_pos : FixedList<<3, Float>>, im_unit : FixedList<<3, Float>>), (p_pos : FixedList<<3, Float>>, np_unit : FixedList<<3, Float>> ),
+            ( b0_pos : FixedList<<3, Float>>, b0_unit : FixedList<<3, Float>>, b0_count : FixedList<<2, Integer>>),
+            ( b1_pos : FixedList<<3, Float>>, b1_unit : FixedList<<3, Float>> , b1_count : FixedList<<2, Integer>> )
+        >>  
+    with (
+            indicator(HELP::minimum_distance_2d(p_pos[0], p_pos[1], b0_pos[0], b0_pos[1], b1_pos[0], b1_pos[1]) <= 1.5) * boundary_cic*100
+    ) where {
+
+        np_unit = [ -p_unit[0], -p_unit[1], p_unit[2] ]
+
+    }
+
+
+}

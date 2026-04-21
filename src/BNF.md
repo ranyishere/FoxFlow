@@ -1,133 +1,532 @@
-## Symbol
-<symbol-name> ::= [Aa-Zz] | [0-9] | _ | <symbol-name>
-<symbol-parameters> ::= "<<" <symbol-parameter> ">> | ""
-<symbol-parameter> ::= "(" <identifier-list> ")" | <identifier-list> | <literal>
-<identifier-list> ::= <symbol-name> | <symbol-name>, <identifier-list>
+# FoxFlow BNF Grammar
 
-##  Types
+This document describes the grammar of the FoxFlow DSL as implemented by the
+parser (`parser/main_parser_op.jl`) and AST (`parser/ast_nodes.jl`).
+
+---
+
+## Terminals & Lexical Elements
+
+```
+<symbol-name>       ::= <letter> { <letter> | <digit> | "_" }
+<letter>            ::= [A-Z] | [a-z]
+<digit>             ::= [0-9]
+<integer>           ::= <digit> { <digit> }
+<float>             ::= <digit> { <digit> } "." <digit> { <digit> }
+<number>            ::= <integer> | <float>
+<string-literal>    ::= '"' { <any-char> } '"'
+<literal>           ::= <integer> | <float> | <symbol-name>
+```
+
+---
+
+## Top-Level File Structure
+
+A FoxFlow file consists of one or more sections in any order:
+
+```
+<file> ::= { <section> }
+
+<section> ::= <type-section>
+            | <parameters-section>
+            | <functions-section>
+            | <rule-section>
+            | <simulations-section>
+```
+
+---
+
+## Symbol Parameters
+
+Symbol parameters appear after `<<` and before `>>`, used to annotate types,
+rule nodes, and rule graph patterns with typed attribute bindings.
+
+```
+<symbol-parameters> ::= "<<" <symbol-parameter-list> ">>"
+                       | ε
+
+<symbol-parameter-list> ::= <symbol-parameter> { "," <symbol-parameter> }
+
+<symbol-parameter> ::= <named-parameter>
+                     | <expression>
+
+<named-parameter> ::= <symbol-name> ":" <type-signature>
+```
+
+---
+
+## Type Signatures
+
+```
+<type-signature> ::= <type-name> <symbol-parameters>
+                   | <type-name> "->" <type-signature>
+                   | <type-name>
+
+<type-name> ::= <symbol-name> | <built-in-type>
+
+<built-in-type> ::= "Float" | "Integer" | "FixedList" | "ODE" | "Type"
+```
+
+---
+
+## Types Section
+
+Declares the named types available in a namespace. Each type has a name,
+optional generic parameters, and a type signature.
+
+```
 <type-section> ::= "types" <symbol-name> "{" <type-declaration-list> "}"
 
-<type-declaration-list> ::= <type-declaration> "\n" | <type-declaration> <type-declaration-list>
+<type-declaration-list> ::= { <type-declaration> "\n" }
 
-<type-declaration> ::= <symbol-name> <symbol-parameters> ":" <type-signature-list>
+<type-declaration> ::= <symbol-name> <symbol-parameters> ":" <type-signature>
+```
 
-<type-assignment-list> ::= <type-assignment> | <type-assignment> "\n" <type-assignment-list>
-                    
-<type-assignment> ::= <symbol-name> <symbol-parameters> ":" <type-signature-list> ":=" <literal>
-                    | <symbol-name> <symbol-parameters> ":" <type-signature-list> ":=" "{" <type-declaration-list> "}"
-                    | <symbol-name> ":" <type-signature-list> ":=" "{" <type-declaration-list> "}"
-                    | <symbol-name> ":" <type-signature-list> ":=" <literal>
-                    | <symbol-name> ":" <type-signature-list> ":=" <expression>
+### Examples
 
-<type-update-list> ::= <type-update> | <type-update> "\n" <type-update-list>
-<type-update> ::= <symbol-name> <symbol-parameters> ":" <type-signature-list> "=" <literal>
-                    | <symbol-name> <symbol-parameters> ":" <type-signature-list> "=" "{" <type-declaration-list> "}"
-                    | <symbol-name> ":" <type-signature-list> "=" "{" <type-declaration-list> "}"
-                    | <symbol-name> ":" <type-signature-list> "=" <literal>
-                    | <symbol-name> ":" <type-signature-list> "=" <expression>
+```
+types Microtubule {
+    Intermediate << Position : FixedList<<3, Float>>,
+                    Direction : FixedList<<3, Float>> >> : Type
+    Positive     << Position : FixedList<<3, Float>>,
+                    Direction : FixedList<<3, Float>> >> : Type
+    Nucleator    << Position : FixedList<<3, Float>>,
+                    Count : FixedList<<2, Integer>> >> : Type
+}
+```
 
+---
 
-<type-signature-list> ::= <symbol-name> "->" <type-signature-list> 
-                        | <symbol-name>
-                        | <built-in-type>
+## Parameters Section
 
-<built-in-type> ::= "Float" | "Integer"
+Declares simulation parameters as typed, named values.
 
-## Parameters
+```
 <parameters-section> ::= "parameters" <symbol-name> "{" <parameter-list> "}"
-<parameter-list> ::= <parameter> "\n" | <parameter> <parameter-list> | nothing
-<parameter> ::= <type-declaration> | <type-assignment>
 
-## Functions
-<functions> ::= "functions" <symbol-name> "{" <function-list> "}"
-<function-list> ::= <function> <function-list> | <function> "\n"
-<function> ::= <type-assignment>
+<parameter-list> ::= { <parameter> "\n" }
+
+<parameter> ::= <symbol-name> <symbol-parameters> ":" <type-signature> ":=" <parameter-value>
+
+<parameter-value> ::= "{" <type-declaration-list> "}"
+                    | <expression>
+```
+
+### Examples
+
+```
+parameters Microtubule {
+    creation_rate : Float := 0.5
+    offset : Float := 10.0
+    boundary_pts : Integer := 10
+}
+```
+
+---
 
 ## Expressions
-<expression> ::= <term>
-                | <expression> "+" <term> 
-                | <expression> "-" <term>
-<term> ::= <factor> 
-            | <term> "\**" <factor> 
-            | <term> "/" <factor>
+Operator precedence (lowest to highest):
 
-<factor> ::= <number> 
-            | <variable> 
-            | "(" <expression> ")"
+1. Assignment: `=`, `:=`
+2. Logical OR: `||`
+3. Logical AND: `&&`
+4. Equality: `==`, `!=`
+5. Relational: `<`, `<=`, `>`, `>=`
+6. Additive: `+`, `-`
+7. Multiplicative: `*`, `/`
+8. Exponential: `^` (right-associative)
+9. Unary: `-`, `+`, `!`, `~`
+10. Postfix: index access `[...]`, function call `(...)`
 
-<number> ::= <digit> | <digit> <number>
-<digit> ::= [0-9]
-<variable> ::= <letter> | <letter> <variable>
-<letter> ::= [Aa-Zz] 
+```
+<expression> ::= <assignment>
 
-## Rules
-<rule-section> ::=  "rules" <symbol-name> "{" <rules-list> "}"
-<rule-list> ::= <rule> <rules-list> | <rule>
+<assignment> ::= <logical-or> [ ("=" | ":=") <assignment> ]
 
-<rule> ::= <symbol-name> ":=" <parameterized-types-left>  <symbol-parameters> 
-        "->" <parameterized-types-right> <symbol-parameters> "with" "(" <with-clause> ")" "where" "{" <where-clause> "}" "\n"
+<logical-or> ::= <logical-and> { "||" <logical-and> }
 
-<solve-rule> ::= <parameterized-type-left> "->" <parameterized-type-right> "solving" <solve-clause> "where" "{" <where-clause> "}" "\n"
+<logical-and> ::= <equality> { "&&" <equality> }
 
-<parameterized-types-left> ::= <parameterized-types> "," | <parameterized-type>
-<parameterized-types-right> ::= <parameterized-types> "," | <parameterized-type>
-<parameterized-types> ::= <parameterized-types> "," | <parameterized-type>
+<equality> ::= <relational> { ("==" | "!=") <relational> }
 
-<parameterized-type> ::= <symbol-name> ":" <type-signature-list> 
+<relational> ::= <additive> { ("<" | "<=" | ">" | ">=") <additive> }
 
-# TODO:  define predicate and expressions to be a list of them.
-<with-clause> ::= "indicator" "(" <predicate> ")" | <function-type> "\n"
-<solve-clause> ::= <function-type> "solving" "{" <expression> "}" "\n" | <function-type> "\n"
+<additive> ::= <multiplicative> { ("+" | "-") <multiplicative> }
 
-<where-clause> ::= <expressions> | <type-assignment-list>
+<multiplicative> ::= <exponential> { ("*" | "/") <exponential> }
 
-<expressions> ::= <expression> "\n" <expressions> 
-                | <expression>
+<exponential> ::= <factor> { "^" <exponential> }
 
-## Observables
-<observables> ::=  "observables" <symbol-name> "{" <observables-list> "}"
-<observable-list> ::= <observable> <observable-list> | <observable>
-<observable> ::= <type-declaration>
+<factor> ::= <integer>
+           | <float>
+           | <identifier-or-call>
+           | <unary-expression>
+           | <grouped-expression>
+           | <array-literal>
 
-## State
-<states> ::=  "states" <symbol-name> "{" <states-list> "}"
-<states-list> ::= <state> <states-list> | <state>
-<state> ::= <type-declaration>
+<identifier-or-call> ::= [ <symbol-name> "::" ] <symbol-name>
+                          [ "(" <arg-list> ")" ]
+                          { "[" <index-list> "]" }
 
-## Grammar
-<grammar> ::= "grammar" <symbol-name> ":" <time-type> 
-          "<<" <parameterized-types> ">>" "{" <rules> "}"
-<time-type> ::= "DiscreteTime" | "ContinuousTime"
+<unary-expression> ::= "-" <factor>
+                     | "+" <factor>
+                     | "!" <factor>
+                     | "~" <factor>
 
+<grouped-expression> ::= "(" <expression> ")"
 
-## Functions
-<function-parameterized-types> ::= <function-parameterized-types> | ""
-<function-parameterized-type> ::= <symbol-name> ":" <type-signature-list>
+<array-literal> ::= "[" "]"
+                  | "[" <expression> { "," <expression> } "]"
 
-# Function Section
+<arg-list> ::= <expression> { "," <expression> }
+
+<index-list> ::= <index-element> { "," <index-element> }
+
+<index-element> ::= <expression>
+                  | <slice>
+
+<slice> ::= [ <expression> ] ":" [ <expression> ] [ ":" <expression> ]
+```
+
+---
+
+## Rules Section
+
+```
+<rule-section> ::= "rules" <symbol-name> "{" <rule-list> "}"
+
+<rule-list> ::= { <rule> }
+```
+
+### Rule Structure
+
+A rule has a name, a LHS graph pattern, an optional LHS parameter block,
+a RHS graph pattern, an optional RHS parameter block, and a modify clause.
+
+```
+<rule> ::= <symbol-name> ":="
+           <rule-graph-pattern> [ <symbol-parameters> ]
+           "->"
+           <rule-graph-pattern> [ <symbol-parameters> ]
+           <modify-clause>
+```
+
+### Rule Graph Patterns (LHS and RHS)
+
+The LHS and RHS of a rule are **graph patterns** — they describe the
+structure of the sub-graph to match (LHS) or produce (RHS). Each element is
+either a standalone typed node or an undirected edge connecting two typed
+nodes. Parentheses around each node are syntactic delimiters consumed by the
+parser.
+
+**Important:** These are *not* assignments. There are no curly braces or
+`:=` here — just `(name : Type)` declarations, optionally connected with
+`--` edges.
+
+```
+<rule-graph-pattern> ::= <graph-element> { <graph-element> }
+
+<graph-element> ::= <type-instance>
+                  | <type-instance> "--" <type-instance>
+
+<type-instance> ::= "(" <symbol-name> ":" <type-signature> ")"
+```
+
+Edges can chain: when the parser sees `(a : T) -- (b : T)` followed by
+another `-- (c : T)`, the rightmost node of the previous edge (`b`) becomes
+the left node of the new edge, producing two `UndirectedTypeEdgeNode`s
+sharing node `b`.
+
+### Rule Parameter Blocks
+
+The `<< ... >>` blocks that follow the LHS and RHS graph patterns bind
+user-chosen names to the attributes of each graph node, grouped by node in
+the order the nodes appear in the pattern:
+
+```
+<< (attr1 : Type1, attr2 : Type2),   -- bindings for graph node 1
+   (attr3 : Type3) >>                 -- bindings for graph node 2
+```
+
+Each named parameter here is a **binding** that gives the user a name to
+refer to that node's attribute in the modify clause (where body or solving
+body).
+
+### Examples
+
+```
+# One LHS node, two RHS nodes (no edges)
+start_to_node := (start : StartType) << (start_pos : FixedList<<3, Float>>) >>
+    -> (p1 : Nucleator) (b0 : CellBoundary)
+       << (nuc_pos : FixedList<<3, Float>>, nuc_count : FixedList<<2, Integer>>),
+          (b_pos : FixedList<<3, Float>>, b_unit : FixedList<<3, Float>>) >>
+    with (heaviside(10, 1)) where { ... }
+
+# Edge on both sides
+growing_rule := (im : Intermediate) -- (pos : Positive)
+    << (im_pos : FixedList<<3, Float>>), (p_pos : FixedList<<3, Float>>) >>
+    -> (new_im : Intermediate) -- (new_pos : Positive)
+       << (im_pos : FixedList<<3, Float>>), (dpos : FixedList<<3, Float>>) >>
+    solving (...) { ... }
+
+# Multiple disconnected components (two edges)
+boundary_catastrophe := (im0 : Intermediate) -- (pos : Positive)
+    (b0 : CellBoundary) -- (b1 : CellBoundary)
+    << (im_pos : FixedList<<3, Float>>), (p_pos : FixedList<<3, Float>>),
+       (b0_pos : FixedList<<3, Float>>), (b1_pos : FixedList<<3, Float>>) >>
+    -> (im0 : Intermediate) -- (ret : Retraction)
+       (b0 : CellBoundary) -- (b1 : CellBoundary)
+       << ... >>
+    with (...) where { ... }
+```
+
+---
+
+## Modify Clauses
+
+Every rule has exactly one modify clause, either a `with` clause (for
+stochastic / propensity-driven rules) or a `solving` clause (for ODE-based
+rules).
+
+```
+<modify-clause> ::= <with-clause>
+                  | <solve-clause>
+```
+
+### With Clause
+
+```
+<with-clause> ::= "with" <propensity> "where" "{" <where-body> "}"
+
+<propensity> ::= "(" <expression> ")"
+
+<where-body> ::= { <where-entry> "\n" }
+
+<where-entry> ::= <definition>
+                | <type-instance-update>
+```
+
+#### Definition (intermediate variable)
+
+Introduces a new local variable computed from an expression. Used in both
+`where` bodies and `solving` bodies.
+
+```
+<definition> ::= <symbol-name> ":" <type-signature> ":=" <expression>
+```
+
+#### Type Instance Update (attribute assignment)
+
+Assigns a value to a bound attribute name. The LHS target can be a bare name
+(assigns the whole attribute) or an indexed name (assigns a single element of
+a tensor attribute).
+
+```
+<type-instance-update> ::= <lhs-target> "=" <update-value>
+
+<lhs-target> ::= <symbol-name>
+               | <symbol-name> { "[" <index-list> "]" }
+
+<update-value> ::= "{" <type-declaration-list> "}"
+                 | <expression>
+```
+
+### Examples (where body)
+
+```
+where {
+    mt_seg_len : Float := ~UniformDistribution(mt_min, mt_max)
+
+    x_c : Float := nuc_pos[0] + ~UniformDistribution(-1*eps, eps)
+
+    ret_pos = [x_l, y_l, z_l]
+    im_pos = [x_c, y_c, z_c]
+
+    nuc_count = [0, nuc_count[1]]
+
+    np_unit = [ -p_unit[0], -p_unit[1], p_unit[2] ]
+}
+```
+
+---
+
+### Solve Clause
+
+```
+<solve-clause> ::= "solving" "(" <binding-variable-list> ")"
+                   "{" <solve-body> "}"
+
+<binding-variable-list> ::= <binding-variable> { "," <binding-variable> }
+
+<binding-variable> ::= <binding-name> ":=" "D" "(" <ode-var-list> ")"
+
+<binding-name> ::= <symbol-name>
+                 | <symbol-name> "[" <expression> "]"
+
+<ode-var-list> ::= <ode-var> { "," <ode-var> }
+
+<ode-var> ::= <symbol-name>
+            | <symbol-name> "[" <expression> "]"
+```
+
+The binding variables establish which derivatives are being solved. For
+example, `dpos[0] := D(im_pos[0], t)` says "`dpos[0]` is the time
+derivative of `im_pos[0]`".
+
+```
+<solve-body> ::= { <solve-entry> "\n" }
+
+<solve-entry> ::= <ode-equation>
+                | <definition>
+
+<ode-equation> ::= <ode-name> ":" "ODE" "=" <expression>
+
+<ode-name> ::= <symbol-name>
+             | <symbol-name> "[" <index-list> "]"
+```
+
+A `<definition>` inside a solving body uses `:=` (define token) and creates
+an intermediate local variable, while an `<ode-equation>` uses `=` (equal
+token) and contributes to the right-hand side of the ODE system.
+
+### Examples (solving)
+
+```
+solving (dpos[0] := D(im_pos[0], t), dpos[1] := D(im_pos[1], t)) {
+
+    check : Float := HELP::distance(im_pos[0], im_pos[1], p_pos[0], p_pos[1])
+
+    dpos[0] : ODE = 0.0615 * p_unit[0] * 4
+    dpos[1] : ODE = 0.0615 * p_unit[1] * 4
+}
+```
+
+---
+
+## Functions Section
+
+```
 <functions-section> ::= "functions" <symbol-name> "{" <function-list> "}"
-<function-list> ::= <function-declaration> <function-list> | <function-declaration>
-<function-type-signature> ::= "<<" <parameterized-types> ">>" <symbol-name> "->"
-                        | <symbol-name>
 
-<function-declaration> ::= <symbol-name>  ":" "Function" <function-type-signature> ":=" "{" <function-expression-list> "return" <expression> "}" "\n"
+<function-list> ::= { <function-declaration> "\n" }
 
-<function-expression-list> ::= <expressions> | <type-assignment-list>
-<function-expression> ::= "return" <expression>
+<function-declaration> ::= <symbol-name> ":" <function-type-signature>
+                           ":=" <function-body>
 
-## Simulations
-<simulations> ::=  "simulations" <symbol-name> "{" <simulations-list> "}"
-<simulations-list> ::= <simulation> <simulation-list> | <simulation>
-<simulation> ::= "ApproximateSimulation" "<<" <parameterized-types> ">>" "\n"
+<function-type-signature> ::= "Function" "<<" "(" <function-arg-list> ")" ">>"
+                              "->" <return-type>
 
-<rules> ::= <rules> | <rule> | <solve-rule>
-<grammar-signature> ::= <parameterized-types-left> "->" <parameterized-types-right>
+<function-arg-list> ::= <function-arg> { "," <function-arg> }
 
-<predicate> ::= <expression> "!=" <expression> 
-            | <expression> "<" <expression> 
-            | <expression> ">" <expression> 
-            | <expression> "==" <expression>
+<function-arg> ::= <symbol-name> ":" <arg-type>
 
-<function-args> ::= <symbol-name> | <symbol-name> "," <function-args>
-<function-type> ::= <symbol-name> "(" <function-args> ")"
-<literal> ::= [0-9] | [Aa-Zz] | <literal>
+<arg-type> ::= <type-name>
+             | "FixedList" "<<" <integer> "," <type-name> ">>"
+
+<return-type> ::= <type-name>
+                | "FixedList" "<<" <integer> "," <type-name> ">>"
+```
+
+### Function Body
+
+```
+<function-body> ::= <regular-function-body>
+                  | <model-load>
+
+<regular-function-body> ::= "{" { <function-statement> "\n" }
+                            "return" <expression> "}"
+
+<function-statement> ::= <symbol-name> ":" <type-name> ":=" <expression>
+
+<model-load> ::= "load" "(" <string-literal> ")"
+```
+
+### Examples
+
+```
+functions Microtubule {
+    distance : Function << (x1 : Float, y1 : Float, x2 : Float, y2 : Float) >> -> Float := {
+        dx : Float := x2 - x1
+        dy : Float := y2 - y1
+        return sqrt(dx * dx + dy * dy)
+    }
+}
+```
+
+---
+
+## Simulations Section
+
+```
+<simulations-section> ::= "simulations" <symbol-name> "{"
+                           <sim-declaration-list>
+                          "}"
+
+<sim-declaration-list> ::= { <sim-declaration> "\n" }
+
+<sim-declaration> ::= <symbol-name> ":" <sim-type> ":=" <sim-value>
+
+<sim-type> ::= "SimulationParameters"
+             | "State"
+             | "SimulationRules"
+             | "SimulationTypes"
+             | "Integer"
+             | "Float"
+             | "Simulation"
+
+<sim-value> ::= <load-file>
+              | <number>
+              | <run-simulation>
+
+<load-file> ::= "load" "(" <string-or-identifier> ")"
+
+<string-or-identifier> ::= <string-literal> | <symbol-name>
+
+<run-simulation> ::= "RunSimulation" "("
+                     <symbol-name> ","
+                     <symbol-name> ","
+                     <symbol-name> ","
+                     <symbol-name> ","
+                     <symbol-or-number>
+                     ")"
+
+<symbol-or-number> ::= <symbol-name> | <number>
+```
+
+### Examples
+
+```
+simulations Microtubule {
+    params : SimulationParameters := load("params.fflow")
+    types  : SimulationTypes      := load("types.fflow")
+    rules  : SimulationRules      := load("rules.fflow")
+    time   : Float                := 100.0
+    sim    : Simulation           := RunSimulation(types, params, rules, funcs, time)
+}
+```
+
+---
+
+## Built-in Functions
+
+These are not declared in the grammar but are recognised by the code
+generator:
+
+| Function | Description |
+|----------|-------------|
+| `indicator(pred)` | 1.0 if predicate is true, else 0.0 |
+| `heaviside(x, n)` | Heaviside step function |
+| `cos(x)`, `sin(x)`, `sqrt(x)` | Standard math |
+| `HELP::distance(...)` | Namespaced helper (euclidean distance) |
+| `HELP::minimum_distance_2d(...)` | Namespaced helper |
+| `~UniformDistribution(lo, hi)` | Random sample (unary `~` prefix) |
+
+---
+
+## Namespace-Qualified Identifiers
+
+Function calls and identifiers can be namespace-qualified with `::`:
+
+```
+<namespaced-call> ::= <symbol-name> "::" <symbol-name> "(" <arg-list> ")"
+```

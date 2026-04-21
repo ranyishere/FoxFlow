@@ -1,0 +1,297 @@
+rules Microtubule {
+
+  start_node_up := (start : StartType) << (start_x, start_y, start_z) >> -> 
+    (cell0 : WildType) (cell0 : HiddenMutant)
+    << (x, y, z), (vx0, vy0, vz0), (cellAge), (identity), (ux, uy, uz),
+      (x1, y1, z1), (vx1, vy1, vz1), (cellAge1), (identity1), (ux1, uy1, uz1) >> with (1.0) where {
+
+      x : Float = 2.0
+      y : Float = 2.0
+      z : Float = 2.0
+
+      vx0 : Float = 0
+      vy0 : Float = 0
+      vz0 : Float = 0
+
+      ux : Float = 1.0
+      uy : Float = 1.0
+      uz : Float = 1.0
+
+      cellAge : Float = ~UniformDistribution(0, 26)
+      identity : Float = ~NormalDistribution(1, 0.3)
+      
+      x1 : Float = 1.5
+      y1 : Float = 1.5
+      z1 : Float = 1.5
+
+      vx1 : Float = 0
+      vy1 : Float = 0
+      vz1 : Float = 0
+
+      ux1 : Float = 1.0
+      uy1 : Float = 1.0
+      uz1 : Float = 1.0
+
+      cellAge1 : Float = ~UniformDistribution(0, 26)
+      identity1 : Float = ~NormalDistribution(1, 0.3)
+
+    }
+
+    activate_mutant := (cell : HiddenMutant) << (x, y, z), (vx, vy, vz), (cellAge), (identity), (ux, uy, uz) >> -> 
+    (new_cell : Mutant) << (new_x, new_y, new_z), (nvx, nvy, nvz), (new_cellAge), (new_identity), (nux, nuy, nuz) >> with (
+        heaviside(cellAge, 26*2) ) where {
+
+
+        nvx : Float = vx
+        nvy : Float = vy
+        nvz : Float = vz
+
+        new_x : Float = x
+        new_y : Float = y
+        new_z : Float = z
+
+        new_identity : Float = identity
+
+        nux : Float = ux
+        nuy : Float = uy
+        nuz : Float = uz
+
+    }
+
+    # TODO: Add Polytype morphism
+    hidden_mutant_identity_drift := (cell0 : HiddenMutant) << (x, y, z), (vx, vy, vz), (cellAge), (identity), (ux, uy, uz)>> -> 
+    (cell1 : HiddenMutant) << (xnew, ynew, znew), (vxn, vyn, vzn), (cellAgenew), (identitynew), (uxnew, uynew, uznew)>> with (0.5) where {
+
+        muWildType : Float := 1
+
+        a : Float := 0.9753
+
+        sig_init : Float := 0.5
+        # epsilon : Float := 0.1
+        epsilon : Float := ~NormalDistribution(0,1)
+
+        xnew : Float = x
+        ynew : Float = y
+        znew : Float = z
+
+        vxn : Float = vx
+        vyn : Float = vy
+        vzn : Float = vz
+
+        cellAgenew : Float = cellAge
+
+        identitynew : Float = muWildType + a*(x-muWildType) + sig_init*sqrt(1 - a*a)*epsilon
+
+        uxnew : Float = ux
+        uynew : Float = uy
+        uznew : Float = uz
+    }
+
+
+    # TODO: Add Polytype morphism
+    mutant_identity_drift := (cell0 : Mutant) << (x, y, z), (vx, vy, vz), (cellAge), (identity), (ux, uy, uz)>> -> 
+    (cell1 : Mutant) << (xnew, ynew, znew), (vxn, vyn, vzn), (cellAgenew), (identitynew), (uxnew, uynew, uznew)>> with (0.5) where {
+
+        muWildType : Float := 1
+
+        a : Float := 0.9753
+
+        vxn : Float = vx
+        vyn : Float = vy
+        vzn : Float = vz
+
+        sig_init : Float := 0.5
+        # epsilon : Float := 0.1
+        epsilon : Float := ~NormalDistribution(0,1)
+
+        xnew : Float = x
+        ynew : Float = y
+        znew : Float = z
+
+        cellAgenew : Float = cellAge
+
+        identitynew : Float = muWildType + a*(x-muWildType) + sig_init*sqrt(1 - a*a)*epsilon
+
+        uxnew : Float = ux
+        uynew : Float = uy
+        uznew : Float = uz
+    }
+
+
+    # TODO: Add Polytype morphism
+    identity_drift := (cell0 : WildType) << (x, y, z), (cellAge), (identity), (ux, uy, uz) >> -> 
+    (cell1 : WildType) << (xnew, ynew, znew), (cellAgenew), (identitynew), (uxnew, uynew, uznew) >> with (0.5) where {
+
+        muWildType : Float := 1
+
+        a : Float := 0.9753
+
+        sig_init : Float := 0.5
+        # epsilon : Float := 0.1
+        epsilon : Float := ~NormalDistribution(0,1)
+
+        xnew : Float = x
+        ynew : Float = y
+        znew : Float = z
+
+        cellAgenew : Float = cellAge
+
+        identitynew : Float = muWildType + a*(x-muWildType) + sig_init*sqrt(1 - a*a)*epsilon
+
+        uxnew : Float = ux
+        uynew : Float = uy
+        uznew : Float = uz
+
+    }
+
+    age_cells := (cell0 : WildType) << (x, y, z), (cellAge), (identity), (ux, uy, uz), mut >> ->
+    (agedCell : WildType) <<(ax, ay, az), (da), (aidentity), (aux, auy, auz), new_mut >> solving (da := D(cellAge,t)) {
+        # speedUp : Float := 3
+        # TODO: Support constants and function calls
+        da : ODE = 1.1 * 3
+    }
+
+    mutant_age_cells := (cell0 : Mutant) << (x, y, z), (cellAge), (identity), (ux, uy, uz) >> ->
+    (agedCell : Mutant) <<(ax, ay, az), (da), (aidentity), (aux, auy, auz) >> solving (da := D(cellAge,t)) {
+        # speedUp : Float := 3
+        # TODO: Support constants and function calls
+        da : ODE = 1.1 * 3
+    }
+
+
+    divide_wild_type_x := (cell0 : WildType) << (x, y, z), (cellAge), (identity), (ux, uy, uz), (mut)>> ->
+    (cell0 : WildType) (cell1 : WildType) <<
+        (x0, y0, z0),(cellAge0), (identity0), (ux0, uy0, uz0), new_mut0
+        (x1, y1, z1),(cellAge1), (identity1), (ux1, uy1, uz1), new_mut1 >> with (heaviside(cellAge, 26)) where {
+            
+        divideNoise0 : Float := ~NormalDistribution(0, 0.01)
+        divideNoise1 : Float := ~NormalDistribution(0, 0.01)
+
+        new_mut0 : Integer = 0
+        new_mut1 : Integer = 0
+
+        x0 : Float =  x - divide_distance * divide_scale + divideNoise0
+
+        y0 : Float =  y
+        z0 : Float =  z
+
+        ux0 : Float = -1
+        uy0 : Float = 1
+        uz0 : Float = 1
+
+        cellAge0 : Float = 0
+        identity0 : Float = identity
+
+        x1 : Float =  x + divide_distance * divide_scale + divideNoise1
+        y1 : Float =  y
+        z1 : Float =  z
+
+        ux1 : Float = 1
+        uy1 : Float = 1
+        uz1 : Float = 1
+
+        cellAge1 : Float = 0
+        identity1 : Float = identity
+
+    }
+
+    mutant_divide_wild_type_x := (cell0 : Mutant) << (x, y, z), (cellAge), (identity), (ux, uy, uz) >> ->
+    (cell0 : Mutant) (cell1 : Mutant) <<
+        (x0, y0, z0),(cellAge0), (identity0), (ux0, uy0, uz0) 
+        (x1, y1, z1),(cellAge1), (identity1), (ux1, uy1, uz1) >> with (heaviside(cellAge, 26)) where {
+            
+        divideNoise0 : Float := ~NormalDistribution(0, 0.01)
+        divideNoise1 : Float := ~NormalDistribution(0, 0.01)
+
+        x0 : Float =  x - divide_distance * divide_scale + divideNoise0
+
+        y0 : Float =  y
+        z0 : Float =  z
+
+        ux0 : Float = -1
+        uy0 : Float = 1
+        uz0 : Float = 1
+
+        cellAge0 : Float = 0
+        identity0 : Float = identity
+
+        x1 : Float =  x + divide_distance * divide_scale + divideNoise1
+        y1 : Float =  y
+        z1 : Float =  z
+
+        ux1 : Float = 1
+        uy1 : Float = 1
+        uz1 : Float = 1
+
+        cellAge1 : Float = 0
+        identity1 : Float = identity
+
+    }
+
+
+    divide_wild_type_y := (cell0 : WildType) << (x, y, z), (cellAge), (identity), (ux, uy, uz) >> ->
+    (cell0 : WildType) (cell1 : WildType) <<
+        (x0, y0, z0),(cellAge0), (identity0), (ux0, uy0, uz0),
+        (x1, y1, z1),(cellAge1), (identity1), (ux1, uy1, uz1), >> with (heaviside(cellAge, 26)) where {
+            
+        divideNoise0 : Float := ~NormalDistribution(0, 0.01)
+        divideNoise1 : Float := ~NormalDistribution(0, 0.01)
+
+        x0 : Float =  x 
+        y0 : Float =  y - divide_distance * divide_scale + divideNoise0
+        z0 : Float =  z
+
+        ux0 : Float = ux
+        uy0 : Float = -1
+        uz0 : Float = uz
+
+        cellAge0 : Float = 0
+        identity0 : Float = identity
+
+        x1 : Float =  x
+        y1 : Float =  y + divide_distance * divide_scale + divideNoise1
+        z1 : Float =  z
+
+        ux1 : Float = ux
+        uy1 : Float = 1
+        uz1 : Float = uz
+
+        cellAge1 : Float = 0
+        identity1 : Float = identity
+
+    }
+
+    mutant_divide_wild_type_y := (cell0 : Mutant) << (x, y, z), (cellAge), (identity), (ux, uy, uz)>> ->
+    (cell0 : Mutant) (cell1 : Mutant) <<
+        (x0, y0, z0),(cellAge0), (identity0), (ux0, uy0, uz0)
+        (x1, y1, z1),(cellAge1), (identity1), (ux1, uy1, uz1)  >> with (heaviside(cellAge, 26)) where {
+            
+        divideNoise0 : Float := ~NormalDistribution(0, 0.01)
+        divideNoise1 : Float := ~NormalDistribution(0, 0.01)
+
+        x0 : Float =  x 
+        y0 : Float =  y - divide_distance * divide_scale + divideNoise0
+        z0 : Float =  z
+
+        ux0 : Float = ux
+        uy0 : Float = -1
+        uz0 : Float = uz
+
+        cellAge0 : Float = 0
+        identity0 : Float = identity
+
+        x1 : Float =  x
+        y1 : Float =  y + divide_distance * divide_scale + divideNoise1
+        z1 : Float =  z
+
+        ux1 : Float = ux
+        uy1 : Float = 1
+        uz1 : Float = uz
+
+        cellAge1 : Float = 0
+        identity1 : Float = identity
+
+    }
+
+
+}

@@ -1,0 +1,5 @@
+types Microtubule {
+
+    Nucleator << Position : FixedList<<3, Float>>, Direction : FixedList<<(2,3,4), Integer>>, unit : Integer >> : Type
+
+}

@@ -1,0 +1,903 @@
+Tokenizing file: ../tests/microtubules/simulation.fflow
+Tokenizing file: ../tests/microtubules/functions.fflow
+func_name ---> sqrt
+func_name ---> cos
+func_name ---> sin
+func_name ---> sin
+func_name ---> cos
+Tokenizing file: ../tests/microtubules/params.fflow
+Generating Params
+Tokenizing file: ../tests/microtubules/types.fflow
+Value: Type
+Value: Type
+Value: Type
+Value: Type
+Value: Type
+Value: Type
+type_name: IdentifierNode(IdentifierToken(PositionToken("Nucleator", 5, 9)))
+symbol_parameters: ParameterNode(Node[IdentifierNode(IdentifierToken(PositionToken("FixedList", 5, 22))), ParameterNode(Node[IntegerNode(IntegerToken(PositionToken("3", 5, 26))), FloatNode(FloatToken(PositionToken("Float", 5, 32)))]), IdentifierNode(IdentifierToken(PositionToken("FixedList", 5, 45))), ParameterNode(Node[IntegerNode(IntegerToken(PositionToken("2", 5, 49))), IntegerNode(IntegerToken(PositionToken("Integer", 5, 57)))])])
+type_name: IdentifierNode(IdentifierToken(PositionToken("CellBoundary", 8, 12)))
+symbol_parameters: ParameterNode(Node[IdentifierNode(IdentifierToken(PositionToken("FixedList", 8, 24))), ParameterNode(Node[IntegerNode(IntegerToken(PositionToken("3", 8, 28))), FloatNode(FloatToken(PositionToken("Float", 8, 34)))]), IdentifierNode(IdentifierToken(PositionToken("FixedList", 8, 47))), ParameterNode(Node[IntegerNode(IntegerToken(PositionToken("3", 8, 51))), FloatNode(FloatToken(PositionToken("Float", 8, 57)))]), IdentifierNode(IdentifierToken(PositionToken("FixedList", 8, 70))), ParameterNode(Node[IntegerNode(IntegerToken(PositionToken("2", 8, 74))), IntegerNode(IntegerToken(PositionToken("Integer", 8, 82)))])])
+type_name: IdentifierNode(IdentifierToken(PositionToken("Retraction", 11, 10)))
+symbol_parameters: ParameterNode(Node[IdentifierNode(IdentifierToken(PositionToken("FixedList", 11, 23))), ParameterNode(Node[IntegerNode(IntegerToken(PositionToken("3", 11, 27))), FloatNode(FloatToken(PositionToken("Float", 11, 33)))]), IdentifierNode(IdentifierToken(PositionToken("FixedList", 11, 46))), ParameterNode(Node[IntegerNode(IntegerToken(PositionToken("3", 11, 50))), FloatNode(FloatToken(PositionToken("Float", 11, 56)))])])
+type_name: IdentifierNode(IdentifierToken(PositionToken("Negative", 14, 8)))
+symbol_parameters: ParameterNode(Node[IdentifierNode(IdentifierToken(PositionToken("FixedList", 14, 21))), ParameterNode(Node[IntegerNode(IntegerToken(PositionToken("3", 14, 25))), FloatNode(FloatToken(PositionToken("Float", 14, 31)))]), IdentifierNode(IdentifierToken(PositionToken("FixedList", 14, 45))), ParameterNode(Node[IntegerNode(IntegerToken(PositionToken("3", 14, 49))), FloatNode(FloatToken(PositionToken("Float", 14, 55)))])])
+type_name: IdentifierNode(IdentifierToken(PositionToken("Intermediate", 17, 12)))
+symbol_parameters: ParameterNode(Node[IdentifierNode(IdentifierToken(PositionToken("FixedList", 17, 25))), ParameterNode(Node[IntegerNode(IntegerToken(PositionToken("3", 17, 29))), FloatNode(FloatToken(PositionToken("Float", 17, 35)))]), IdentifierNode(IdentifierToken(PositionToken("FixedList", 17, 49))), ParameterNode(Node[IntegerNode(IntegerToken(PositionToken("3", 17, 53))), FloatNode(FloatToken(PositionToken("Float", 17, 59)))])])
+type_name: IdentifierNode(IdentifierToken(PositionToken("Positive", 20, 8)))
+symbol_parameters: ParameterNode(Node[IdentifierNode(IdentifierToken(PositionToken("FixedList", 20, 21))), ParameterNode(Node[IntegerNode(IntegerToken(PositionToken("3", 20, 25))), FloatNode(FloatToken(PositionToken("Float", 20, 31)))]), IdentifierNode(IdentifierToken(PositionToken("FixedList", 20, 45))), ParameterNode(Node[IntegerNode(IntegerToken(PositionToken("3", 20, 49))), FloatNode(FloatToken(PositionToken("Float", 20, 55)))])])
+Generating Types
+struct Type {
+	template <class Archive>
+	void serialize(Archive& archive) {
+	}
+};
+
+struct StartType {
+	float start_location[3];
+	template <class Archive>
+	void serialize(Archive& archive) {
+		archive(start_location);
+	}
+};
+
+struct Boundary {
+	float boundary_location[3];
+	template <class Archive>
+	void serialize(Archive& archive) {
+		archive(boundary_location);
+	}
+};
+
+Tokenizing file: ../tests/microtubules/rules.fflow
+cur_token =======>: WhereToken(PositionToken("where", 6, 81))
+cur_token =======>: WhereToken(PositionToken("where", 35, 7))
+cur_token =======>: WhereToken(PositionToken("where", 66, 7))
+cur_token =======>: WhereToken(PositionToken("where", 98, 7))
+cur_token =======>: WhereToken(PositionToken("where", 129, 7))
+cur_token =======>: WhereToken(PositionToken("where", 159, 75))
+cur_token =======>: WhereToken(PositionToken("where", 178, 75))
+cur_token =======>: WhereToken(PositionToken("where", 202, 108))
+Generating Rules
+Rule name ====================> start_to_node
+function_node in ir_prop_expr!: IdentifierNode(IdentifierToken(PositionToken("buffer", 8, 22)))
+arg: IdentifierToken(PositionToken("buffer", 8, 22))
+propensity: false
+function_node in ir_prop_expr!: IdentifierNode(IdentifierToken(PositionToken("buffer", 9, 22)))
+arg: IdentifierToken(PositionToken("buffer", 9, 22))
+propensity: false
+Rule name ====================> make_boundary_bottom
+Adding edge between nodes: 1 and 2
+function_node in ir_prop_expr!: IdentifierNode(IdentifierToken(PositionToken("x", 37, 14)))
+arg: IdentifierToken(PositionToken("x", 37, 14))
+propensity: false
+===============================
+arg.position.value: x
+ir_builder ===> (
+===============================
+ir for lhs variable x = double x = std::get<Microtubule::CellBoundary>(lhs[m1[1]].data).fflow_3d546b[0];
+
+function_node in ir_prop_expr!: IdentifierNode(IdentifierToken(PositionToken("y", 38, 14)))
+arg: IdentifierToken(PositionToken("y", 38, 14))
+propensity: false
+===============================
+arg.position.value: y
+ir_builder ===> (
+===============================
+ir for lhs variable y = double y = std::get<Microtubule::CellBoundary>(lhs[m1[1]].data).fflow_3d546b[1];
+
+function_node in ir_prop_expr!: IdentifierNode(IdentifierToken(PositionToken("z", 39, 14)))
+arg: IdentifierToken(PositionToken("z", 39, 14))
+propensity: false
+===============================
+arg.position.value: z
+ir_builder ===> (
+===============================
+ir for lhs variable z = double z = std::get<Microtubule::CellBoundary>(lhs[m1[1]].data).fflow_3d546b[2];
+
+function_node in ir_prop_expr!: IdentifierNode(IdentifierToken(PositionToken("county", 42, 25)))
+arg: IdentifierToken(PositionToken("county", 42, 25))
+propensity: false
+===============================
+arg.position.value: county
+ir_builder ===> (
+===============================
+ir for lhs variable county = int county = std::get<Microtubule::CellBoundary>(lhs[m1[1]].data).fflow_1edb6b[1];
+
+function_node in ir_prop_expr!: IdentifierNode(IdentifierToken(PositionToken("ux", 44, 17)))
+arg: IdentifierToken(PositionToken("ux", 44, 17))
+propensity: false
+===============================
+arg.position.value: ux
+ir_builder ===> (
+===============================
+ir for lhs variable ux = double ux = std::get<Microtubule::CellBoundary>(lhs[m1[1]].data).fflow_861e98[0];
+
+function_node in ir_prop_expr!: IdentifierNode(IdentifierToken(PositionToken("uy", 45, 17)))
+arg: IdentifierToken(PositionToken("uy", 45, 17))
+propensity: false
+===============================
+arg.position.value: uy
+ir_builder ===> (
+===============================
+ir for lhs variable uy = double uy = std::get<Microtubule::CellBoundary>(lhs[m1[1]].data).fflow_861e98[1];
+
+function_node in ir_prop_expr!: IdentifierNode(IdentifierToken(PositionToken("uz", 46, 17)))
+arg: IdentifierToken(PositionToken("uz", 46, 17))
+propensity: false
+===============================
+arg.position.value: uz
+ir_builder ===> (
+===============================
+ir for lhs variable uz = double uz = std::get<Microtubule::CellBoundary>(lhs[m1[1]].data).fflow_861e98[2];
+
+function_node in ir_prop_expr!: IdentifierNode(IdentifierToken(PositionToken("x", 48, 15)))
+arg: IdentifierToken(PositionToken("x", 48, 15))
+propensity: false
+===============================
+arg.position.value: x
+ir_builder ===> (
+===============================
+function_node in ir_prop_expr!: IdentifierNode(IdentifierToken(PositionToken("boundary_offset", 48, 33)))
+arg: IdentifierToken(PositionToken("boundary_offset", 48, 33))
+propensity: false
+function_node in ir_prop_expr!: IdentifierNode(IdentifierToken(PositionToken("y", 49, 15)))
+arg: IdentifierToken(PositionToken("y", 49, 15))
+propensity: false
+===============================
+arg.position.value: y
+ir_builder ===> (
+===============================
+function_node in ir_prop_expr!: IdentifierNode(IdentifierToken(PositionToken("z", 50, 15)))
+arg: IdentifierToken(PositionToken("z", 50, 15))
+propensity: false
+===============================
+arg.position.value: z
+ir_builder ===> (
+===============================
+function_node in ir_prop_expr!: IdentifierNode(IdentifierToken(PositionToken("ux", 52, 17)))
+arg: IdentifierToken(PositionToken("ux", 52, 17))
+propensity: false
+===============================
+arg.position.value: ux
+ir_builder ===> (
+===============================
+function_node in ir_prop_expr!: IdentifierNode(IdentifierToken(PositionToken("uy", 53, 17)))
+arg: IdentifierToken(PositionToken("uy", 53, 17))
+propensity: false
+===============================
+arg.position.value: uy
+ir_builder ===> (
+===============================
+function_node in ir_prop_expr!: IdentifierNode(IdentifierToken(PositionToken("uz", 54, 17)))
+arg: IdentifierToken(PositionToken("uz", 54, 17))
+propensity: false
+===============================
+arg.position.value: uz
+ir_builder ===> (
+===============================
+function_node in ir_prop_expr!: IdentifierNode(IdentifierToken(PositionToken("countx", 56, 27)))
+arg: IdentifierToken(PositionToken("countx", 56, 27))
+propensity: false
+===============================
+arg.position.value: countx
+ir_builder ===> (
+===============================
+ir for lhs variable countx = int countx = std::get<Microtubule::CellBoundary>(lhs[m1[1]].data).fflow_1edb6b[0];
+
+function_node in ir_prop_expr!: IdentifierNode(IdentifierToken(PositionToken("county", 57, 27)))
+arg: IdentifierToken(PositionToken("county", 57, 27))
+propensity: false
+===============================
+arg.position.value: county
+ir_builder ===> (
+===============================
+Emitting variable from propensity table: countx
+skipping
+Emitting variable from parameter table: boundary_pts
+Emitting variable from propensity table: ux
+skipping
+skipping
+Rule name ====================> make_boundary_right
+Adding edge between nodes: 1 and 2
+function_node in ir_prop_expr!: IdentifierNode(IdentifierToken(PositionToken("x", 68, 14)))
+arg: IdentifierToken(PositionToken("x", 68, 14))
+propensity: false
+===============================
+arg.position.value: x
+ir_builder ===> (
+===============================
+ir for lhs variable x = double x = std::get<Microtubule::CellBoundary>(lhs[m1[1]].data).fflow_3d546b[0];
+
+function_node in ir_prop_expr!: IdentifierNode(IdentifierToken(PositionToken("y", 69, 14)))
+arg: IdentifierToken(PositionToken("y", 69, 14))
+propensity: false
+===============================
+arg.position.value: y
+ir_builder ===> (
+===============================
+ir for lhs variable y = double y = std::get<Microtubule::CellBoundary>(lhs[m1[1]].data).fflow_3d546b[1];
+
+function_node in ir_prop_expr!: IdentifierNode(IdentifierToken(PositionToken("z", 70, 14)))
+arg: IdentifierToken(PositionToken("z", 70, 14))
+propensity: false
+===============================
+arg.position.value: z
+ir_builder ===> (
+===============================
+ir for lhs variable z = double z = std::get<Microtubule::CellBoundary>(lhs[m1[1]].data).fflow_3d546b[2];
+
+function_node in ir_prop_expr!: IdentifierNode(IdentifierToken(PositionToken("countx", 72, 25)))
+arg: IdentifierToken(PositionToken("countx", 72, 25))
+propensity: false
+===============================
+arg.position.value: countx
+ir_builder ===> (
+===============================
+ir for lhs variable countx = int countx = std::get<Microtubule::CellBoundary>(lhs[m1[1]].data).fflow_1edb6b[0];
+
+function_node in ir_prop_expr!: IdentifierNode(IdentifierToken(PositionToken("uy", 76, 17)))
+arg: IdentifierToken(PositionToken("uy", 76, 17))
+propensity: false
+===============================
+arg.position.value: uy
+ir_builder ===> (
+===============================
+ir for lhs variable uy = double uy = std::get<Microtubule::CellBoundary>(lhs[m1[1]].data).fflow_861e98[1];
+
+function_node in ir_prop_expr!: IdentifierNode(IdentifierToken(PositionToken("uz", 77, 17)))
+arg: IdentifierToken(PositionToken("uz", 77, 17))
+propensity: false
+===============================
+arg.position.value: uz
+ir_builder ===> (
+===============================
+ir for lhs variable uz = double uz = std::get<Microtubule::CellBoundary>(lhs[m1[1]].data).fflow_861e98[2];
+
+function_node in ir_prop_expr!: IdentifierNode(IdentifierToken(PositionToken("x", 79, 15)))
+arg: IdentifierToken(PositionToken("x", 79, 15))
+propensity: false
+===============================
+arg.position.value: x
+ir_builder ===> (
+===============================
+function_node in ir_prop_expr!: IdentifierNode(IdentifierToken(PositionToken("y", 80, 15)))
+arg: IdentifierToken(PositionToken("y", 80, 15))
+propensity: false
+===============================
+arg.position.value: y
+ir_builder ===> (
+===============================
+function_node in ir_prop_expr!: IdentifierNode(IdentifierToken(PositionToken("boundary_offset", 80, 33)))
+arg: IdentifierToken(PositionToken("boundary_offset", 80, 33))
+propensity: false
+function_node in ir_prop_expr!: IdentifierNode(IdentifierToken(PositionToken("z", 81, 15)))
+arg: IdentifierToken(PositionToken("z", 81, 15))
+propensity: false
+===============================
+arg.position.value: z
+ir_builder ===> (
+===============================
+function_node in ir_prop_expr!: IdentifierNode(IdentifierToken(PositionToken("uy", 84, 17)))
+arg: IdentifierToken(PositionToken("uy", 84, 17))
+propensity: false
+===============================
+arg.position.value: uy
+ir_builder ===> (
+===============================
+function_node in ir_prop_expr!: IdentifierNode(IdentifierToken(PositionToken("uz", 85, 17)))
+arg: IdentifierToken(PositionToken("uz", 85, 17))
+propensity: false
+===============================
+arg.position.value: uz
+ir_builder ===> (
+===============================
+function_node in ir_prop_expr!: IdentifierNode(IdentifierToken(PositionToken("countx", 87, 27)))
+arg: IdentifierToken(PositionToken("countx", 87, 27))
+propensity: false
+===============================
+arg.position.value: countx
+ir_builder ===> (
+===============================
+function_node in ir_prop_expr!: IdentifierNode(IdentifierToken(PositionToken("county", 88, 27)))
+arg: IdentifierToken(PositionToken("county", 88, 27))
+propensity: false
+===============================
+arg.position.value: county
+ir_builder ===> (
+===============================
+ir for lhs variable county = int county = std::get<Microtubule::CellBoundary>(lhs[m1[1]].data).fflow_1edb6b[1];
+
+Emitting variable from propensity table: countx
+Emitting variable from parameter table: boundary_pts
+Emitting variable from propensity table: county
+skipping
+skipping
+Emitting variable from propensity table: uy
+Rule name ====================> make_boundary_top
+Adding edge between nodes: 1 and 2
+function_node in ir_prop_expr!: IdentifierNode(IdentifierToken(PositionToken("x", 100, 14)))
+arg: IdentifierToken(PositionToken("x", 100, 14))
+propensity: false
+===============================
+arg.position.value: x
+ir_builder ===> (
+===============================
+ir for lhs variable x = double x = std::get<Microtubule::CellBoundary>(lhs[m1[1]].data).fflow_3d546b[0];
+
+function_node in ir_prop_expr!: IdentifierNode(IdentifierToken(PositionToken("y", 101, 14)))
+arg: IdentifierToken(PositionToken("y", 101, 14))
+propensity: false
+===============================
+arg.position.value: y
+ir_builder ===> (
+===============================
+ir for lhs variable y = double y = std::get<Microtubule::CellBoundary>(lhs[m1[1]].data).fflow_3d546b[1];
+
+function_node in ir_prop_expr!: IdentifierNode(IdentifierToken(PositionToken("z", 102, 14)))
+arg: IdentifierToken(PositionToken("z", 102, 14))
+propensity: false
+===============================
+arg.position.value: z
+ir_builder ===> (
+===============================
+ir for lhs variable z = double z = std::get<Microtubule::CellBoundary>(lhs[m1[1]].data).fflow_3d546b[2];
+
+function_node in ir_prop_expr!: IdentifierNode(IdentifierToken(PositionToken("countx", 104, 25)))
+arg: IdentifierToken(PositionToken("countx", 104, 25))
+propensity: false
+===============================
+arg.position.value: countx
+ir_builder ===> (
+===============================
+ir for lhs variable countx = int countx = std::get<Microtubule::CellBoundary>(lhs[m1[1]].data).fflow_1edb6b[0];
+
+function_node in ir_prop_expr!: IdentifierNode(IdentifierToken(PositionToken("county", 105, 25)))
+arg: IdentifierToken(PositionToken("county", 105, 25))
+propensity: false
+===============================
+arg.position.value: county
+ir_builder ===> (
+===============================
+ir for lhs variable county = int county = std::get<Microtubule::CellBoundary>(lhs[m1[1]].data).fflow_1edb6b[1];
+
+function_node in ir_prop_expr!: IdentifierNode(IdentifierToken(PositionToken("uy", 108, 17)))
+arg: IdentifierToken(PositionToken("uy", 108, 17))
+propensity: false
+===============================
+arg.position.value: uy
+ir_builder ===> (
+===============================
+ir for lhs variable uy = double uy = std::get<Microtubule::CellBoundary>(lhs[m1[1]].data).fflow_861e98[1];
+
+function_node in ir_prop_expr!: IdentifierNode(IdentifierToken(PositionToken("uz", 109, 17)))
+arg: IdentifierToken(PositionToken("uz", 109, 17))
+propensity: false
+===============================
+arg.position.value: uz
+ir_builder ===> (
+===============================
+ir for lhs variable uz = double uz = std::get<Microtubule::CellBoundary>(lhs[m1[1]].data).fflow_861e98[2];
+
+function_node in ir_prop_expr!: IdentifierNode(IdentifierToken(PositionToken("x", 111, 15)))
+arg: IdentifierToken(PositionToken("x", 111, 15))
+propensity: false
+===============================
+arg.position.value: x
+ir_builder ===> (
+===============================
+function_node in ir_prop_expr!: IdentifierNode(IdentifierToken(PositionToken("boundary_offset", 111, 33)))
+arg: IdentifierToken(PositionToken("boundary_offset", 111, 33))
+propensity: false
+function_node in ir_prop_expr!: IdentifierNode(IdentifierToken(PositionToken("y", 112, 15)))
+arg: IdentifierToken(PositionToken("y", 112, 15))
+propensity: false
+===============================
+arg.position.value: y
+ir_builder ===> (
+===============================
+function_node in ir_prop_expr!: IdentifierNode(IdentifierToken(PositionToken("z", 113, 15)))
+arg: IdentifierToken(PositionToken("z", 113, 15))
+propensity: false
+===============================
+arg.position.value: z
+ir_builder ===> (
+===============================
+function_node in ir_prop_expr!: IdentifierNode(IdentifierToken(PositionToken("uy", 116, 17)))
+arg: IdentifierToken(PositionToken("uy", 116, 17))
+propensity: false
+===============================
+arg.position.value: uy
+ir_builder ===> (
+===============================
+function_node in ir_prop_expr!: IdentifierNode(IdentifierToken(PositionToken("uz", 117, 17)))
+arg: IdentifierToken(PositionToken("uz", 117, 17))
+propensity: false
+===============================
+arg.position.value: uz
+ir_builder ===> (
+===============================
+function_node in ir_prop_expr!: IdentifierNode(IdentifierToken(PositionToken("countx", 119, 27)))
+arg: IdentifierToken(PositionToken("countx", 119, 27))
+propensity: false
+===============================
+arg.position.value: countx
+ir_builder ===> (
+===============================
+function_node in ir_prop_expr!: IdentifierNode(IdentifierToken(PositionToken("county", 120, 27)))
+arg: IdentifierToken(PositionToken("county", 120, 27))
+propensity: false
+===============================
+arg.position.value: county
+ir_builder ===> (
+===============================
+Emitting variable from propensity table: countx
+Emitting variable from parameter table: boundary_pts
+skipping
+skipping
+Emitting variable from propensity table: county
+skipping
+Emitting variable from propensity table: ux
+Emitting variable from propensity table: uy
+Rule name ====================> make_boundary_left
+Adding edge between nodes: 1 and 2
+function_node in ir_prop_expr!: IdentifierNode(IdentifierToken(PositionToken("x", 131, 14)))
+arg: IdentifierToken(PositionToken("x", 131, 14))
+propensity: false
+===============================
+arg.position.value: x
+ir_builder ===> (
+===============================
+ir for lhs variable x = double x = std::get<Microtubule::CellBoundary>(lhs[m1[1]].data).fflow_3d546b[0];
+
+function_node in ir_prop_expr!: IdentifierNode(IdentifierToken(PositionToken("y", 132, 14)))
+arg: IdentifierToken(PositionToken("y", 132, 14))
+propensity: false
+===============================
+arg.position.value: y
+ir_builder ===> (
+===============================
+ir for lhs variable y = double y = std::get<Microtubule::CellBoundary>(lhs[m1[1]].data).fflow_3d546b[1];
+
+function_node in ir_prop_expr!: IdentifierNode(IdentifierToken(PositionToken("z", 133, 14)))
+arg: IdentifierToken(PositionToken("z", 133, 14))
+propensity: false
+===============================
+arg.position.value: z
+ir_builder ===> (
+===============================
+ir for lhs variable z = double z = std::get<Microtubule::CellBoundary>(lhs[m1[1]].data).fflow_3d546b[2];
+
+function_node in ir_prop_expr!: IdentifierNode(IdentifierToken(PositionToken("countx", 135, 25)))
+arg: IdentifierToken(PositionToken("countx", 135, 25))
+propensity: false
+===============================
+arg.position.value: countx
+ir_builder ===> (
+===============================
+ir for lhs variable countx = int countx = std::get<Microtubule::CellBoundary>(lhs[m1[1]].data).fflow_1edb6b[0];
+
+function_node in ir_prop_expr!: IdentifierNode(IdentifierToken(PositionToken("county", 136, 25)))
+arg: IdentifierToken(PositionToken("county", 136, 25))
+propensity: false
+===============================
+arg.position.value: county
+ir_builder ===> (
+===============================
+ir for lhs variable county = int county = std::get<Microtubule::CellBoundary>(lhs[m1[1]].data).fflow_1edb6b[1];
+
+function_node in ir_prop_expr!: IdentifierNode(IdentifierToken(PositionToken("uy", 139, 17)))
+arg: IdentifierToken(PositionToken("uy", 139, 17))
+propensity: false
+===============================
+arg.position.value: uy
+ir_builder ===> (
+===============================
+ir for lhs variable uy = double uy = std::get<Microtubule::CellBoundary>(lhs[m1[1]].data).fflow_861e98[1];
+
+function_node in ir_prop_expr!: IdentifierNode(IdentifierToken(PositionToken("uz", 140, 17)))
+arg: IdentifierToken(PositionToken("uz", 140, 17))
+propensity: false
+===============================
+arg.position.value: uz
+ir_builder ===> (
+===============================
+ir for lhs variable uz = double uz = std::get<Microtubule::CellBoundary>(lhs[m1[1]].data).fflow_861e98[2];
+
+function_node in ir_prop_expr!: IdentifierNode(IdentifierToken(PositionToken("x", 142, 15)))
+arg: IdentifierToken(PositionToken("x", 142, 15))
+propensity: false
+===============================
+arg.position.value: x
+ir_builder ===> (
+===============================
+function_node in ir_prop_expr!: IdentifierNode(IdentifierToken(PositionToken("y", 143, 15)))
+arg: IdentifierToken(PositionToken("y", 143, 15))
+propensity: false
+===============================
+arg.position.value: y
+ir_builder ===> (
+===============================
+function_node in ir_prop_expr!: IdentifierNode(IdentifierToken(PositionToken("boundary_offset", 143, 33)))
+arg: IdentifierToken(PositionToken("boundary_offset", 143, 33))
+propensity: false
+function_node in ir_prop_expr!: IdentifierNode(IdentifierToken(PositionToken("z", 144, 15)))
+arg: IdentifierToken(PositionToken("z", 144, 15))
+propensity: false
+===============================
+arg.position.value: z
+ir_builder ===> (
+===============================
+function_node in ir_prop_expr!: IdentifierNode(IdentifierToken(PositionToken("uz", 148, 17)))
+arg: IdentifierToken(PositionToken("uz", 148, 17))
+propensity: false
+===============================
+arg.position.value: uz
+ir_builder ===> (
+===============================
+function_node in ir_prop_expr!: IdentifierNode(IdentifierToken(PositionToken("countx", 150, 27)))
+arg: IdentifierToken(PositionToken("countx", 150, 27))
+propensity: false
+===============================
+arg.position.value: countx
+ir_builder ===> (
+===============================
+function_node in ir_prop_expr!: IdentifierNode(IdentifierToken(PositionToken("county", 151, 27)))
+arg: IdentifierToken(PositionToken("county", 151, 27))
+propensity: false
+===============================
+arg.position.value: county
+ir_builder ===> (
+===============================
+Emitting variable from propensity table: countx
+Emitting variable from parameter table: boundary_pts
+Emitting variable from propensity table: county
+skipping
+skipping
+skipping
+Rule name ====================> create_nucleator_grid_x
+function_node in ir_prop_expr!: IdentifierNode(IdentifierToken(PositionToken("x", 161, 14)))
+arg: IdentifierToken(PositionToken("x", 161, 14))
+propensity: false
+===============================
+arg.position.value: x
+ir_builder ===> (
+===============================
+ir for lhs variable x = double x = std::get<Microtubule::Nucleator>(lhs[m1[1]].data).fflow_a9cb96[0];
+
+function_node in ir_prop_expr!: IdentifierNode(IdentifierToken(PositionToken("y", 162, 14)))
+arg: IdentifierToken(PositionToken("y", 162, 14))
+propensity: false
+===============================
+arg.position.value: y
+ir_builder ===> (
+===============================
+ir for lhs variable y = double y = std::get<Microtubule::Nucleator>(lhs[m1[1]].data).fflow_a9cb96[1];
+
+function_node in ir_prop_expr!: IdentifierNode(IdentifierToken(PositionToken("z", 163, 14)))
+arg: IdentifierToken(PositionToken("z", 163, 14))
+propensity: false
+===============================
+arg.position.value: z
+ir_builder ===> (
+===============================
+ir for lhs variable z = double z = std::get<Microtubule::Nucleator>(lhs[m1[1]].data).fflow_a9cb96[2];
+
+function_node in ir_prop_expr!: IdentifierNode(IdentifierToken(PositionToken("county", 166, 24)))
+arg: IdentifierToken(PositionToken("county", 166, 24))
+propensity: false
+===============================
+arg.position.value: county
+ir_builder ===> (
+===============================
+ir for lhs variable county = int county = std::get<Microtubule::Nucleator>(lhs[m1[1]].data).fflow_31649b[1];
+
+function_node in ir_prop_expr!: IdentifierNode(IdentifierToken(PositionToken("x", 168, 15)))
+arg: IdentifierToken(PositionToken("x", 168, 15))
+propensity: false
+===============================
+arg.position.value: x
+ir_builder ===> (
+===============================
+function_node in ir_prop_expr!: IdentifierNode(IdentifierToken(PositionToken("offset", 168, 24)))
+arg: IdentifierToken(PositionToken("offset", 168, 24))
+propensity: false
+function_node in ir_prop_expr!: IdentifierNode(IdentifierToken(PositionToken("y", 169, 15)))
+arg: IdentifierToken(PositionToken("y", 169, 15))
+propensity: false
+===============================
+arg.position.value: y
+ir_builder ===> (
+===============================
+function_node in ir_prop_expr!: IdentifierNode(IdentifierToken(PositionToken("countx", 172, 25)))
+arg: IdentifierToken(PositionToken("countx", 172, 25))
+propensity: false
+===============================
+arg.position.value: countx
+ir_builder ===> (
+===============================
+ir for lhs variable countx = int countx = std::get<Microtubule::Nucleator>(lhs[m1[1]].data).fflow_31649b[0];
+
+function_node in ir_prop_expr!: IdentifierNode(IdentifierToken(PositionToken("county", 173, 25)))
+arg: IdentifierToken(PositionToken("county", 173, 25))
+propensity: false
+===============================
+arg.position.value: county
+ir_builder ===> (
+===============================
+Emitting variable from propensity table: countx
+Rule name ====================> create_nucleator_grid_y
+function_node in ir_prop_expr!: IdentifierNode(IdentifierToken(PositionToken("x", 180, 14)))
+arg: IdentifierToken(PositionToken("x", 180, 14))
+propensity: false
+===============================
+arg.position.value: x
+ir_builder ===> (
+===============================
+ir for lhs variable x = double x = std::get<Microtubule::Nucleator>(lhs[m1[1]].data).fflow_a9cb96[0];
+
+function_node in ir_prop_expr!: IdentifierNode(IdentifierToken(PositionToken("y", 181, 14)))
+arg: IdentifierToken(PositionToken("y", 181, 14))
+propensity: false
+===============================
+arg.position.value: y
+ir_builder ===> (
+===============================
+ir for lhs variable y = double y = std::get<Microtubule::Nucleator>(lhs[m1[1]].data).fflow_a9cb96[1];
+
+function_node in ir_prop_expr!: IdentifierNode(IdentifierToken(PositionToken("z", 182, 14)))
+arg: IdentifierToken(PositionToken("z", 182, 14))
+propensity: false
+===============================
+arg.position.value: z
+ir_builder ===> (
+===============================
+ir for lhs variable z = double z = std::get<Microtubule::Nucleator>(lhs[m1[1]].data).fflow_a9cb96[2];
+
+function_node in ir_prop_expr!: IdentifierNode(IdentifierToken(PositionToken("countx", 184, 24)))
+arg: IdentifierToken(PositionToken("countx", 184, 24))
+propensity: false
+===============================
+arg.position.value: countx
+ir_builder ===> (
+===============================
+ir for lhs variable countx = int countx = std::get<Microtubule::Nucleator>(lhs[m1[1]].data).fflow_31649b[0];
+
+function_node in ir_prop_expr!: IdentifierNode(IdentifierToken(PositionToken("x", 187, 15)))
+arg: IdentifierToken(PositionToken("x", 187, 15))
+propensity: false
+===============================
+arg.position.value: x
+ir_builder ===> (
+===============================
+function_node in ir_prop_expr!: IdentifierNode(IdentifierToken(PositionToken("y", 188, 15)))
+arg: IdentifierToken(PositionToken("y", 188, 15))
+propensity: false
+===============================
+arg.position.value: y
+ir_builder ===> (
+===============================
+function_node in ir_prop_expr!: IdentifierNode(IdentifierToken(PositionToken("offset", 188, 24)))
+arg: IdentifierToken(PositionToken("offset", 188, 24))
+propensity: false
+function_node in ir_prop_expr!: IdentifierNode(IdentifierToken(PositionToken("countx", 191, 25)))
+arg: IdentifierToken(PositionToken("countx", 191, 25))
+propensity: false
+===============================
+arg.position.value: countx
+ir_builder ===> (
+===============================
+function_node in ir_prop_expr!: IdentifierNode(IdentifierToken(PositionToken("county", 192, 25)))
+arg: IdentifierToken(PositionToken("county", 192, 25))
+propensity: false
+===============================
+arg.position.value: county
+ir_builder ===> (
+===============================
+ir for lhs variable county = int county = std::get<Microtubule::Nucleator>(lhs[m1[1]].data).fflow_31649b[1];
+
+Emitting variable from propensity table: county
+Rule name ====================> create_microtubule
+Adding edge between nodes: 2 and 3
+Adding edge between nodes: 3 and 4
+name = mt_seg_len
+function_node in ir_prop_expr!: IdentifierNode(IdentifierToken(PositionToken("mt_min_segment_init", 204, 62)))
+arg: IdentifierToken(PositionToken("mt_min_segment_init", 204, 62))
+propensity: false
+function_node in ir_prop_expr!: IdentifierNode(IdentifierToken(PositionToken("mt_max_segment_init", 204, 83)))
+arg: IdentifierToken(PositionToken("mt_max_segment_init", 204, 83))
+propensity: false
+=========================
+name: mt_seg_len
+value = GroupNode(UnaryOpNode(SampleToken(PositionToken("~", 204, 23)), CallNode(IdentifierNode(IdentifierToken(PositionToken("UniformDistribution", 204, 42))), Union{BinaryOpNode, CallNode, FloatNode, GroupNode, IdentifierNode, IntegerNode, UnaryOpNode, Token}[IdentifierNode(IdentifierToken(PositionToken("mt_min_segment_init", 204, 62))), IdentifierNode(IdentifierToken(PositionToken("mt_max_segment_init", 204, 83)))])))
+ir_value: (std::uniform_real_distribution<double>(settings.mt_min_segment_init, settings.mt_max_segment_init)(random_engine))
+ir_builder: IRBuilder(Any["[&](auto &lhs, auto &rhs, auto &m1, auto &m2) {", "std::random_device random_device;\n", "std::mt19937 random_engine(random_device());\n"])
+=========================
+name = mt_orientation
+=========================
+name: mt_orientation
+value = GroupNode(UnaryOpNode(SampleToken(PositionToken("~", 205, 27)), CallNode(IdentifierNode(IdentifierToken(PositionToken("UniformDistribution", 205, 46))), Union{BinaryOpNode, CallNode, FloatNode, GroupNode, IdentifierNode, IntegerNode, UnaryOpNode, Token}[IntegerNode(IntegerToken(PositionToken("0.0", 205, 51))), BinaryOpNode(AsteriskToken(PositionToken("*", 205, 57)), IntegerNode(IntegerToken(PositionToken("2.0", 205, 56))), IntegerNode(IntegerToken(PositionToken("3.1415", 205, 65))))])))
+ir_value: (std::uniform_real_distribution<double>(0.0, 2.0 * 3.1415)(random_engine))
+ir_builder: IRBuilder(Any["[&](auto &lhs, auto &rhs, auto &m1, auto &m2) {", "std::random_device random_device;\n", "std::mt19937 random_engine(random_device());\n", "double mt_seg_len = (std::uniform_real_distribution<double>(settings.mt_min_segment_init, settings.mt_max_segment_init)(random_engine));"])
+=========================
+name = x_c
+function_node in ir_prop_expr!: IdentifierNode(IdentifierToken(PositionToken("x", 207, 16)))
+arg: IdentifierToken(PositionToken("x", 207, 16))
+propensity: false
+=========================
+name: x_c
+value = GroupNode(IdentifierNode(IdentifierToken(PositionToken("x", 207, 16))))
+ir_value: (double x = std::get<Microtubule::Nucleator>(lhs[m[1]].data).fflow_a9cb96[0];
+)
+ir_builder: IRBuilder(Any["[&](auto &lhs, auto &rhs, auto &m1, auto &m2) {", "std::random_device random_device;\n", "std::mt19937 random_engine(random_device());\n", "double mt_seg_len = (std::uniform_real_distribution<double>(settings.mt_min_segment_init, settings.mt_max_segment_init)(random_engine));", "double mt_orientation = (std::uniform_real_distribution<double>(0.0, 2.0 * 3.1415)(random_engine));"])
+=========================
+name = y_c
+function_node in ir_prop_expr!: IdentifierNode(IdentifierToken(PositionToken("y", 208, 16)))
+arg: IdentifierToken(PositionToken("y", 208, 16))
+propensity: false
+=========================
+name: y_c
+value = GroupNode(IdentifierNode(IdentifierToken(PositionToken("y", 208, 16))))
+ir_value: (double y = std::get<Microtubule::Nucleator>(lhs[m[1]].data).fflow_a9cb96[1];
+)
+ir_builder: IRBuilder(Any["[&](auto &lhs, auto &rhs, auto &m1, auto &m2) {", "std::random_device random_device;\n", "std::mt19937 random_engine(random_device());\n", "double mt_seg_len = (std::uniform_real_distribution<double>(settings.mt_min_segment_init, settings.mt_max_segment_init)(random_engine));", "double mt_orientation = (std::uniform_real_distribution<double>(0.0, 2.0 * 3.1415)(random_engine));", "double x_c = (double x = std::get<Microtubule::Nucleator>(lhs[m[1]].data).fflow_a9cb96[0];\n);"])
+=========================
+name = z_c
+function_node in ir_prop_expr!: IdentifierNode(IdentifierToken(PositionToken("z", 209, 16)))
+arg: IdentifierToken(PositionToken("z", 209, 16))
+propensity: false
+=========================
+name: z_c
+value = GroupNode(IdentifierNode(IdentifierToken(PositionToken("z", 209, 16))))
+ir_value: (double z = std::get<Microtubule::Nucleator>(lhs[m[1]].data).fflow_a9cb96[2];
+)
+ir_builder: IRBuilder(Any["[&](auto &lhs, auto &rhs, auto &m1, auto &m2) {", "std::random_device random_device;\n", "std::mt19937 random_engine(random_device());\n", "double mt_seg_len = (std::uniform_real_distribution<double>(settings.mt_min_segment_init, settings.mt_max_segment_init)(random_engine));", "double mt_orientation = (std::uniform_real_distribution<double>(0.0, 2.0 * 3.1415)(random_engine));", "double x_c = (double x = std::get<Microtubule::Nucleator>(lhs[m[1]].data).fflow_a9cb96[0];\n);", "double y_c = (double y = std::get<Microtubule::Nucleator>(lhs[m[1]].data).fflow_a9cb96[1];\n);"])
+=========================
+name = x_s
+=========================
+name: x_s
+value = GroupNode(IntegerNode(IntegerToken(PositionToken("0.0", 211, 19))))
+ir_value: (0.0)
+ir_builder: IRBuilder(Any["[&](auto &lhs, auto &rhs, auto &m1, auto &m2) {", "std::random_device random_device;\n", "std::mt19937 random_engine(random_device());\n", "double mt_seg_len = (std::uniform_real_distribution<double>(settings.mt_min_segment_init, settings.mt_max_segment_init)(random_engine));", "double mt_orientation = (std::uniform_real_distribution<double>(0.0, 2.0 * 3.1415)(random_engine));", "double x_c = (double x = std::get<Microtubule::Nucleator>(lhs[m[1]].data).fflow_a9cb96[0];\n);", "double y_c = (double y = std::get<Microtubule::Nucleator>(lhs[m[1]].data).fflow_a9cb96[1];\n);", "double z_c = (double z = std::get<Microtubule::Nucleator>(lhs[m[1]].data).fflow_a9cb96[2];\n);"])
+=========================
+name = y_s
+function_node in ir_prop_expr!: IdentifierNode(IdentifierToken(PositionToken("mt_seg_len", 212, 25)))
+arg: IdentifierToken(PositionToken("mt_seg_len", 212, 25))
+propensity: false
+=========================
+name: y_s
+value = GroupNode(IdentifierNode(IdentifierToken(PositionToken("mt_seg_len", 212, 25))))
+ir_value: (mt_seg_len)
+ir_builder: IRBuilder(Any["[&](auto &lhs, auto &rhs, auto &m1, auto &m2) {", "std::random_device random_device;\n", "std::mt19937 random_engine(random_device());\n", "double mt_seg_len = (std::uniform_real_distribution<double>(settings.mt_min_segment_init, settings.mt_max_segment_init)(random_engine));", "double mt_orientation = (std::uniform_real_distribution<double>(0.0, 2.0 * 3.1415)(random_engine));", "double x_c = (double x = std::get<Microtubule::Nucleator>(lhs[m[1]].data).fflow_a9cb96[0];\n);", "double y_c = (double y = std::get<Microtubule::Nucleator>(lhs[m[1]].data).fflow_a9cb96[1];\n);", "double z_c = (double z = std::get<Microtubule::Nucleator>(lhs[m[1]].data).fflow_a9cb96[2];\n);", "double x_s = (0.0);"])
+=========================
+name = x_r_t
+function_node in ir_prop_expr!: IdentifierNode(IdentifierToken(PositionToken("x_s", 214, 20)))
+arg: IdentifierToken(PositionToken("x_s", 214, 20))
+propensity: false
+function_node in ir_prop_expr!: IdentifierNode(IdentifierToken(PositionToken("y_s", 214, 48)))
+arg: IdentifierToken(PositionToken("y_s", 214, 48))
+propensity: false
+=========================
+name: x_r_t
+value = GroupNode(BinaryOpNode(PlusToken(PositionToken("+", 214, 44)), BinaryOpNode(AsteriskToken(PositionToken("*", 214, 22)), IdentifierNode(IdentifierToken(PositionToken("x_s", 214, 20))), CallNode(IdentifierNode(IdentifierToken(PositionToken("cos", 214, 26))), Union{BinaryOpNode, CallNode, FloatNode, GroupNode, IdentifierNode, IntegerNode, UnaryOpNode, Token}[IdentifierNode(IdentifierToken(PositionToken("mt_orientation", 214, 41)))])), BinaryOpNode(AsteriskToken(PositionToken("*", 214, 50)), IdentifierNode(IdentifierToken(PositionToken("y_s", 214, 48))), CallNode(IdentifierNode(IdentifierToken(PositionToken("sin", 214, 54))), Union{BinaryOpNode, CallNode, FloatNode, GroupNode, IdentifierNode, IntegerNode, UnaryOpNode, Token}[IdentifierNode(IdentifierToken(PositionToken("mt_orientation", 214, 69)))]))))
+ir_value: (x_s * cos(mt_orientation) + y_s * sin(mt_orientation))
+ir_builder: IRBuilder(Any["[&](auto &lhs, auto &rhs, auto &m1, auto &m2) {", "std::random_device random_device;\n", "std::mt19937 random_engine(random_device());\n", "double mt_seg_len = (std::uniform_real_distribution<double>(settings.mt_min_segment_init, settings.mt_max_segment_init)(random_engine));", "double mt_orientation = (std::uniform_real_distribution<double>(0.0, 2.0 * 3.1415)(random_engine));", "double x_c = (double x = std::get<Microtubule::Nucleator>(lhs[m[1]].data).fflow_a9cb96[0];\n);", "double y_c = (double y = std::get<Microtubule::Nucleator>(lhs[m[1]].data).fflow_a9cb96[1];\n);", "double z_c = (double z = std::get<Microtubule::Nucleator>(lhs[m[1]].data).fflow_a9cb96[2];\n);", "double x_s = (0.0);", "double y_s = (mt_seg_len);"])
+=========================
+name = y_r_t
+function_node in ir_prop_expr!: IdentifierNode(IdentifierToken(PositionToken("y_s", 215, 49)))
+arg: IdentifierToken(PositionToken("y_s", 215, 49))
+propensity: false
+=========================
+name: y_r_t
+value = GroupNode(BinaryOpNode(PlusToken(PositionToken("+", 215, 45)), BinaryOpNode(AsteriskToken(PositionToken("*", 215, 23)), UnaryOpNode(MinusToken(PositionToken("-", 215, 18)), IdentifierNode(IdentifierToken(PositionToken("x_s", 215, 21)))), CallNode(IdentifierNode(IdentifierToken(PositionToken("sin", 215, 27))), Union{BinaryOpNode, CallNode, FloatNode, GroupNode, IdentifierNode, IntegerNode, UnaryOpNode, Token}[IdentifierNode(IdentifierToken(PositionToken("mt_orientation", 215, 42)))])), BinaryOpNode(AsteriskToken(PositionToken("*", 215, 51)), IdentifierNode(IdentifierToken(PositionToken("y_s", 215, 49))), CallNode(IdentifierNode(IdentifierToken(PositionToken("cos", 215, 55))), Union{BinaryOpNode, CallNode, FloatNode, GroupNode, IdentifierNode, IntegerNode, UnaryOpNode, Token}[IdentifierNode(IdentifierToken(PositionToken("mt_orientation", 215, 70)))]))))
+ir_value: (-x_s * sin(mt_orientation) + y_s * cos(mt_orientation))
+ir_builder: IRBuilder(Any["[&](auto &lhs, auto &rhs, auto &m1, auto &m2) {", "std::random_device random_device;\n", "std::mt19937 random_engine(random_device());\n", "double mt_seg_len = (std::uniform_real_distribution<double>(settings.mt_min_segment_init, settings.mt_max_segment_init)(random_engine));", "double mt_orientation = (std::uniform_real_distribution<double>(0.0, 2.0 * 3.1415)(random_engine));", "double x_c = (double x = std::get<Microtubule::Nucleator>(lhs[m[1]].data).fflow_a9cb96[0];\n);", "double y_c = (double y = std::get<Microtubule::Nucleator>(lhs[m[1]].data).fflow_a9cb96[1];\n);", "double z_c = (double z = std::get<Microtubule::Nucleator>(lhs[m[1]].data).fflow_a9cb96[2];\n);", "double x_s = (0.0);", "double y_s = (mt_seg_len);", "double x_r_t = (x_s * cos(mt_orientation) + y_s * sin(mt_orientation));"])
+=========================
+name = x_r
+function_node in ir_prop_expr!: IdentifierNode(IdentifierToken(PositionToken("x_c", 217, 18)))
+arg: IdentifierToken(PositionToken("x_c", 217, 18))
+propensity: false
+function_node in ir_prop_expr!: IdentifierNode(IdentifierToken(PositionToken("x_r_t", 217, 26)))
+arg: IdentifierToken(PositionToken("x_r_t", 217, 26))
+propensity: false
+=========================
+name: x_r
+value = GroupNode(BinaryOpNode(PlusToken(PositionToken("+", 217, 20)), IdentifierNode(IdentifierToken(PositionToken("x_c", 217, 18))), IdentifierNode(IdentifierToken(PositionToken("x_r_t", 217, 26)))))
+ir_value: (x_c + x_r_t)
+ir_builder: IRBuilder(Any["[&](auto &lhs, auto &rhs, auto &m1, auto &m2) {", "std::random_device random_device;\n", "std::mt19937 random_engine(random_device());\n", "double mt_seg_len = (std::uniform_real_distribution<double>(settings.mt_min_segment_init, settings.mt_max_segment_init)(random_engine));", "double mt_orientation = (std::uniform_real_distribution<double>(0.0, 2.0 * 3.1415)(random_engine));", "double x_c = (double x = std::get<Microtubule::Nucleator>(lhs[m[1]].data).fflow_a9cb96[0];\n);", "double y_c = (double y = std::get<Microtubule::Nucleator>(lhs[m[1]].data).fflow_a9cb96[1];\n);", "double z_c = (double z = std::get<Microtubule::Nucleator>(lhs[m[1]].data).fflow_a9cb96[2];\n);", "double x_s = (0.0);", "double y_s = (mt_seg_len);", "double x_r_t = (x_s * cos(mt_orientation) + y_s * sin(mt_orientation));", "double y_r_t = (-x_s * sin(mt_orientation) + y_s * cos(mt_orientation));"])
+=========================
+name = y_r
+function_node in ir_prop_expr!: IdentifierNode(IdentifierToken(PositionToken("y_c", 218, 18)))
+arg: IdentifierToken(PositionToken("y_c", 218, 18))
+propensity: false
+function_node in ir_prop_expr!: IdentifierNode(IdentifierToken(PositionToken("y_r_t", 218, 26)))
+arg: IdentifierToken(PositionToken("y_r_t", 218, 26))
+propensity: false
+=========================
+name: y_r
+value = GroupNode(BinaryOpNode(PlusToken(PositionToken("+", 218, 20)), IdentifierNode(IdentifierToken(PositionToken("y_c", 218, 18))), IdentifierNode(IdentifierToken(PositionToken("y_r_t", 218, 26)))))
+ir_value: (y_c + y_r_t)
+ir_builder: IRBuilder(Any["[&](auto &lhs, auto &rhs, auto &m1, auto &m2) {", "std::random_device random_device;\n", "std::mt19937 random_engine(random_device());\n", "double mt_seg_len = (std::uniform_real_distribution<double>(settings.mt_min_segment_init, settings.mt_max_segment_init)(random_engine));", "double mt_orientation = (std::uniform_real_distribution<double>(0.0, 2.0 * 3.1415)(random_engine));", "double x_c = (double x = std::get<Microtubule::Nucleator>(lhs[m[1]].data).fflow_a9cb96[0];\n);", "double y_c = (double y = std::get<Microtubule::Nucleator>(lhs[m[1]].data).fflow_a9cb96[1];\n);", "double z_c = (double z = std::get<Microtubule::Nucleator>(lhs[m[1]].data).fflow_a9cb96[2];\n);", "double x_s = (0.0);", "double y_s = (mt_seg_len);", "double x_r_t = (x_s * cos(mt_orientation) + y_s * sin(mt_orientation));", "double y_r_t = (-x_s * sin(mt_orientation) + y_s * cos(mt_orientation));", "double x_r = (x_c + x_r_t);"])
+=========================
+name = z_r
+=========================
+name: z_r
+value = GroupNode(IntegerNode(IntegerToken(PositionToken("0", 219, 17))))
+ir_value: (0)
+ir_builder: IRBuilder(Any["[&](auto &lhs, auto &rhs, auto &m1, auto &m2) {", "std::random_device random_device;\n", "std::mt19937 random_engine(random_device());\n", "double mt_seg_len = (std::uniform_real_distribution<double>(settings.mt_min_segment_init, settings.mt_max_segment_init)(random_engine));", "double mt_orientation = (std::uniform_real_distribution<double>(0.0, 2.0 * 3.1415)(random_engine));", "double x_c = (double x = std::get<Microtubule::Nucleator>(lhs[m[1]].data).fflow_a9cb96[0];\n);", "double y_c = (double y = std::get<Microtubule::Nucleator>(lhs[m[1]].data).fflow_a9cb96[1];\n);", "double z_c = (double z = std::get<Microtubule::Nucleator>(lhs[m[1]].data).fflow_a9cb96[2];\n);", "double x_s = (0.0);", "double y_s = (mt_seg_len);", "double x_r_t = (x_s * cos(mt_orientation) + y_s * sin(mt_orientation));", "double y_r_t = (-x_s * sin(mt_orientation) + y_s * cos(mt_orientation));", "double x_r = (x_c + x_r_t);", "double y_r = (y_c + y_r_t);"])
+=========================
+name = x_l
+function_node in ir_prop_expr!: IdentifierNode(IdentifierToken(PositionToken("x_c", 221, 18)))
+arg: IdentifierToken(PositionToken("x_c", 221, 18))
+propensity: false
+function_node in ir_prop_expr!: IdentifierNode(IdentifierToken(PositionToken("x_r", 221, 25)))
+arg: IdentifierToken(PositionToken("x_r", 221, 25))
+propensity: false
+function_node in ir_prop_expr!: IdentifierNode(IdentifierToken(PositionToken("x_c", 221, 31)))
+arg: IdentifierToken(PositionToken("x_c", 221, 31))
+propensity: false
+=========================
+name: x_l
+value = GroupNode(BinaryOpNode(MinusToken(PositionToken("-", 221, 20)), IdentifierNode(IdentifierToken(PositionToken("x_c", 221, 18))), GroupNode(BinaryOpNode(MinusToken(PositionToken("-", 221, 27)), IdentifierNode(IdentifierToken(PositionToken("x_r", 221, 25))), IdentifierNode(IdentifierToken(PositionToken("x_c", 221, 31)))))))
+ir_value: (x_c - (x_r - x_c))
+ir_builder: IRBuilder(Any["[&](auto &lhs, auto &rhs, auto &m1, auto &m2) {", "std::random_device random_device;\n", "std::mt19937 random_engine(random_device());\n", "double mt_seg_len = (std::uniform_real_distribution<double>(settings.mt_min_segment_init, settings.mt_max_segment_init)(random_engine));", "double mt_orientation = (std::uniform_real_distribution<double>(0.0, 2.0 * 3.1415)(random_engine));", "double x_c = (double x = std::get<Microtubule::Nucleator>(lhs[m[1]].data).fflow_a9cb96[0];\n);", "double y_c = (double y = std::get<Microtubule::Nucleator>(lhs[m[1]].data).fflow_a9cb96[1];\n);", "double z_c = (double z = std::get<Microtubule::Nucleator>(lhs[m[1]].data).fflow_a9cb96[2];\n);", "double x_s = (0.0);", "double y_s = (mt_seg_len);", "double x_r_t = (x_s * cos(mt_orientation) + y_s * sin(mt_orientation));", "double y_r_t = (-x_s * sin(mt_orientation) + y_s * cos(mt_orientation));", "double x_r = (x_c + x_r_t);", "double y_r = (y_c + y_r_t);", "double z_r = (0);"])
+=========================
+name = y_l
+function_node in ir_prop_expr!: IdentifierNode(IdentifierToken(PositionToken("y_c", 222, 18)))
+arg: IdentifierToken(PositionToken("y_c", 222, 18))
+propensity: false
+function_node in ir_prop_expr!: IdentifierNode(IdentifierToken(PositionToken("y_r", 222, 25)))
+arg: IdentifierToken(PositionToken("y_r", 222, 25))
+propensity: false
+function_node in ir_prop_expr!: IdentifierNode(IdentifierToken(PositionToken("y_c", 222, 31)))
+arg: IdentifierToken(PositionToken("y_c", 222, 31))
+propensity: false
+=========================
+name: y_l
+value = GroupNode(BinaryOpNode(MinusToken(PositionToken("-", 222, 20)), IdentifierNode(IdentifierToken(PositionToken("y_c", 222, 18))), GroupNode(BinaryOpNode(MinusToken(PositionToken("-", 222, 27)), IdentifierNode(IdentifierToken(PositionToken("y_r", 222, 25))), IdentifierNode(IdentifierToken(PositionToken("y_c", 222, 31)))))))
+ir_value: (y_c - (y_r - y_c))
+ir_builder: IRBuilder(Any["[&](auto &lhs, auto &rhs, auto &m1, auto &m2) {", "std::random_device random_device;\n", "std::mt19937 random_engine(random_device());\n", "double mt_seg_len = (std::uniform_real_distribution<double>(settings.mt_min_segment_init, settings.mt_max_segment_init)(random_engine));", "double mt_orientation = (std::uniform_real_distribution<double>(0.0, 2.0 * 3.1415)(random_engine));", "double x_c = (double x = std::get<Microtubule::Nucleator>(lhs[m[1]].data).fflow_a9cb96[0];\n);", "double y_c = (double y = std::get<Microtubule::Nucleator>(lhs[m[1]].data).fflow_a9cb96[1];\n);", "double z_c = (double z = std::get<Microtubule::Nucleator>(lhs[m[1]].data).fflow_a9cb96[2];\n);", "double x_s = (0.0);", "double y_s = (mt_seg_len);", "double x_r_t = (x_s * cos(mt_orientation) + y_s * sin(mt_orientation));", "double y_r_t = (-x_s * sin(mt_orientation) + y_s * cos(mt_orientation));", "double x_r = (x_c + x_r_t);", "double y_r = (y_c + y_r_t);", "double z_r = (0);", "double x_l = (x_c - (x_r - x_c));"])
+=========================
+name = z_l
+=========================
+name: z_l
+value = GroupNode(IntegerNode(IntegerToken(PositionToken("0", 223, 17))))
+ir_value: (0)
+ir_builder: IRBuilder(Any["[&](auto &lhs, auto &rhs, auto &m1, auto &m2) {", "std::random_device random_device;\n", "std::mt19937 random_engine(random_device());\n", "double mt_seg_len = (std::uniform_real_distribution<double>(settings.mt_min_segment_init, settings.mt_max_segment_init)(random_engine));", "double mt_orientation = (std::uniform_real_distribution<double>(0.0, 2.0 * 3.1415)(random_engine));", "double x_c = (double x = std::get<Microtubule::Nucleator>(lhs[m[1]].data).fflow_a9cb96[0];\n);", "double y_c = (double y = std::get<Microtubule::Nucleator>(lhs[m[1]].data).fflow_a9cb96[1];\n);", "double z_c = (double z = std::get<Microtubule::Nucleator>(lhs[m[1]].data).fflow_a9cb96[2];\n);", "double x_s = (0.0);", "double y_s = (mt_seg_len);", "double x_r_t = (x_s * cos(mt_orientation) + y_s * sin(mt_orientation));", "double y_r_t = (-x_s * sin(mt_orientation) + y_s * cos(mt_orientation));", "double x_r = (x_c + x_r_t);", "double y_r = (y_c + y_r_t);", "double z_r = (0);", "double x_l = (x_c - (x_r - x_c));", "double y_l = (y_c - (y_r - y_c));"])
+=========================
+function_node in ir_prop_expr!: IdentifierNode(IdentifierToken(PositionToken("x_l", 225, 16)))
+arg: IdentifierToken(PositionToken("x_l", 225, 16))
+propensity: false
+function_node in ir_prop_expr!: IdentifierNode(IdentifierToken(PositionToken("y_l", 226, 16)))
+arg: IdentifierToken(PositionToken("y_l", 226, 16))
+propensity: false
+function_node in ir_prop_expr!: IdentifierNode(IdentifierToken(PositionToken("z_l", 227, 16)))
+arg: IdentifierToken(PositionToken("z_l", 227, 16))
+propensity: false
+function_node in ir_prop_expr!: IdentifierNode(IdentifierToken(PositionToken("x_c", 229, 16)))
+arg: IdentifierToken(PositionToken("x_c", 229, 16))
+propensity: false
+function_node in ir_prop_expr!: IdentifierNode(IdentifierToken(PositionToken("y_c", 230, 16)))
+arg: IdentifierToken(PositionToken("y_c", 230, 16))
+propensity: false
+function_node in ir_prop_expr!: IdentifierNode(IdentifierToken(PositionToken("z_c", 231, 16)))
+arg: IdentifierToken(PositionToken("z_c", 231, 16))
+propensity: false
+function_node in ir_prop_expr!: IdentifierNode(IdentifierToken(PositionToken("x_r", 233, 16)))
+arg: IdentifierToken(PositionToken("x_r", 233, 16))
+propensity: false
+function_node in ir_prop_expr!: IdentifierNode(IdentifierToken(PositionToken("y_r", 234, 16)))
+arg: IdentifierToken(PositionToken("y_r", 234, 16))
+propensity: false
+function_node in ir_prop_expr!: IdentifierNode(IdentifierToken(PositionToken("z_r", 235, 16)))
+arg: IdentifierToken(PositionToken("z_r", 235, 16))
+propensity: false
+function_node in ir_prop_expr!: IdentifierNode(IdentifierToken(PositionToken("creation_factor", 202, 85)))
+arg: IdentifierToken(PositionToken("creation_factor", 202, 85))
+propensity: true
+function_node in ir_prop_expr!: IdentifierNode(IdentifierToken(PositionToken("creation_rate", 202, 101)))
+arg: IdentifierToken(PositionToken("creation_rate", 202, 101))
+propensity: true
+Generating Model
+ir_models_section: Generating Models Section IR
+Generating Main

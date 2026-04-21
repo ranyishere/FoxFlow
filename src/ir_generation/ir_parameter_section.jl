@@ -37,7 +37,6 @@ function ir_parameter_section(ast, propensity_table)
         push!(parameter_section_data, ir_grammar_parameter!(param, parameter_table))
     end
 
-
     push!(parameter_section_data, "};\n")
     push!(parameter_section_data, "#endif")
 

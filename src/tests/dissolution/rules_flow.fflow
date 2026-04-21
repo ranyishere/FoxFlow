@@ -1,0 +1,125 @@
+# Stage 2: Pressure-driven fluid flow (ODE solve rules)
+# Runs on the lattice built by Stage 1
+rules Dissolution {
+
+    # 1. Source boundary: fixed high pressure drives adjacent fluid node
+    source_flow := (f0 : FluidSource) -- (f1 : Fluid)
+        << (fp0 : FixedList<<3, Float>>, fu0 : FixedList<<3, Float>>, fc0 : FixedList<<1, Integer>>, P0 : Float, C0 : Float),
+           (fp1 : FixedList<<3, Float>>, fu1 : FixedList<<3, Float>>, fc1 : FixedList<<1, Integer>>, P1 : Float, C1 : Float) >> ->
+        (f0 : FluidSource) -- (f1 : Fluid)
+        << (fp0 : FixedList<<3, Float>>, fu0 : FixedList<<3, Float>>, fc0 : FixedList<<1, Integer>>, P0 : Float, C0 : Float),
+           (fp1 : FixedList<<3, Float>>, fu1 : FixedList<<3, Float>>, fc1 : FixedList<<1, Integer>>, dP1 : Float, C1 : Float) >>
+        solving (dP1 := D(P1, P0, t), dP0 := D(P0, t)) {
+
+            dP1 : ODE = 11.11 * (P0 - P1)
+            dP0 : ODE = 0.0
+
+    }
+
+    # 2. Interior fluid: pressure diffusion between connected fluid nodes
+    #    Discrete Laplacian via DGGML edge matching:
+    #    DGGML matches each undirected A--B edge TWICE (both orientations).
+    #    So solving only dP1 per match gives EACH node a contribution from
+    #    each neighbor exactly once, yielding the correct Laplacian:
+    #    dPi/dt = (k/mu/dx^2) * sum_neighbors(Pj - Pi)
+    fluid_flow := (f0 : Fluid) -- (f1 : Fluid)
+        << (fp0 : FixedList<<3, Float>>, fu0 : FixedList<<3, Float>>, fc0 : FixedList<<1, Integer>>, P0 : Float, C0 : Float),
+           (fp1 : FixedList<<3, Float>>, fu1 : FixedList<<3, Float>>, fc1 : FixedList<<1, Integer>>, P1 : Float, C1 : Float) >> ->
+        (f0 : Fluid) -- (f1 : Fluid)
+        << (fp0 : FixedList<<3, Float>>, fu0 : FixedList<<3, Float>>, fc0 : FixedList<<1, Integer>>, dP0 : Float, C0 : Float),
+           (fp1 : FixedList<<3, Float>>, fu1 : FixedList<<3, Float>>, fc1 : FixedList<<1, Integer>>, dP1 : Float, C1 : Float) >>
+        solving (dP1 := D(P1,P0,t), dP0 := D(P0,t)) {
+
+            dP1 : ODE = 11.11 * (P0 - P1)
+            dP0 : ODE = 0.0
+    }
+
+    # 3. Sink boundary: fixed low pressure drains last fluid node
+    sink_flow := (f0 : Fluid) -- (f1 : FluidSink)
+        << (fp0 : FixedList<<3, Float>>, fu0 : FixedList<<3, Float>>, fc0 : FixedList<<1, Integer>>, P0 : Float, C0 : Float),
+           (fp1 : FixedList<<3, Float>>, fu1 : FixedList<<3, Float>>, fc1 : FixedList<<1, Integer>>, P1 : Float, C1 : Float) >> ->
+        (f0 : Fluid) -- (f1 : FluidSink)
+        << (fp0 : FixedList<<3, Float>>, fu0 : FixedList<<3, Float>>, fc0 : FixedList<<1, Integer>>, dP0 : Float, C0 : Float),
+           (fp1 : FixedList<<3, Float>>, fu1 : FixedList<<3, Float>>, fc1 : FixedList<<1, Integer>>, P1 : Float, C1 : Float) >>
+        solving (dP0 := D(P0,P1,t), dP1 := D(P1, t)) {
+
+            dP0 : ODE = 11.11 * (P1 - P0)
+            dP1 : ODE = 0.0
+    }
+
+    # =============================================
+    # DISSOLUTION: Fluid pressure erodes nearby rock
+    # =============================================
+
+    # 4. Erosion: Fluid edge near a RockStart with Density > 0.1
+    #    Each firing reduces the rock density by 0.1.
+    #    Propensity scales with pressure => higher pressure erodes faster.
+    #    LHS matches a Fluid--Fluid edge (since all Fluid nodes are connected)
+    #    plus a disconnected RockStart matched by proximity.
+    erode_rock := (f0 : Fluid) -- (f1 : Fluid) (rock0 : RockStart)
+        << (fp0 : FixedList<<3, Float>>, fu0 : FixedList<<3, Float>>, fc0 : FixedList<<1, Integer>>, P0 : Float, C0 : Float),
+           (fp1 : FixedList<<3, Float>>, fu1 : FixedList<<3, Float>>, fc1 : FixedList<<1, Integer>>, P1 : Float, C1 : Float),
+           (rpos : FixedList<<3, Float>>, rc : FixedList<<3, Integer>>, rdir : FixedList<<3, Integer>>, rho : Float) >> ->
+        (f0 : Fluid) -- (f1 : Fluid) (rock0 : RockStart)
+        << (fp0n : FixedList<<3, Float>>, fu0n : FixedList<<3, Float>>, fc0n : FixedList<<1, Integer>>, P0n : Float, C0n : Float),
+           (fp1n : FixedList<<3, Float>>, fu1n : FixedList<<3, Float>>, fc1n : FixedList<<1, Integer>>, P1n : Float, C1n : Float),
+           (rposn : FixedList<<3, Float>>, rcn : FixedList<<3, Integer>>, rdirn : FixedList<<3, Integer>>, rhon : Float) >>
+        with (
+            10.0 * P0 * indicator( rho > 0.1 ) * indicator( HELP::distance(fp0[0], fp0[1], fp0[2], rpos[0], rpos[1], rpos[2]) <= 0.35 )
+        ) where {
+
+        fp0n = fp0
+        fu0n = fu0
+        fc0n = fc0
+        P0n = P0
+        C0n = C0
+
+        fp1n = fp1
+        fu1n = fu1
+        fc1n = fc1
+        P1n = P1
+        C1n = C1
+
+        rposn = rpos
+        rcn = rc
+        rdirn = rdir
+        rhon = rho - 0.1
+    }
+
+    # 5. Rock-to-Fluid conversion: When a RockStart near a Fluid edge
+    #    has been eroded below the threshold (Density <= 0.1),
+    #    the rock transforms into a new Fluid node and connects
+    #    to the existing fluid via an edge, extending the fluid network.
+#     rock_to_fluid := (f0 : Fluid) -- (f1 : Fluid) (rock0 : RockStart)
+#         << (fp0 : FixedList<<3, Float>>, fu0 : FixedList<<3, Float>>, fc0 : FixedList<<1, Integer>>, P0 : Float, C0 : Float),
+#            (fp1 : FixedList<<3, Float>>, fu1 : FixedList<<3, Float>>, fc1 : FixedList<<1, Integer>>, P1 : Float, C1 : Float),
+#            (rpos : FixedList<<3, Float>>, rc : FixedList<<3, Integer>>, rdir : FixedList<<3, Integer>>, rho : Float) >> ->
+#         (f0 : Fluid) -- (f1 : Fluid) -- (fnew : Fluid)
+#         << (fp0n : FixedList<<3, Float>>, fu0n : FixedList<<3, Float>>, fc0n : FixedList<<1, Integer>>, P0n : Float, C0n : Float),
+#            (fp1n : FixedList<<3, Float>>, fu1n : FixedList<<3, Float>>, fc1n : FixedList<<1, Integer>>, P1n : Float, C1n : Float),
+#            (fpnew : FixedList<<3, Float>>, funew : FixedList<<3, Float>>, fcnew : FixedList<<1, Integer>>, Pnew : Float, Cnew : Float) >>
+#         with (
+#             10000.0 * indicator( rho <= 0.1 ) * indicator( HELP::distance(fp0[0], fp0[1], fp0[2], rpos[0], rpos[1], rpos[2]) <= 0.35 )
+#         ) where {
+# 
+#         fp0n = fp0
+#         fu0n = fu0
+#         fc0n = fc0
+#         P0n = P0
+#         C0n = C0
+# 
+#         fp1n = fp1
+#         fu1n = fu1
+#         fc1n = fc1
+#         P1n = P1
+#         C1n = C1
+# 
+#         fpnew = rpos
+#         funew = [0.0, 0.0, 0.0]
+#         fcnew = [0]
+#         Pnew = (P0 + P1) / 2.0
+#         Cnew = 0.0
+#     }
+
+   # TODO: Add Continuity Equation?
+}

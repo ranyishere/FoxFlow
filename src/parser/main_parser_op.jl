@@ -3,20 +3,27 @@ import ..Tokens:
     LeftParenthesisToken, RightParenthesisToken, LeftAngleBracketToken,
     RightAngleBracketToken, SingleColonToken, DefineToken, LeftBracketToken,
     RightBracketToken, PunctuationToken, TypeSectionToken, ParameterSectionToken,
-    RuleSectionToken, SlashToken, AsteriskToken, PlusToken, MinusToken, RightArrowToken, WithToken, WhereToken, SolvingToken, EqualToken, CommaToken, EdgeToken, ODEToken, SampleToken, LtToken, GtToken, LtEqToken, GtEqToken, EqEqToken, NotEqToken, NotToken, AndAndToken, OrOrToken, TypeToken, FunctionSectionToken, FunctionToken, CaretToken, ReturnToken
-
+    RuleSectionToken, SlashToken, AsteriskToken, PlusToken, MinusToken, RightArrowToken, WithToken, WhereToken, SolvingToken,
+    EqualToken, CommaToken, EdgeToken, ODEToken, SampleToken, BackslashToken,
+    LtToken, GtToken, LtEqToken, GtEqToken, EqEqToken, NotEqToken,
+    NotToken, AndAndToken, OrOrToken, TypeToken, FunctionSectionToken, FunctionToken, CaretToken, ReturnToken,
+    StateToken, SimulationTypesToken, RulesToken, DotToken, ParameterToken, SimulationToken, RunSimulationToken, QuoteToken, SimulationSectionToken, LoadFileToken, StringToken, SimulationParametersToken, DoubleColonToken,
+    LeftSquareBracketToken, RightSquareBracketToken
 import ..AstNodes:
-    Node, IdentifierNode, ParameterNode, TypeInstanceNode, TypeClassNode,
+    Node, IdentifierNode, ParameterNode, TypeInstanceNode, TypeInstanceUpdateNode, TypeClassNode,
     TypeSectionNode, ParameterSectionNode, RuleSectionNode, RuleNode,
     WhereClauseNode, WithClauseNode, SolveClauseNode, CallNode,
     GroupNode, BinaryOpNode, FunctionNode, FloatNode, IntegerNode, UndirectedTypeEdgeNode,
     BindingVariableNode, ODENode, UnaryOpNode, DefinitionNode, FunctionArgNode, FunctionSignatureNode,
     FunctionBodyExpressionNode, FunctionDefinitionExpressionNode, FunctionDefinitionNode,
-    ReturnNode, FunctionSectionNode
+    ReturnNode, FunctionSectionNode, SimulationSectionNode, StringNode, LoadNode, SimDeclarationNode,
+    SimulationNode, SimulationRulesNode, SimulationTypesNode, SimulationStateNode, SimulationParametersNode,
+    RunSimulationNode, NamedParameterNode, IndexAccessNode, ArrayLiteralNode, ModelLoadNode, SliceNode
 
 include("expression_parser.jl")
 include("function_parser.jl")
 include("parser_utils.jl")
+include("sim_parser.jl")
 
 const PRECEDENCE = Dict(
     "+" => 1,
@@ -37,8 +44,6 @@ function expect_token!(tokens, ::Type{T}) where T <: Token
 end
 
 function tokenize_file(file_name)
-
-    println("Tokenizing file: $file_name")
 
     lines_tokens = []
     open(file_name) do f
@@ -96,12 +101,81 @@ function parse_symbol_parameters!(tokens)
 
         while !isempty(tokens) && !isa(lookahead(tokens), RightAngleBracketToken)
 
+            println("lookahead tokens: $(lookahead(tokens))")
             # Handling nested parameters
             if isa(lookahead(tokens), LeftAngleBracketToken)
                 nested_params = parse_symbol_parameters!(tokens)
                 push!(params, nested_params)  # Add nested params to params array
 
             elseif isa(lookahead(tokens), LeftParenthesisToken) || isa(lookahead(tokens), RightParenthesisToken)
+                popfirst!(tokens)
+            elseif isa(lookahead(tokens), EndLineToken)
+                # Pop EndLineToken and ignore
+                popfirst!(tokens)
+
+            elseif isa(lookahead(tokens), IdentifierToken) && length(tokens) > 1 && isa(tokens[2], SingleColonToken)
+                # Handle cases like `param: Type`
+                param_name = parse_symbol_name!(tokens)
+                popfirst!(tokens) # Consume `:`
+                param_type = parse_type_signature_list!(tokens)
+
+                # println("param_name: $param_name, param_type: $param_type")
+
+                push!(params, NamedParameterNode(param_name, param_type))
+                # push!(params, (param_name, param_type))  # Add parameter name and type as a tuple to params array
+
+            else
+
+                # It could jsut be a regular identifer token. Is this valid?
+                cur_expr = parse_expression!(tokens)
+                push!(params, cur_expr)  # Add parsed expression to params array
+
+            end
+
+            if !isempty(tokens) && isa(lookahead(tokens), PunctuationToken)
+                popfirst!(tokens) # Consume `,`
+            end
+
+        end
+
+        if isempty(tokens) || !isa(popfirst!(tokens), RightAngleBracketToken)
+            throw("Expected `>>` to close parameter list")
+        end
+
+    end
+    return ParameterNode(params)
+end
+
+function parse_type_symbol_parameters!(tokens)
+    params = []
+
+    lookahead_token = lookahead(tokens)
+    
+    if !isempty(tokens) && isa(lookahead(tokens), LeftAngleBracketToken)
+
+        popfirst!(tokens) # Consume `<<`
+
+        while !isempty(tokens) && !isa(lookahead(tokens), RightAngleBracketToken)
+
+            if !(lookahead(tokens) isa IdentifierToken)
+                throw("Expected IdentifierToken in type parameter list, got $(lookahead(tokens))")
+            end
+
+            param_name = parse_symbol_name!(tokens)
+            if !(lookahead(tokens) isa SingleColonToken)
+                throw("Expected SingleColonToken after parameter name in type parameter list, got $(lookahead(tokens))")
+            end
+            popfirst!(tokens) # Consume `:`
+
+            # Handling nested parameters
+            if isa(lookahead(tokens), LeftAngleBracketToken)
+                nested_params = parse_symbol_parameters!(tokens)
+                push!(params, nested_params)  # Add nested params to params array
+
+            elseif isa(lookahead(tokens), LeftParenthesisToken) || isa(lookahead(tokens), RightParenthesisToken)
+                popfirst!(tokens)
+            elseif isa(lookahead(tokens), EndLineToken)
+                # Pop EndLineToken and ignore
                 popfirst!(tokens)
             else
                 cur_expr = parse_expression!(tokens)
@@ -122,7 +196,7 @@ function parse_symbol_parameters!(tokens)
     return ParameterNode(params)
 end
 
-# Parse a type signature list (e.g., `A -> B -> C`)
+
 function parse_type_signature_list!(tokens)
 
     typename = nothing
@@ -140,6 +214,10 @@ function parse_type_signature_list!(tokens)
     if !isempty(tokens) && isa(lookahead(tokens), RightArrowToken)
         popfirst!(tokens)  # Consume `->`
         return TypeClassNode(type_name, parse_type_signature_list!(tokens))
+    elseif !isempty(tokens) && isa(lookahead(tokens), LeftAngleBracketToken)
+        # popfirst!(tokens)  # Consume `->`
+        param_node = parse_symbol_parameters!(tokens)
+        return TypeClassNode(type_name, param_node)
     else
         return TypeClassNode(type_name, ParameterNode([]))
     end
@@ -160,6 +238,8 @@ function parse_type_assignment!(tokens)
     # Parse Type Signature
     type_signature_list = parse_type_signature_list!(tokens)
 
+    # println("type_signature_list: $type_signature_list")
+
     if !isempty(tokens) && isa(lookahead(tokens), DefineToken)
 
         popfirst!(tokens)  # Consume `=`
@@ -172,7 +252,6 @@ function parse_type_assignment!(tokens)
                 throw("Expected `}` to close type declaration list")
             end
 
-            # println("type_declarations: ", type_declarations)
             return TypeInstanceNode(symbol_name, symbol_parameters, type_signature_list, type_declarations)
         else
 
@@ -208,36 +287,134 @@ function parse_type!(tokens)
     return TypeInstanceNode(symbol_name, nothing, type_signature_list, nothing)
 end
 
+"""
+    parse_index_element!(tokens)
+
+Parse a single index element inside [...]. This can be:
+  - A plain expression:        tensor[i]
+  - A slice with start:stop:    tensor[0:3]
+  - A slice with start:stop:step: tensor[1:5:2]
+  - A bare colon (select all):  tensor[:]
+  - A colon with step (::step):  tensor[::2]
+
+Returns either a normal expression Node or a SliceNode.
+"""
+function parse_index_element!(tokens)
+    # Check for bare colon first: [:] or [::step] or [:stop] or [:stop:step]
+    if !isempty(tokens) && lookahead(tokens) isa SingleColonToken
+        popfirst!(tokens)  # consume ':'
+        start_expr = nothing
+        # Check for second colon (::step pattern) or stop expression
+        if !isempty(tokens) && lookahead(tokens) isa SingleColonToken
+            # ::step
+            popfirst!(tokens)  # consume second ':'
+            if !isempty(tokens) && !(lookahead(tokens) isa RightSquareBracketToken) && !(lookahead(tokens) isa PunctuationToken)
+                step_expr = parse_expression!(tokens)
+                return SliceNode(nothing, nothing, step_expr)
+            else
+                return SliceNode(nothing, nothing, nothing)
+            end
+        elseif !isempty(tokens) && !(lookahead(tokens) isa RightSquareBracketToken) && !(lookahead(tokens) isa PunctuationToken)
+            # :stop or :stop:step
+            stop_expr = parse_expression!(tokens)
+            if !isempty(tokens) && lookahead(tokens) isa SingleColonToken
+                popfirst!(tokens)  # consume ':'
+                step_expr = parse_expression!(tokens)
+                return SliceNode(nothing, stop_expr, step_expr)
+            end
+            return SliceNode(nothing, stop_expr, nothing)
+        else
+            # bare : (select all)
+            return SliceNode(nothing, nothing, nothing)
+        end
+    end
+
+    # Parse the first expression (could be start of a slice or a plain index)
+    expr = parse_expression!(tokens)
+
+    # Check if followed by colon -> slice
+    if !isempty(tokens) && lookahead(tokens) isa SingleColonToken
+        popfirst!(tokens)  # consume ':'
+        start_expr = expr
+        # Check for second colon right away (start::step)
+        if !isempty(tokens) && lookahead(tokens) isa SingleColonToken
+            popfirst!(tokens)  # consume second ':'
+            if !isempty(tokens) && !(lookahead(tokens) isa RightSquareBracketToken) && !(lookahead(tokens) isa PunctuationToken)
+                step_expr = parse_expression!(tokens)
+                return SliceNode(start_expr, nothing, step_expr)
+            else
+                return SliceNode(start_expr, nothing, nothing)
+            end
+        elseif !isempty(tokens) && !(lookahead(tokens) isa RightSquareBracketToken) && !(lookahead(tokens) isa PunctuationToken)
+            # start:stop possibly followed by :step
+            stop_expr = parse_expression!(tokens)
+            if !isempty(tokens) && lookahead(tokens) isa SingleColonToken
+                popfirst!(tokens)  # consume ':'
+                step_expr = parse_expression!(tokens)
+                return SliceNode(start_expr, stop_expr, step_expr)
+            end
+            return SliceNode(start_expr, stop_expr, nothing)
+        else
+            # start: (from start to end)
+            return SliceNode(start_expr, nothing, nothing)
+        end
+    end
+
+    return expr
+end
+
 function parse_type_update!(tokens)
+    # Updates to existing types done by a rule or sees a definition of a tmp variable
 
     symbol_name = parse_symbol_name!(tokens)
-    symbol_parameters = parse_symbol_parameters!(tokens)
 
-    tmp = popfirst!(tokens)
-    if !isa(tmp, SingleColonToken)
-        throw("Expected `:` after symbol name got $(tmp). Did you mean to put a type?")
+    # Check for indexed LHS: name[idx] = expr
+    lhs_node = symbol_name
+    if !isempty(tokens) && lookahead(tokens) isa LeftSquareBracketToken
+        while !isempty(tokens) && lookahead(tokens) isa LeftSquareBracketToken
+            popfirst!(tokens)  # consume '['
+            indices = Node[]
+            push!(indices, parse_index_element!(tokens))
+            while !isempty(tokens) && lookahead(tokens) isa PunctuationToken
+                popfirst!(tokens)  # consume ','
+                push!(indices, parse_index_element!(tokens))
+            end
+            if isempty(tokens) || !(lookahead(tokens) isa RightSquareBracketToken)
+                error("Expected ']' after index expression in LHS")
+            end
+            popfirst!(tokens)  # consume ']'
+            lhs_node = IndexAccessNode(lhs_node, indices)
+        end
     end
 
-    type_signature_list = parse_type_signature_list!(tokens)
+    symbol_parameters = parse_symbol_parameters!(tokens)
+    type_signature_list = nothing
 
-    # This is an intermediate value and not a type update
-    if isa(lookahead(tokens), DefineToken)
-        popfirst!(tokens)  # Consume `:=`
+    # Its a definition node
+    if lookahead(tokens) isa SingleColonToken
+        popfirst!(tokens)  # Consume `:`
 
-        expression = []
-        while !isa(lookahead(tokens), EndLineToken)
-            literal = popfirst!(tokens)  # Assume it's a literal/expression
-            push!(expression,literal)
+        type_signature_list = parse_type_signature_list!(tokens)
+
+        # This is an intermediate value and not a type update
+        if isa(lookahead(tokens), DefineToken)
+            popfirst!(tokens)  # Consume `:=`
+            expression = []
+            while !isa(lookahead(tokens), EndLineToken)
+                literal = popfirst!(tokens)  # Assume it's a literal/expression
+                push!(expression,literal)
+            end
+
+            expression_nodes = parse_expression!(expression)
+            return DefinitionNode(symbol_name, type_signature_list, expression_nodes)
         end
 
-        expression_nodes = parse_expression!(expression)
 
-        return DefinitionNode(symbol_name, type_signature_list, expression_nodes)
     end
-
+    
     if !isempty(tokens) && isa(lookahead(tokens), EqualToken)
 
-        popfirst!(tokens)  # Consume `:=`
+        popfirst!(tokens)  # Consume `=`
 
         if !isempty(tokens) && isa(lookahead(tokens), LeftBracketToken)
 
@@ -248,38 +425,36 @@ function parse_type_update!(tokens)
                 throw("Expected `}` to close type declaration list")
             end
 
-            return TypeInstanceNode(symbol_name, symbol_parameters, type_signature_list, type_declarations)
+
+            # return TypeInstanceNode(symbol_name, symbol_parameters, type_signature_list, type_declarations)
+            return TypeInstanceUpdateNode(lhs_node, type_declarations)
         else
 
-            #TODO: Support expression
             expression = []
             while !isa(lookahead(tokens), EndLineToken) && !isa(lookahead(tokens), RightBracketToken)
                 literal = popfirst!(tokens)  # Assume it's a literal/expression
                 push!(expression,literal)
             end
 
-            # TODO: Actually implement this intead
             expression_nodes = parse_expression!(expression)
-            return TypeInstanceNode(symbol_name, symbol_parameters, type_signature_list, expression_nodes)
-            # return TypeInstanceNode(symbol_name, symbol_parameters, type_signature_list, expression)
+            # return TypeInstanceNode(symbol_name, symbol_parameters, type_signature_list, expression_nodes)
+            return TypeInstanceUpdateNode(lhs_node, expression_nodes)
 
         end
     end
-
 
     return TypeInstanceNode(symbol_name, symbol_parameters, type_signature_list, nothing)
 end
 
 
-
 # Parse a type declaration (non-assignment case)
 function parse_type_declaration!(tokens)
 
+    # Nucleator
     type_name = parse_symbol_name!(tokens)
-    symbol_parameters = parse_symbol_parameters!(tokens)
 
-    println("type_name: ", type_name)
-    println("symbol_parameters: ", symbol_parameters)
+    # << param >>
+    symbol_parameters = parse_symbol_parameters!(tokens)
 
     if !isa(lookahead(tokens), SingleColonToken)
         throw("Expected `:` in type declaration got $(lookahead(tokens))")
@@ -307,7 +482,6 @@ function parse_type_declaration_list!(tokens)
     return declarations
 end
 
-# Parse a type section `{ ... }` into an AST node
 function parse_types_section!(tokens)
 
     if !isa(lookahead(tokens), TypeSectionToken)
@@ -360,23 +534,60 @@ function parse_factor!(tokens)
 
     elseif lookahead(tokens) isa IdentifierToken
 
-
         id_token = popfirst!(tokens)
+        namespace = nothing
+
+        if (length(tokens) > 0)
+            if (lookahead(tokens) isa DoubleColonToken)
+                # popping Double Colon
+                popfirst!(tokens)
+                namespace = id_token
+                if lookahead(tokens) isa IdentifierToken
+                    id_token = popfirst!(tokens)
+                else
+                    throw("Error expected an IdentifierToken after '::'")
+                end
+            end
+        end
+
         if !isempty(tokens) && lookahead(tokens) isa LeftParenthesisToken
+
+            
             popfirst!(tokens)  # consume '('
             args = Node[]
+
             while !(lookahead(tokens) isa RightParenthesisToken)
                 push!(args, parse_expression!(tokens))
                 if lookahead(tokens) isa PunctuationToken
                     popfirst!(tokens)
                 end
+
             end
             popfirst!(tokens)  # consume ')'
 
-            return CallNode(IdentifierNode(id_token), args)
+            # FIXME: Namespace not appearing with variable.
+            result = CallNode(IdentifierNode(id_token, namespace), args)
         else
-            return IdentifierNode(id_token)
+            result = IdentifierNode(id_token)
         end
+
+        # Postfix index access: expr[i] or expr[i, j] or expr[0:3] etc.
+        while !isempty(tokens) && lookahead(tokens) isa LeftSquareBracketToken
+            popfirst!(tokens)  # consume '['
+            indices = Node[]
+            push!(indices, parse_index_element!(tokens))
+            while !isempty(tokens) && lookahead(tokens) isa PunctuationToken
+                popfirst!(tokens)  # consume ','
+                push!(indices, parse_index_element!(tokens))
+            end
+            if isempty(tokens) || !(lookahead(tokens) isa RightSquareBracketToken)
+                error("Expected ']' after index expression")
+            end
+            popfirst!(tokens)  # consume ']'
+            result = IndexAccessNode(result, indices)
+        end
+
+        return result
 
     elseif lookahead(tokens) isa IntegerToken
         return IntegerNode(popfirst!(tokens))
@@ -403,9 +614,33 @@ function parse_factor!(tokens)
         sample_token = popfirst!(tokens)  # consume '~'
         right = parse_factor!(tokens)
         return UnaryOpNode(sample_token, right)
+
+    elseif lookahead(tokens) isa LeftSquareBracketToken
+        # Array/tensor literal: [expr, expr, ...] or [[expr,...], [expr,...], ...]
+        popfirst!(tokens)  # consume '['
+        elements = Node[]
+        if !(lookahead(tokens) isa RightSquareBracketToken)
+            push!(elements, parse_expression!(tokens))
+            while !isempty(tokens) && lookahead(tokens) isa PunctuationToken
+                popfirst!(tokens)  # consume ','
+                push!(elements, parse_expression!(tokens))
+            end
+        end
+        if isempty(tokens) || !(lookahead(tokens) isa RightSquareBracketToken)
+            error("Expected ']' after array literal")
+        end
+        popfirst!(tokens)  # consume ']'
+        return ArrayLiteralNode(elements)
+
+    # elseif lookahead(tokens) isa RightAngleBracketToken
+        # right_angle_token = popfirst!(tokens)  # consume '>'
+        # right = parse_factor!(tokens)
+        # return UnaryOpNode(right_angle_token, right)
     else
+        println("tokens: $tokens")
         error("Unexpected token in factor: $(lookahead(tokens))")
     end
+
 end
 
 
@@ -516,28 +751,28 @@ function parse_function_type!(tokens)
     FunctionNode(function_name, function_args)
 end
 
-function parse_type_assignment_list!(tokens)
-    """
-    Parse Type Assignment List
-    """
-
-    type_assignments = []
-
-    while isa(lookahead(tokens), EndLineToken)
-        popfirst!(tokens)
-    end
-
-    cur_type_assignment = parse_type_assignment!(tokens)
-
-    push!(type_assignments, cur_type_assignment)
-
-    if isa(lookahead(tokens), EndLineToken)
-        tmp = parse_type_assignment_list!(tokens)
-        type_assignments = [type_assignments;tmp]
-    end
-
-    return type_assignments
-end
+# function parse_type_assignment_list!(tokens)
+#     """
+#     Parse Type Assignment List
+#     """
+# 
+#     type_assignments = []
+# 
+#     while isa(lookahead(tokens), EndLineToken)
+#         popfirst!(tokens)
+#     end
+# 
+#     cur_type_assignment = parse_type_assignment!(tokens)
+# 
+#     push!(type_assignments, cur_type_assignment)
+# 
+#     if isa(lookahead(tokens), EndLineToken)
+#         tmp = parse_type_assignment_list!(tokens)
+#         type_assignments = [type_assignments;tmp]
+#     end
+# 
+#     return type_assignments
+# end
 
 function parse_type_update_list!(tokens)
 
@@ -592,23 +827,14 @@ function parse_with_clause!(tokens)
     end
 
     propensity = parse_expression!(tokens)
-    # check lookahead
-    # if isa(lookahead(tokens), LeftParenthesisToken)
-    # if isa(lookahead(tokens), IdentifierToken) && tokens[2] isa LeftParenthesisToken
-        # propensity = parse_function_type!(tokens)
-    # else
-        # Probably some expression
-        # propensity = parse_expression!(tokens)
-    # end
-    #
-    # cur_token = popfirst!(tokens)
-    # if !isa(cur_token, RightParenthesisToken)
-        # println("Expected RightParenthesis got $cur_token")
-    # end
+
+    # remove endline tokens
+    while isa(lookahead(tokens), EndLineToken)
+        popfirst!(tokens)
+    end
+
 
     cur_token = popfirst!(tokens)
-
-    println("cur_token =======>: ", cur_token)
 
     if !isa(cur_token, WhereToken)
         throw("Expected WhereToken got $cur_token")
@@ -638,10 +864,6 @@ function parse_with_clause!(tokens)
     WithClauseNode(propensity, where_clause)
 end
 
-function parse_parameterized_type!(tokens)
-    popfirst!(tokens)
-end
-
 function parse_solving_content(tokens)
     """
     Parse Solving Content
@@ -667,10 +889,27 @@ function parse_binding_variable!(tokens)
     Parse Binding Variable
     """
 
-    # Should be identifier name
+    # Should be identifier name, possibly with index access like dpos[0]
     var_name = popfirst!(tokens)
     if !isa(var_name, IdentifierToken)
         throw("Expected IdentifierToken got $var_name")
+    end
+
+    # Check for index access: dpos[0]
+    var_node = IdentifierNode(var_name)
+    if !isempty(tokens) && lookahead(tokens) isa LeftSquareBracketToken
+        popfirst!(tokens)  # consume '['
+        indices = Node[]
+        push!(indices, parse_expression!(tokens))
+        while !isempty(tokens) && lookahead(tokens) isa PunctuationToken
+            popfirst!(tokens)  # consume ','
+            push!(indices, parse_expression!(tokens))
+        end
+        if isempty(tokens) || !(lookahead(tokens) isa RightSquareBracketToken)
+            error("Expected ']' after index in binding variable")
+        end
+        popfirst!(tokens)  # consume ']'
+        var_node = IndexAccessNode(var_node, indices)
     end
 
     # Should pop := define symbol
@@ -696,6 +935,21 @@ function parse_binding_variable!(tokens)
             popfirst!(tokens)
         else
             ode_variable = parse_symbol_name!(tokens)
+            # Check for index access on ODE variable: D(im_pos[0], t)
+            if !isempty(tokens) && lookahead(tokens) isa LeftSquareBracketToken
+                popfirst!(tokens)  # consume '['
+                indices = Node[]
+                push!(indices, parse_expression!(tokens))
+                while !isempty(tokens) && lookahead(tokens) isa PunctuationToken
+                    popfirst!(tokens)  # consume ','
+                    push!(indices, parse_expression!(tokens))
+                end
+                if isempty(tokens) || !(lookahead(tokens) isa RightSquareBracketToken)
+                    error("Expected ']' after index in ODE variable")
+                end
+                popfirst!(tokens)  # consume ']'
+                ode_variable = IndexAccessNode(ode_variable, indices)
+            end
             push!(ode_variables, ode_variable)
         end
 
@@ -706,14 +960,15 @@ function parse_binding_variable!(tokens)
         throw("Expected RightParenthesisToken got $right_paren")
     end
 
-    var_name = IdentifierNode(var_name)
-    BindingVariableNode(var_name, ode_variables)
+    BindingVariableNode(var_node, ode_variables)
 end
 
 # TODO: Add support for DefinitionNode
 function parse_solve_clause!(tokens)
     """
-    Parses Solve Clause and returns an ODENode
+    Parses Solve Clause and returns an ODENode.
+    Handles both simple names (dx : ODE = expr) and
+    indexed names (dx[0] : ODE = expr) for tensor component ODEs.
     """
 
     var_name = popfirst!(tokens)
@@ -724,6 +979,22 @@ function parse_solve_clause!(tokens)
 
     var_name = IdentifierNode(var_name)
 
+    # Check for index access: dx[i] : ODE = expr or dx[0:3] : ODE = expr
+    if !isempty(tokens) && lookahead(tokens) isa LeftSquareBracketToken
+        popfirst!(tokens)  # consume '['
+        indices = Node[]
+        push!(indices, parse_index_element!(tokens))
+        while !isempty(tokens) && lookahead(tokens) isa PunctuationToken
+            popfirst!(tokens)  # consume ','
+            push!(indices, parse_index_element!(tokens))
+        end
+        if isempty(tokens) || !(lookahead(tokens) isa RightSquareBracketToken)
+            error("Expected ']' after index expression in ODE name")
+        end
+        popfirst!(tokens)  # consume ']'
+        var_name = IndexAccessNode(var_name, indices)
+    end
+
     colon_token = popfirst!(tokens)
     if !(colon_token isa SingleColonToken)
         throw("Error expected single colon token")
@@ -731,18 +1002,24 @@ function parse_solve_clause!(tokens)
 
     # Should be an ode token (Type)
     ode_token = popfirst!(tokens)
-    if !(ode_token isa ODEToken)
-        throw("Error expected an ODEtoken. Got: $ode_token.")
+    if !((ode_token isa ODEToken) || (ode_token isa FloatToken) || (ode_token isa IntegerToken))
+        throw("Error expected an ODE type or Float or Integer. Got: $ode_token.")
     end
 
     eq_token = popfirst!(tokens)
-    if !(eq_token isa EqualToken)
-        throw("Error expected EqualToken got $eq_token")
+    if !(eq_token isa EqualToken || eq_token isa DefineToken)
+        throw("Error expected '=' or ':=' got $eq_token")
     end
 
     expression = parse_expression!(tokens)
 
-    ODENode(var_name, expression)
+    if eq_token isa EqualToken
+        return ODENode(var_name, expression)
+    elseif eq_token isa DefineToken
+        return DefinitionNode(var_name, TypeClassNode(IdentifierNode(ode_token), ParameterNode([])), expression)
+    else
+        throw("Unexpected token in solve clause: $eq_token")
+    end
 end
 
 function parse_rule_solve!(tokens)
@@ -801,6 +1078,7 @@ function parse_rule_solve!(tokens)
     if !isa(cur_token, RightBracketToken)
         throw("Expected RightBracketToken got $cur_token")
     end
+
     SolveClauseNode(
         total_binding_variables,
         solve_clause
@@ -853,8 +1131,6 @@ function parse_rule!(tokens)
             popfirst!(tokens)
 
             edge_node = UndirectedTypeEdgeNode(vert_0, vert_1)
-            # edge_node.left_vertex = vert_0
-            # edge_node.right_vertex = vert_1
             push!(lhs, edge_node)
 
         else
@@ -869,7 +1145,7 @@ function parse_rule!(tokens)
         left_rule_parameter_node = parse_symbol_parameters!(tokens)
     end
 
-    # cur_token = popfirst!(tokens)
+    # println("left rule parameter node: $left_rule_parameter_node")
 
     # Gets rid of new lines
     while isa(lookahead(tokens), EndLineToken)
@@ -896,8 +1172,6 @@ function parse_rule!(tokens)
             # TODO: Handle things like Node -- Node -- Node
             vert_0 = pop!(rhs)
 
-            # println("check vert_0 ---------> ", vert_0)
-# 
             if vert_0 isa UndirectedTypeEdgeNode
                 # If the last node was an edge node, we need to pop it
                 tmp = vert_0.right_vertex
@@ -929,7 +1203,6 @@ function parse_rule!(tokens)
 
     right_rule_parameter_node = ParameterNode([])
     if isa(lookahead(tokens), LeftAngleBracketToken)
-        # println("Parsing symb param: ", tokens)
         right_rule_parameter_node = parse_symbol_parameters!(tokens)
     end
 
@@ -958,7 +1231,6 @@ function parse_rule!(tokens)
             # modify_clause = WithClauseNode(clause_token, clause_content)
         else
 
-            println("Parsing solving clause")
             modify_clause = parse_rule_solve!(tokens)
         end
     end
@@ -997,14 +1269,16 @@ function parse_file!(tokens)
             )
         elseif isa(cur_token, FunctionSectionToken)
             push!(ast_nodes, parse_functions_section!(tokens))
+
+        elseif isa(cur_token, SimulationSectionToken)
+            push!(ast_nodes, parse_simulations_section!(tokens))
+
         elseif isa(cur_token, EndLineToken)
             popfirst!(tokens)
         else
             throw("Unexpected token: $cur_token")
         end
     end
-
-
     return ast_nodes
 end
 

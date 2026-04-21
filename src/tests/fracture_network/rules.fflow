@@ -3,48 +3,47 @@
 # GEOS
 rules FractureNetwork {
 
-#   start_node_up := (start : StartType) << (start_x, start_y, start_z) >> -> 
-#     (s : PressureSource) -- (p2 : PressureSource)
-#     << (psx, psy, psz), (pressure), (ux, uy, uz),
-#   (ps2x, ps2y, ps2z), (pressure2), (ux2, uy2, uz2) >> with (10 * s_min) where {
-# 
-#       psx : Float = 1.5
-#       psy : Float = 1.5
-#       psz : Float = 3.0
-# 
-#       ux : Float = 1.0
-#       uy : Float = 1.0
-#       uz : Float = -1.0
-# 
-#       ps2x : Float = 1.5
-#       ps2y : Float = 1.5
-#       ps2z : Float = 2.9
-# 
-#       ux2 : Float = 1.0
-#       uy2 : Float = 1.0
-#       uz2 : Float = -1.0
-# 
-#     }
+  start_node_up := (start : StartType) << (start_x, start_y, start_z) >> -> 
+    (s : PressureSource) -- (p2 : PressureSource)
+    << (psx, psy, psz), (pressure), (ux, uy, uz),
+  (ps2x, ps2y, ps2z), (pressure2), (ux2, uy2, uz2) >> with (10 * s_min) where {
+
+      psx : Float = 1.5
+      psy : Float = 1.5
+      psz : Float = 3.0
+
+      ux : Float = 1.0
+      uy : Float = 1.0
+      uz : Float = -1.0
+
+      ps2x : Float = 1.5
+      ps2y : Float = 1.5
+      ps2z : Float = 2.9
+ 
+      ux2 : Float = 1.0
+      uy2 : Float = 1.0
+      uz2 : Float = -1.0
+
+    }
 
     start_rock_prop := (start : StartType) <<(start_x, start_y, start_z) >> -> (rock : RockStart) << (lx,ly,lz), (cx, cy, cz) >> with (10000) where {
 
-
-        offset_distance : Float := 0.1
+        offset_distance : Float := 0.3
 
         lx : Float = 0
         ly : Float = 0
         lz : Float = 0
 
-        cx : Float = 30
-        cy : Float = 30
-        cz : Float = 30
+        cx : Float = 10
+        cy : Float = 10
+        cz : Float = 10
 
     }
 
-    propagate_rock_x := (rock0 : RockStart) << (x0, y0, z0), (cx0, cy0, cz0) >> -> (rock0 : RockStart) -- (Rock1 : RockStart)
-        << (x0n, y0n, z0n), (cx0n, cy0n, cz0n), (x1n, y1n, z1n), (cx1n, cy1n, cz1n) >> with ( 1*indicator( cx0 < 300 ) ) where {
+    propagate_rock_x := (rock0 : RockStart) << (x0, y0, z0), (cx0, cy0, cz0) >> -> (rock0 : RockStart) (Rock1 : RockStart)
+        << (x0n, y0n, z0n), (cx0n, cy0n, cz0n), (x1n, y1n, z1n), (cx1n, cy1n, cz1n) >> with ( 1*indicator( cx0 > 0 ) ) where {
 
-        offset_distance : Float := 0.1
+        offset_distance : Float := 0.3
 
         x0n : Float = x0
         y0n : Float = y0
@@ -64,10 +63,10 @@ rules FractureNetwork {
 
     }
 
-    propagate_rock_y := (rock0 : RockStart) << (x0, y0, z0), (cx0, cy0, cz0) >> -> (rock0 : RockStart) -- (Rock1 : RockStart)
-        << (x0n, y0n, z0n), (cx0n, cy0n, cz0n), (x1n, y1n, z1n), (cx1n, cy1n, cz1n) >> with ( 1*indicator( cy0 < 300 ) ) where {
+    propagate_rock_y := (rock0 : RockStart) << (x0, y0, z0), (cx0, cy0, cz0) >> -> (rock0 : RockStart) (Rock1 : RockStart)
+        << (x0n, y0n, z0n), (cx0n, cy0n, cz0n), (x1n, y1n, z1n), (cx1n, cy1n, cz1n) >> with ( 1*indicator( cy0 > 0 ) ) where {
 
-        offset_distance : Float := 0.1
+        offset_distance : Float := 0.3
 
         x0n : Float = x0
         y0n : Float = y0
@@ -87,10 +86,10 @@ rules FractureNetwork {
 
     }
 
-    propagate_rock_z := (rock0 : RockStart) << (x0, y0, z0), (cx0, cy0, cz0) >> -> (rock0 : RockStart) -- (Rock1 : RockStart)
-        << (x0n, y0n, z0n), (cx0n, cy0n, cz0n), (x1n, y1n, z1n), (cx1n, cy1n, cz1n) >> with ( 1*indicator( cy0 < 300 ) ) where {
+    propagate_rock_z := (rock0 : RockStart) << (x0, y0, z0), (cx0, cy0, cz0) >> -> (rock0 : RockStart) (Rock1 : RockStart)
+        << (x0n, y0n, z0n), (cx0n, cy0n, cz0n), (x1n, y1n, z1n), (cx1n, cy1n, cz1n) >> with ( 1*indicator( cz0 > 0 ) ) where {
 
-        offset_distance : Float := 0.1
+        offset_distance : Float := 0.6
 
         x0n : Float = x0
         y0n : Float = y0

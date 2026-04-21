@@ -4,8 +4,23 @@ function convert_token_to_node(token)
         return FloatNode(token)
     elseif token isa IdentifierToken
         return IdentifierNode(token)
+    elseif token isa IntegerToken
+        return IntegerNode(token)
     else
         throw("Unsupported token type for conversion to node: $token")
+    end
+end
+
+function get_value_safe(node)
+    """Helper to safely get the string value from a node."""
+    if node isa IdentifierNode
+        return node.token.position.value
+    elseif node isa FloatNode
+        return node.token.position.value
+    elseif node isa IntegerNode
+        return node.token.position.value
+    else
+        return ""
     end
 end
 
@@ -28,11 +43,26 @@ function process_arg_token(arg_token)
     end
 
     arg_node = nothing
-
     arg_node = convert_token_to_node(popfirst!(arg_token))
 
-    # Declare param_node array type
+    # Check if this is a FixedList<<...>> type
     param_nodes = ParameterNode(nothing)
+    if get_value_safe(arg_node) == "FixedList" && !isempty(arg_token) && (lookahead(arg_token) isa LeftAngleBracketToken)
+        popfirst!(arg_token)  # Consume '<<'
+        # Collect the inner parameters until we hit '>>'
+        inner_params = []
+        while !isempty(arg_token) && !(lookahead(arg_token) isa RightAngleBracketToken)
+            if (lookahead(arg_token) isa PunctuationToken) || (lookahead(arg_token) isa EndLineToken)
+                popfirst!(arg_token)
+                continue
+            end
+            push!(inner_params, convert_token_to_node(popfirst!(arg_token)))
+        end
+        if !isempty(arg_token) && (lookahead(arg_token) isa RightAngleBracketToken)
+            popfirst!(arg_token)  # Consume '>>'
+        end
+        param_nodes = ParameterNode(inner_params)
+    end
 
     arg_type = TypeClassNode(arg_node, param_nodes)
 
@@ -94,7 +124,26 @@ function parse_function_type_signature!(tokens)
     ret_type = popfirst!(tokens)  # Consume return type identifier
 
     ret_type_node = convert_token_to_node(ret_type)
-    ret_type_class = TypeClassNode(ret_type_node, ParameterNode(nothing))
+
+    # Check if return type is FixedList<<...>>
+    ret_param_nodes = ParameterNode(nothing)
+    if get_value_safe(ret_type_node) == "FixedList" && !isempty(tokens) && (lookahead(tokens) isa LeftAngleBracketToken)
+        popfirst!(tokens)  # Consume '<<'
+        inner_params = []
+        while !isempty(tokens) && !(lookahead(tokens) isa RightAngleBracketToken)
+            if (lookahead(tokens) isa PunctuationToken) || (lookahead(tokens) isa EndLineToken)
+                popfirst!(tokens)
+                continue
+            end
+            push!(inner_params, convert_token_to_node(popfirst!(tokens)))
+        end
+        if !isempty(tokens) && (lookahead(tokens) isa RightAngleBracketToken)
+            popfirst!(tokens)  # Consume '>>'
+        end
+        ret_param_nodes = ParameterNode(inner_params)
+    end
+
+    ret_type_class = TypeClassNode(ret_type_node, ret_param_nodes)
     return FunctionSignatureNode(args, ret_type_class)
 end
 
@@ -179,6 +228,34 @@ function parse_function_definition!(tokens)
     end
     popfirst!(tokens)  # Consume ':='
 
+    # Check if this is a model load (load("file.pt")) or a regular function body
+    if lookahead(tokens) isa LoadFileToken
+        # This is a neural network model loaded from a file
+        popfirst!(tokens)  # Consume 'load'
+
+        if (lookahead(tokens) isa LeftParenthesisToken) == false
+            throw("Expected '(' after 'load' in model function definition")
+        end
+        popfirst!(tokens)  # Consume '('
+
+        if (lookahead(tokens) isa StringToken) == false
+            throw("Expected string file path in load() for model function definition, got: $(lookahead(tokens))")
+        end
+        model_path = StringNode(popfirst!(tokens))
+
+        if (lookahead(tokens) isa RightParenthesisToken) == false
+            throw("Expected ')' after file path in load() for model function definition")
+        end
+        popfirst!(tokens)  # Consume ')'
+
+        # Consume any trailing endline tokens
+        while !isempty(tokens) && lookahead(tokens) isa EndLineToken
+            popfirst!(tokens)
+        end
+
+        return FunctionDefinitionNode(function_name_token, function_signature, nothing, nothing, ModelLoadNode(model_path))
+    end
+
     function_body = parse_function_body!(tokens)
 
     # Should expect to see a return token at the end
@@ -198,7 +275,7 @@ function parse_function_definition!(tokens)
         popfirst!(tokens)  # Consume '}'
     end
 
-    return FunctionDefinitionNode(function_name_token, function_signature, function_body, ret_val)
+    return FunctionDefinitionNode(function_name_token, function_signature, function_body, ret_val, nothing)
 end
 
 function parse_functions_list!(tokens)

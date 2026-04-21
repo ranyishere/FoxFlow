@@ -72,6 +72,10 @@ module Tokens
         position::PositionToken
     end
 
+    struct BackslashToken <: OperatorToken
+        position::PositionToken
+    end
+
     struct RightArrowToken <: Token
         position::PositionToken
     end
@@ -81,6 +85,14 @@ module Tokens
     end
 
     struct PunctuationToken <: Token
+        position::PositionToken
+    end
+
+    struct LeftSquareBracketToken <: Token
+        position::PositionToken
+    end
+
+    struct RightSquareBracketToken <: Token
         position::PositionToken
     end
 
@@ -132,6 +144,10 @@ module Tokens
         position::PositionToken
     end
 
+    struct SimulationTypesToken <: Token
+        position::PositionToken
+    end
+
     struct DoubleColonToken <: Token
         position::PositionToken
     end
@@ -156,6 +172,10 @@ module Tokens
         position::PositionToken
     end
 
+    struct SimulationParametersToken <: Token
+        position::PositionToken
+    end
+
     struct FunctionSectionToken <: Token
         position::PositionToken
     end
@@ -169,6 +189,10 @@ module Tokens
     end
 
     struct RuleToken <: Token
+        position::PositionToken
+    end
+
+    struct RulesToken <: Token
         position::PositionToken
     end
 
@@ -189,6 +213,10 @@ module Tokens
     end
 
     struct SimulationSectionToken <: Token
+        position::PositionToken
+    end
+
+    struct RunSimulationToken <: Token
         position::PositionToken
     end
 
@@ -257,6 +285,22 @@ module Tokens
     end
 
     struct OrOrToken <: OperatorToken
+        position::PositionToken
+    end
+
+    struct DotToken <: Token
+        position::PositionToken
+    end
+
+    struct QuoteToken <: Token
+        position::PositionToken
+    end
+
+    struct StringToken <: Token
+        position::PositionToken
+    end
+
+    struct LoadFileToken <: Token
         position::PositionToken
     end
 

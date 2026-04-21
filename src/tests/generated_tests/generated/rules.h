@@ -14,7 +14,6 @@ namespace particle_rules {
                 GT change_to_particle_lhs;
                 change_to_particle_lhs.addNode({1, {Particles::ParticleNodeCreator{} }});
 
-
                 GT change_to_particle_rhs;
                 change_to_particle_rhs.addNode({1, {Particles::ParticleNodeCreator{} }});
                 change_to_particle_rhs.addNode({2, {Particles::Particle{} }});
@@ -24,7 +23,7 @@ namespace particle_rules {
                 [&](auto &lhs, auto &m) {
                     auto &node = lhs.findNode(m[1])->second.getData();
 
-            // The counter is stored in the a4c6400 field of the ParticleNodeCreator
+                    // The counter is stored in the a4c6400 field of the ParticleNodeCreator
                     auto counter = std::get<Particles::ParticleNodeCreator>(node.data).a4c6400;
                     return DGGML::heaviside(counter,  0);
                 },
@@ -42,23 +41,22 @@ namespace particle_rules {
                     tmp.ad89e53[0] = x;
                     tmp.ad89e53[1] = y;
 
-            // This offsets particle node creator
-            rhs[m2[1]].position[0] = lhs[m1[1]].position[0] + x*0.2;
-            rhs[m2[1]].position[1] = lhs[m1[1]].position[0] + y*0.2;
+                    // This offsets particle node creator
+                    rhs[m2[1]].position[0] = lhs[m1[1]].position[0] + x*0.2;
+                    rhs[m2[1]].position[1] = lhs[m1[1]].position[0] + y*0.2;
 
-            std::get<Particles::Particle>(rhs[m2[2]].data).a35817d[0] = lhs[m1[1]].position[0] + x*0.3;
-            std::get<Particles::Particle>(rhs[m2[2]].data).a35817d[1] = lhs[m1[1]].position[1] + y*0.3;
+                    std::get<Particles::Particle>(rhs[m2[2]].data).a35817d[0] = lhs[m1[1]].position[0] + x*0.3;
+                    std::get<Particles::Particle>(rhs[m2[2]].data).a35817d[1] = lhs[m1[1]].position[1] + y*0.3;
 
-            // This creates the particle at this location
-            // TODO: How are the particles ending up where they are ending up.
-            rhs[m2[2]].position[0] = lhs[m1[1]].position[0] + x*0.3;
-            rhs[m2[2]].position[1] = lhs[m1[1]].position[1] + y*0.3;
+                    // This creates the particle at this location
+                    // TODO: How are the particles ending up where they are ending up.
+                    rhs[m2[2]].position[0] = lhs[m1[1]].position[0] + x*0.3;
+                    rhs[m2[2]].position[1] = lhs[m1[1]].position[1] + y*0.3;
 
                     /*
                     std::get<Particles::Particle>(rhs[m2[2]].data).a35817d[0] = x+1;
                     std::get<Particles::Particle>(rhs[m2[2]].data).a35817d[1] = y+1;
                     */
-
             });
 
         gamma.addRule(rule);
