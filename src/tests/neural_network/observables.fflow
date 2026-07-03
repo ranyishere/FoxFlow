@@ -1,0 +1,17 @@
+observables NeuralNetwork {
+
+    layer_mean_weight : Observable << (p1 : Layer) << position : FixedList<<3, Float>>,
+            cur_weights : FixedList<<100, Float>>, layer_id : Integer
+             >> >> -> Float := {
+
+        return mean(cur_weights)
+    }
+
+    output_norm : Observable << (p1 : OutputLayer) << position : FixedList<<3, Float>>,
+                                digit_class : FixedList<<10, Float>>
+                             >> >> -> Float := {
+
+        return norm(digit_class)
+    }
+
+}

@@ -32,6 +32,7 @@ A FoxFlow file consists of one or more sections in any order:
             | <functions-section>
             | <rule-section>
             | <simulations-section>
+            | <observables-section>
 ```
 
 ---
@@ -109,8 +110,23 @@ Declares simulation parameters as typed, named values.
 <parameter> ::= <symbol-name> <symbol-parameters> ":" <type-signature> ":=" <parameter-value>
 
 <parameter-value> ::= "{" <type-declaration-list> "}"
+                    | <from-file>
                     | <expression>
+
+<from-file> ::= "from_file" "(" <string-literal> ")"
 ```
+
+A `FixedList` parameter with `from_file` loads a raw binary file (saved via
+`numpy().tofile()`) into a `torch::Tensor` at startup using memory-mapping:
+
+```
+images : FixedList<<60000, 1, 28, 28, Float>>   := from_file("mnist_images.bin")
+labels : FixedList<<60000, Integer>>             := from_file("mnist_labels.bin")
+```
+
+The last type parameter of the `FixedList` (`Float` or `Integer`) determines
+the element dtype (`torch::kFloat64` / `torch::kInt64`). All preceding
+integer parameters are the tensor dimensions.
 
 ### Examples
 
@@ -119,6 +135,11 @@ parameters Microtubule {
     creation_rate : Float := 0.5
     offset : Float := 10.0
     boundary_pts : Integer := 10
+}
+
+parameters NeuralNetwork {
+    images : FixedList<<60000, 1, 28, 28, Float>> := from_file("mnist_images.bin")
+    labels : FixedList<<60000, Integer>>           := from_file("mnist_labels.bin")
 }
 ```
 
@@ -470,6 +491,7 @@ functions Microtubule {
              | "State"
              | "SimulationRules"
              | "SimulationTypes"
+             | "SimulationObservables"
              | "Integer"
              | "Float"
              | "Simulation"
@@ -488,6 +510,7 @@ functions Microtubule {
                      <symbol-name> ","
                      <symbol-name> ","
                      <symbol-or-number>
+                     [ "," <symbol-name> ]
                      ")"
 
 <symbol-or-number> ::= <symbol-name> | <number>
@@ -503,6 +526,73 @@ simulations Microtubule {
     time   : Float                := 100.0
     sim    : Simulation           := RunSimulation(types, params, rules, funcs, time)
 }
+
+simulations NeuralNetwork {
+    params : SimulationParameters  := load("params.fflow")
+    types  : SimulationTypes       := load("types.fflow")
+    rules  : SimulationRules       := load("rules.fflow")
+    obs    : SimulationObservables := load("observables.fflow")
+    time   : Float                 := 100.0
+    sim    : Simulation            := RunSimulation(types, params, rules, funcs, time, obs)
+}
+```
+
+---
+
+## Observables Section
+
+An `observables` section defines per-node measurement functions that are
+evaluated after each simulation step and written to output.
+
+```
+<observables-section> ::= "observables" <symbol-name> "{"
+                           { <observable-definition> }
+                          "}"
+
+<observable-definition> ::= <symbol-name> ":" <obs-kind>
+                             "<<" <obs-param-block> ">>"
+                             "->" <return-type>
+                             ":=" <obs-body>
+
+<obs-kind> ::= "Observable" | "Function"
+
+<obs-param-block> ::= "(" <symbol-name> ":" <symbol-name> ")"
+                      [ "<<" <function-arg-list> ">>" ]
+
+<obs-body> ::= "{" { <function-statement> "\n" } "return" <expression> "}"
+```
+
+- The `(p : TypeName)` block is the **primary node argument** — the graph
+  node instance being observed.
+- The inner `<< alias : FieldType, ... >>` block **destructures** that node's
+  attributes into named local variables inside the body.
+- `Observable` definitions are called automatically by the runtime for every
+  matching node at each output step.
+- `Function` definitions are helper functions callable from `Observable`
+  bodies.
+
+### Examples
+
+```
+observables NeuralNetwork {
+    # Helper: run a forward pass and return the predicted class
+    classify : Function
+        << (node : InputLayer) << input_id : Integer, layer_id : Integer >> >>
+        -> Integer := {
+            img   : torch::Tensor := images[input_id]
+            logits : torch::Tensor := forward(img)
+            return argmax(logits)
+        }
+
+    # Observable: emit (node_id, predicted_label, true_label) each step
+    accuracy : Observable
+        << (node : InputLayer) << input_id : Integer >> >>
+        -> Float := {
+            pred  : Integer := classify(node)
+            truth : Integer := labels[input_id]
+            return indicator(pred == truth)
+        }
+}
 ```
 
 ---
@@ -512,6 +602,8 @@ simulations Microtubule {
 These are not declared in the grammar but are recognised by the code
 generator:
 
+### General
+
 | Function | Description |
 |----------|-------------|
 | `indicator(pred)` | 1.0 if predicate is true, else 0.0 |
@@ -520,6 +612,24 @@ generator:
 | `HELP::distance(...)` | Namespaced helper (euclidean distance) |
 | `HELP::minimum_distance_2d(...)` | Namespaced helper |
 | `~UniformDistribution(lo, hi)` | Random sample (unary `~` prefix) |
+
+### Tensor Operations
+
+These built-ins operate on `FixedList` / `torch::Tensor` values and are
+available in expressions, rule bodies, and observable bodies:
+
+| Function | Description |
+|----------|-------------|
+| `zeros_matrix(m, n)` | `m × n` zero tensor |
+| `rand_matrix(m, n)` | `m × n` uniform-random tensor |
+| `mat_dot(A, B)` | Matrix–matrix or matrix–vector product |
+| `mat_add(A, B)` | Element-wise addition |
+| `mat_mul(A, B)` | Element-wise (Hadamard) multiplication |
+| `transpose(A)` | Matrix transpose |
+| `einsum(expr, A, B)` | Einstein summation (passes through to `torch::einsum`) |
+| `permute(A, d0, d1, ...)` | Permute tensor dimensions |
+| `autodiff(loss, param)` | Compute gradient of `loss` w.r.t. `param` |
+| `from_file(path)` | Load raw binary file into tensor (params only — see Parameters Section) |
 
 ---
 

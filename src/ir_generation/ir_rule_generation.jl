@@ -12,7 +12,9 @@ module IRRuleGeneration
             WithClauseNode, SolveClauseNode, UnaryOpNode, FunctionNode, GroupNode,
             CallNode, LiteralNode, DefinitionNode, ODENode, BindingVariableNode, WhereClauseNode, NamedParameterNode,
             IndexAccessNode, ArrayLiteralNode, SliceNode,
-            IntegerNode, FloatNode
+            IntegerNode, FloatNode, StringNode,
+            FunctionDefinitionNode, FunctionSignatureNode, FunctionArgNode,
+            FunctionBodyExpressionNode, FunctionDefinitionExpressionNode, ReturnNode
 
     export ir_rules_section!
 
@@ -20,7 +22,16 @@ module IRRuleGeneration
 
     const BUILT_IN_FUNC = [
         "heaviside", "sqrt", "normal_distr",
-        "uniform_distr", "cos", "sin", "inverse", "pow", "indicator"
+        "uniform_distr", "cos", "sin", "inverse", "pow", "indicator",
+        # Matrix / tensor operations (FixedList<<M,N,Float>> treated as 2-D tensor)
+        "zeros_matrix", "ones_matrix", "rand_matrix", "eye_matrix",
+        "mat_add", "mat_mul", "mat_dot", "transpose",
+        # N-D tensor operations
+        "tensordot", "einsum", "permute",
+        # Autograd
+        "backward", "grad",
+        # Single-call automatic differentiation: autodiff(expr, var)
+        "autodiff"
     ]
 
     # Module-level type namespace, set by ir_rules_section! at entry
@@ -435,6 +446,10 @@ module IRRuleGeneration
             # Inline tensor literal: [1,2,3] -> torch::tensor({1,2,3}, torch::kFloat64)
             emit(ir_builder, ir_array_literal(expression, propensity_table, context))
 
+        elseif expression isa StringNode
+            # String literal \u2014 emit as quoted C++ string (used e.g. in einsum equations)
+            emit(ir_builder, "\"$(expression.token.position.value)\"")
+
         else
             throw("Error: $(expression) not recognized.")
         end
@@ -491,6 +506,23 @@ module IRRuleGeneration
             namespace = call_node.function_node.namespace
 
             args = call_node.args
+
+            # ── tensordot special case ──────────────────────────────────────────────
+            # torch::tensordot(self, other, IntArrayRef dims_self, IntArrayRef dims_other)
+            # Dim args must be rendered as {0,1} (IntArrayRef), not torch::tensor(...).
+            # FoxFlow syntax: tensordot(A, B, [dims_self...], [dims_other...])
+            if func_name == "tensordot"
+                if length(args) != 4
+                    throw("tensordot requires 4 arguments: tensordot(A, B, [dims_self], [dims_other])")
+                end
+                t1 = traverse_group_node(GroupNode(args[1]), variables)
+                t2 = traverse_group_node(GroupNode(args[2]), variables)
+                d1 = _arr_to_intarrayref(args[3])
+                d2 = _arr_to_intarrayref(args[4])
+                return "torch::tensordot($t1, $t2, $d1, $d2)"
+            end
+            # ────────────────────────────────────────────────────────────────────────
+
             arg_str = join(map( (arg) -> begin
                 if arg isa LiteralNode
                     return string(get_value(arg))
@@ -510,6 +542,8 @@ module IRRuleGeneration
                     return traverse_group_node(GroupNode(arg), variables)
                 elseif arg isa ArrayLiteralNode
                     return ir_array_literal(arg)
+                elseif arg isa StringNode
+                    return "\"$(arg.token.position.value)\""
                 else
                     return arg.token
                 end
@@ -521,10 +555,16 @@ module IRRuleGeneration
             if !(namespace isa Nothing)
                 namespace = namespace.position.value
             end
-            ir = add_namespace_identifier(func_name, namespace, arg_str)
-            return ir
 
-            # return "$func_name($arg_str)"
+            # Route built-in functions through the same mapping used by ir_builtin_func
+            # so that nested calls like rand_matrix(4,4) or transpose(W2) inside
+            # mat_add / mat_mul args get their C++ equivalents emitted correctly.
+            if func_name in BUILT_IN_FUNC
+                ir = _builtin_to_cpp(func_name, arg_str)
+            else
+                ir = add_namespace_identifier(func_name, namespace, arg_str)
+            end
+            return ir
 
         elseif group_node.expression isa LiteralNode
             return string(get_value(group_node.expression))
@@ -578,6 +618,92 @@ module IRRuleGeneration
         end
     end
 
+    """
+        _arr_to_intarrayref(node) -> String
+
+    Renders an ArrayLiteralNode (or integer IdentifierNode/IntegerNode) as a
+    C++ initializer-list suitable for IntArrayRef, e.g. `{0, 1, 2}`.
+    Used by tensordot and permute to avoid torch::tensor(...).
+    """
+    function _arr_to_intarrayref(node)
+        if node isa ArrayLiteralNode
+            inner = _ir_array_literal_inner(node)
+            return inner  # already produces {0, 1, ...}
+        elseif node isa IntegerNode
+            return "{$(get_value(node))}"
+        elseif node isa IdentifierNode
+            return get_value(node)
+        else
+            return "{$(get_value(node))}"
+        end
+    end
+
+    """
+        _builtin_to_cpp(func_name, arg_str) -> String
+
+    Pure string-level mapping from a FoxFlow built-in function name and its
+    already-rendered argument string to the corresponding C++ expression.
+    Used by both ir_builtin_func and traverse_group_node so that nested
+    built-in calls (e.g. rand_matrix inside mat_add) are always expanded.
+    Returns `nothing` for functions that are NOT pure string mappings
+    (e.g. indicator, distribution functions that need extra context).
+    """
+    function _builtin_to_cpp(func_name, arg_str)
+        if func_name == "heaviside"
+            return "DGGML::$func_name($arg_str)"
+        elseif func_name == "sqrt"
+            return "sqrt($arg_str)"
+        elseif func_name == "cos"
+            return "cos($arg_str)"
+        elseif func_name == "arccos"
+            return "acos($arg_str)"
+        elseif func_name == "sin"
+            return "sin($arg_str)"
+        elseif func_name == "abs"
+            return "abs($arg_str)"
+        elseif func_name == "pow"
+            return "pow($arg_str)"
+        elseif func_name == "zeros_matrix"
+            return "torch::zeros({$arg_str}, torch::kFloat64)"
+        elseif func_name == "ones_matrix"
+            return "torch::ones({$arg_str}, torch::kFloat64)"
+        elseif func_name == "rand_matrix"
+            return "torch::rand({$arg_str}, torch::kFloat64)"
+        elseif func_name == "eye_matrix"
+            return "torch::eye($arg_str, torch::kFloat64)"
+        elseif func_name == "mat_add"
+            parts = split(arg_str, ", ", limit=2)
+            return "($(parts[1]) + $(parts[2]))"
+        elseif func_name == "mat_mul"
+            parts = split(arg_str, ", ", limit=2)
+            return "torch::mm($(parts[1]), $(parts[2]))"
+        elseif func_name == "mat_dot"
+            parts = split(arg_str, ", ", limit=2)
+            return "torch::mv($(parts[1]), $(parts[2]))"
+        elseif func_name == "transpose"
+            return "($arg_str).t()"
+        elseif func_name == "tensordot"
+            # tensordot(A, B, {dims_self}, {dims_other})
+            # arg_str contains 4 parts: tensor1, tensor2, intarrayref1, intarrayref2
+            parts = split(arg_str, ", ", limit=4)
+            return "torch::tensordot($(parts[1]), $(parts[2]), $(parts[3]), $(parts[4]))"
+        elseif func_name == "einsum"
+            parts = split(arg_str, ", ", limit=2)
+            tensor_list = join(split(parts[2], ", "), ", ")
+            return "torch::einsum($(parts[1]), {$tensor_list})"
+        elseif func_name == "permute"
+            parts = split(arg_str, ", ", limit=2)
+            dims = join(split(parts[2], ", "), ", ")
+            return "$(parts[1]).permute({$dims})"
+        elseif func_name == "backward"
+            return "$arg_str.backward()"
+        elseif func_name == "grad"
+            return "$arg_str.grad()"
+        else
+            return nothing  # needs propensity_table context — handled by ir_builtin_func
+        end
+    end
+
     function ir_builtin_func(func_name, args, namespace, ir_builder,
             propensity_table, prop_body_ir, propensity=false, where_clause=false)
         """
@@ -622,6 +748,9 @@ module IRRuleGeneration
                     return traverse_group_node(GroupNode(arg), variables)
                 elseif arg isa ArrayLiteralNode
                     return ir_array_literal(arg)
+                elseif arg isa StringNode
+                    # Emit as a quoted C++ string literal for e.g. einsum equations
+                    return "\"$(arg.token.position.value)\""
                 else
                     return arg.token
                 end
@@ -657,13 +786,15 @@ module IRRuleGeneration
                         end
 
                     else
-                        # FIXME: This is the issue. ir_builder in definition is value.
-                        # while ir_builder in where clause is correctly an IRBuilder. I need to fix this.
                         push!(propensity_table["var_local_table"]["rule_rhs"]["declared"], var)
 
-                        # need to lift this.
-                        emit(ir_builder, ir)
-                        # emit(ir_builder, ir)
+                        if where_clause == true
+                            # Emit declaration as a preamble side-effect so it doesn't
+                            # pollute the expression string (e.g. in Neural ODE RHS).
+                            emit(prop_body_ir, ir)
+                        else
+                            emit(ir_builder, ir)
+                        end
                     end
 
                 elseif var in collect(keys(propensity_table["var_local_table"]["rule_rhs"]))
@@ -696,35 +827,25 @@ module IRRuleGeneration
             collect(variables)
         )
 
-        if func_name == "heaviside"
-            ir = "DGGML::$func_name($arg_str)"
-        elseif func_name == "sqrt"
-            ir = "sqrt($arg_str)"
-        elseif func_name == "normal_distr"
-            ir = "DGGML::normal_distr()"
-        elseif func_name == "uniform_distr"
-            ir = "DGGML::uniform_distr()"
-        elseif func_name == "cos"
-            ir = "cos($arg_str)"
-        elseif func_name == "arccos"
-            ir = "acos($arg_str)"
-        elseif func_name == "sin"
-            ir = "sin($arg_str)"
-        elseif func_name == "inverse"
-            ir = "DGGML::inverse()"
-        elseif func_name == "pow"
-            ir = "pow()"
-        elseif func_name == "abs"
-            ir = "abs($arg_str)"
-        elseif func_name == "indicator"
-            ir = ir_indicator_func(arg_str)
-            # TODO: Allow variable name space for functions in the propensity table.
-        elseif func_name in collect(keys(propensity_table["function_table"]))
-            ir = add_namespace_identifier(func_name, namespace, arg_str)
-        elseif func_name == "gamma_distr"
-            ir = "std::gamma_distribution<double>($arg_str)"
-        else
-            throw("Unknown built-in function: $func_name")
+        # Try the pure string mapping first
+        ir = _builtin_to_cpp(func_name, arg_str)
+        if ir === nothing
+            # Functions that need propensity_table / extra context
+            if func_name == "normal_distr"
+                ir = "DGGML::normal_distr()"
+            elseif func_name == "uniform_distr"
+                ir = "DGGML::uniform_distr()"
+            elseif func_name == "inverse"
+                ir = "DGGML::inverse()"
+            elseif func_name == "indicator"
+                ir = ir_indicator_func(arg_str)
+            elseif func_name == "gamma_distr"
+                ir = "std::gamma_distribution<double>($arg_str)"
+            elseif func_name in collect(keys(propensity_table["function_table"]))
+                ir = add_namespace_identifier(func_name, namespace, arg_str)
+            else
+                throw("Unknown built-in function: $func_name")
+            end
         end
 
         emit(ir_builder, ir)
@@ -902,12 +1023,9 @@ module IRRuleGeneration
 
                 ir_builtin_func(func_name, args, namespace,
                             ir_value, propensity_table,
-                            ir_builder, false, true)
+                            context, false, true)
 
-                println("ir_value after ir_builtin_func: ", build(ir_value))
-                # emit(ir_builder, build(ir_value))
-                emit(context, build(ir_value))
-                println("ir_builder after emitting ir_value: ", ir_builder.instructions)
+                emit(ir_builder, build(ir_value))
 
             elseif (expression isa IndexAccessNode)
                 # Check if this is an indexed access on a tensor dep var (e.g., position[1])
@@ -1523,25 +1641,47 @@ module IRRuleGeneration
                     bv_name = get_value(ode_name_node)
 
                     if haskey(bv_to_dep, bv_name) && haskey(tensor_binding_info, bv_to_dep[bv_name])
-                        # === UNINDEXED TENSOR ODE: dx : ODE = expr ===
-                        # Broadcast the same expression to ALL tensor elements
+                        # === UNINDEXED TENSOR ODE (Neural ODE): dw : ODE = f(weights) ===
+                        # Pattern:
+                        #   1. Reconstruct the tensor from SUNDIALS y (so it reflects ODE state)
+                        #   2. Evaluate the RHS once into a temp torch::Tensor
+                        #   3. Scatter elements into ydot element-by-element
                         dep_var_name = bv_to_dep[bv_name]
                         tsize, ptr_name, bv_pos = tensor_binding_info[dep_var_name]
+                        bv_attr     = lhs_assgn_to_node[dep_var_name].cpp_var.name
+                        bv_node_type = lhs_assgn_to_node[dep_var_name].type
 
-                        for i in 0:(tsize - 1)
-                            ref = "$(ptr_name)[$i]"
-                            ir = "NV_Ith_S(ydot, varmap[&$ref]) += "
+                        # === from_blob zero-copy pattern ===
+                        # SUNDIALS stores this tensor's elements contiguously starting at
+                        # varmap[&ptr[0]].  We wrap y/ydot memory directly into LibTorch
+                        # tensors — no copy in either direction.
+                        emit(ir_builder, "{  // Neural ODE: $bv_name")
+                        emit(ir_builder, "const int _base_$bv_name = varmap.at(&$(ptr_name)[0]);")
+                        emit(ir_builder, "// Zero-copy views into SUNDIALS y / ydot memory")
+                        emit(ir_builder, "torch::Tensor _y_$bv_name = torch::from_blob(")
+                        emit(ir_builder, "    N_VGetArrayPointer(y) + _base_$bv_name, {$tsize}, torch::kFloat64);")
+                        emit(ir_builder, "torch::Tensor _ydot_$bv_name = torch::from_blob(")
+                        emit(ir_builder, "    N_VGetArrayPointer(ydot) + _base_$bv_name, {$tsize}, torch::kFloat64);")
 
-                            expr_ir = IRBuilder([])
-                            traverse_ode_expr(ode_value, expr_ir, var_attr_loc,
-                                              lhs_assgn_to_node, dep_vars, propensity_table, ir_builder)
+                        # Rebind the user-visible attribute name to the y view
+                        emit(ir_builder, "auto& $bv_attr = _y_$bv_name;")
 
-                            build_expr_ir = join(expr_ir.instructions)
-                            ir = ir * build_expr_ir * ";"
-                            emit(ir_builder, ir)
+                        # Evaluate RHS once; flush any preamble declarations first
+                        rhs_preamble = IRBuilder([])
+                        rhs_expr    = IRBuilder([])
+                        traverse_ode_expr(ode_value, rhs_expr, var_attr_loc,
+                                          lhs_assgn_to_node, dep_vars, propensity_table, rhs_preamble)
+                        for preamble_line in rhs_preamble.instructions
+                            emit(ir_builder, preamble_line)
                         end
+                        rhs_str = join(rhs_expr.instructions)
+                        emit(ir_builder, "torch::Tensor _rhs_$bv_name = $rhs_str;")
 
-                        # Collect symbolic form (broadcast: same expr for all elements)
+                        # Accumulate into ydot via the zero-copy view (no scatter loop)
+                        emit(ir_builder, "_ydot_$(bv_name) += _rhs_$(bv_name);")
+                        emit(ir_builder, "}  // end Neural ODE: $bv_name")
+
+                        # Collect symbolic form
                         sym_rhs = symbolic_ode_expr(ode_value, lhs_assgn_to_node, dep_vars, bv_to_dep)
                         push!(symbolic_equations, "d($bv_name[0..$( tsize-1 )])/dt += $sym_rhs")
 
@@ -2644,11 +2784,15 @@ module IRRuleGeneration
             user_param_name = param[end][1]
 
             ir = nothing
-            if attr_loc > 3 || attr_type == "torch::Tensor"
-                # This means that the attribute is not a position attribute and we need to access it differently in the C++ code.
+            if attr_type == "torch::Tensor"
+                # Tensor attribute — always read from .data
                 ir = "$attr_type $user_param_name = std::get<$type_namespace::$node_type>(lhs[m1[$node_loc]].data).$attr_name;\n"
-            else
+            elseif attr_loc <= 3 && attr_name == "Position"
+                # Only the spatial Position attribute is mirrored in .position[]
                 ir = "$attr_type $user_param_name = lhs[m1[$node_loc]].position[$(attr_loc-1)];"
+            else
+                # All other scalar attributes live in .data
+                ir = "$attr_type $user_param_name = std::get<$type_namespace::$node_type>(lhs[m1[$node_loc]].data).$attr_name;\n"
             end
 
             # ir_prop = "$attr_type $user_param_name = std::get<$type_namespace::$node_type>(lhs[m1[$node_loc]].data).$attr_name;\n"
@@ -2684,11 +2828,15 @@ module IRRuleGeneration
             end
 
             ir = nothing
-            if attr_loc > 3 || attr_type == "torch::Tensor"
-                # This means that the attribute is not a position attribute and we need to access it differently in the C++ code.
+            if attr_type == "torch::Tensor"
+                # Tensor attribute — always read from .data
                 ir = "$attr_type $user_param_name = std::get<$type_namespace::$node_type>(rhs[m2[$node_loc]].data).$attr_name;\n"
-            else
+            elseif attr_loc <= 3 && attr_name == "Position"
+                # Only the spatial Position attribute is mirrored in .position[]
                 ir = "$attr_type $user_param_name = rhs[m2[$node_loc]].position[$(attr_loc-1)];"
+            else
+                # All other scalar attributes live in .data
+                ir = "$attr_type $user_param_name = std::get<$type_namespace::$node_type>(rhs[m2[$node_loc]].data).$attr_name;\n"
             end
 
             # ir_prop = "$attr_type $user_param_name = std::get<$type_namespace::$node_type>(lhs[m[$node_loc]].data).$attr_name;\n"
@@ -2758,6 +2906,56 @@ module IRRuleGeneration
         return ir2
     end
 
+    """
+        collect_grad_vars(where_clause) -> Set{String}
+
+    Pre-scan pass: walk all nodes in a where clause body and collect every
+    variable name passed as an argument to a `grad(x)` call.  These are the
+    tensors that need `requires_grad_(true)` injected at their declaration site
+    so that the computation graph is built correctly before `backward()` is
+    called.
+    """
+    function collect_grad_vars(where_clause)
+        result = Set{String}()
+        for node in where_clause
+            _scan_grad_calls!(node, result)
+        end
+        return result
+    end
+
+    function _scan_grad_calls!(node, result)
+        if node isa DefinitionNode
+            _scan_grad_calls!(node.value, result)
+        elseif node isa CallNode
+            println("Scanning CallNode for grad calls: ", node.function_node.token)
+            fname = get_value(node.function_node)
+            if fname == "grad" && !isempty(node.args)
+                arg = node.args[1]
+                if arg isa IdentifierNode
+                    push!(result, get_value(arg))
+                end
+            else
+                for a in node.args
+                    _scan_grad_calls!(a, result)
+                end
+            end
+        elseif node isa BinaryOpNode
+            _scan_grad_calls!(node.lhs, result)
+            _scan_grad_calls!(node.rhs, result)
+        elseif node isa UnaryOpNode
+            _scan_grad_calls!(node.operand, result)
+        elseif node isa GroupNode
+            _scan_grad_calls!(node.expression, result)
+        elseif node isa IndexAccessNode
+            _scan_grad_calls!(node.object, result)
+        elseif node isa ArrayLiteralNode
+            for e in node.elements
+                _scan_grad_calls!(e, result)
+            end
+        end
+        # Leaf nodes (IdentifierNode, LiteralNode, etc.) — nothing to do
+    end
+
     function ir_where_clause!(where_clause, ir_builder,
             lhs_param_to_node, lhs_assgn_to_node, rhs_param_to_node,
             rhs_assgn_to_node, symbol_tables, type_namespace, propensity_table
@@ -2769,10 +2967,26 @@ module IRRuleGeneration
         where_hdr = "[&](auto &lhs, auto &rhs, auto &m1, auto &m2) {"
         emit(ir_builder, where_hdr)
 
+        # ── Pre-scan: find all variables passed to grad(...) ──
+        grad_vars = collect_grad_vars(where_clause)
+        if !isempty(grad_vars)
+            println("  Autograd pre-scan — grad vars detected: ", grad_vars)
+        end
+
         # These functions will populate the propensity table
         # with the local variables.
         ir_where_left_clause!(lhs_param_to_node, type_namespace,
                               symbol_tables, propensity_table, ir_builder)
+
+        # For LHS-bound attributes that need grad, emit requires_grad_ immediately
+        # after they are declared by ir_where_left_clause!.
+        for (_, _, _, _, user_param_name) in lhs_param_to_node
+            vname = user_param_name[1]
+            if vname in grad_vars
+                emit(ir_builder, "$vname.requires_grad_(true);")
+                println("  Injected requires_grad_(true) for LHS attr: ", vname)
+            end
+        end
 
 
         rhs_table = ir_where_right_clause!(rhs_param_to_node, type_namespace,
@@ -2831,7 +3045,7 @@ module IRRuleGeneration
             (assign_node) -> begin
 
                 ir_where_assignment!(assign_node, type_namespace, rhs_assgn_to_node,
-                                     propensity_table, ir_builder)
+                                     propensity_table, ir_builder, grad_vars)
                             end, 
             where_clause
         )
@@ -3103,18 +3317,129 @@ module IRRuleGeneration
         return occursin(pattern, strip(code_line))
     end
 
+    # ── helpers for local (where-body) function definitions ──────────────────
+
+    function _ir_local_fn_scalar_type(type_str)
+        if type_str == "Float"       return "double"
+        elseif type_str == "Integer" return "int64_t"
+        elseif type_str == "FixedList" return "torch::Tensor"
+        else return type_str
+        end
+    end
+
+    function _ir_local_fn_return_type(ret_type_node)
+        # ret_type_node is a TypeClassNode; its .name is an IdentifierNode
+        return _ir_local_fn_scalar_type(get_value(ret_type_node.name))
+    end
+
+    function _ir_local_fn_param(arg_node)
+        # FunctionArgNode has .name (IdentifierNode) and .type (TypeClassNode)
+        name     = get_value(arg_node.name)
+        type_str = get_value(arg_node.type.name)
+        return "$(_ir_local_fn_scalar_type(type_str)) $name"
+    end
+
+    # ─────────────────────────────────────────────────────────────────────────
+
     function ir_where_assignment!(assign_node, type_namespace,
                                  rhs_assgn_to_node,
-                                 propensity_table, ir_builder)
+                                 propensity_table, ir_builder,
+                                 grad_vars=Set{String}())
         """
         Handles the assignment in the where clause.
         """
 
         # FIXME: if you assign a node to another node who is just assigned it will not work.
+
+        # ── Bare call statement (e.g. backward(loss)) ──
+        # Parsed as a CallNode with no LHS.  Emit as a side-effecting statement.
+        if assign_node isa CallNode
+            ir_value = IRBuilder([])
+            ir_definition!(GroupNode(assign_node), ir_value, propensity_table, ir_builder)
+            ir_str = build_sameline(ir_value)
+            emit(ir_builder, "$ir_str;")
+            return
+        end
+
+        # ── Local function definition (emitted as a C++ lambda) ──
+        if assign_node isa FunctionDefinitionNode
+            fn_name    = get_value(assign_node.name)
+            sig        = assign_node.signature
+            ret_cpp    = _ir_local_fn_return_type(sig.output)
+            params_cpp = join([_ir_local_fn_param(a) for a in sig.args], ", ")
+
+            emit(ir_builder, "auto $fn_name = [&]($params_cpp) -> $ret_cpp {")
+
+            # body statements
+            if assign_node.body !== nothing
+                for stmt in assign_node.body.expressions
+                    stmt_name = get_value(stmt.name)
+                    stmt_type = _ir_local_fn_scalar_type(get_value(stmt.type))
+                    stmt_ir   = IRBuilder([])
+                    ir_definition!(GroupNode(stmt.value), stmt_ir, propensity_table, ir_builder)
+                    stmt_val  = build_sameline(stmt_ir)
+                    emit(ir_builder, "    $stmt_type $stmt_name = $stmt_val;")
+                end
+            end
+
+            # return statement
+            if assign_node.fun_return !== nothing
+                ret_ir  = IRBuilder([])
+                ir_definition!(GroupNode(assign_node.fun_return.value), ret_ir, propensity_table, ir_builder)
+                ret_str = build_sameline(ret_ir)
+                emit(ir_builder, "    return $ret_str;")
+            end
+
+            emit(ir_builder, "};")
+            return
+        end
+
         if assign_node isa DefinitionNode
             name = get_value(assign_node.name)
             type = convert_type_name(get_value(assign_node.type.name))
             value = assign_node.value
+
+            # ── Special case: autodiff(expr, var) ──────────────────────────────
+            # autodiff(expr, W) means "differentiate expr w.r.t. W".
+            # We emit an immediately-invoked lambda so that requires_grad_(true)
+            # is set on W *before* expr is evaluated, ensuring W is in the graph:
+            #
+            #   auto dW = ([&]() {
+            #       W.requires_grad_(true);
+            #       auto _fflow_ad_tmp = <expr>;
+            #       _fflow_ad_tmp.backward();
+            #       return W.grad();
+            #   })();
+            raw_value = value isa GroupNode ? value.expression : value
+            if raw_value isa CallNode && get_value(raw_value.function_node) == "autodiff"
+                if length(raw_value.args) != 2
+                    throw("autodiff requires exactly 2 arguments: autodiff(expr, var)")
+                end
+                ad_expr_node = raw_value.args[1]
+                ad_var_node  = raw_value.args[2]
+                if !(ad_var_node isa IdentifierNode)
+                    throw("Second argument to autodiff must be a plain variable name")
+                end
+                ad_var = get_value(ad_var_node)
+
+                # Emit the forward expression into a temp string
+                ad_expr_ir = IRBuilder([])
+                ir_definition!(GroupNode(ad_expr_node), ad_expr_ir, propensity_table, ir_builder)
+                ad_expr_str = build_sameline(ad_expr_ir)
+
+                push!(propensity_table["var_local_table"]["rule_rhs"]["declared"], "$name")
+                emit(ir_builder, "$type $name = ([&]() {")
+                emit(ir_builder, "    $ad_var.requires_grad_(true);")
+                emit(ir_builder, "    auto _fflow_ad_tmp = $ad_expr_str;")
+                emit(ir_builder, "    _fflow_ad_tmp.backward();")
+                emit(ir_builder, "    return $ad_var.grad();")
+                emit(ir_builder, "})();")
+                if name in grad_vars
+                    emit(ir_builder, "$name.requires_grad_(true);")
+                end
+                return
+            end
+            # ── end autodiff special case ───────────────────────────────────────
 
             if !(value isa GroupNode)
                 value = GroupNode(value)
@@ -3151,6 +3476,11 @@ module IRRuleGeneration
 
             ir = "$type $name = $ir_value;"
             emit(ir_builder, ir)
+            # ── Autograd: inject requires_grad_(true) if this var is differentiated over ──
+            if name in grad_vars
+                emit(ir_builder, "$name.requires_grad_(true);")
+                println("  Injected requires_grad_(true) for local def: ", name)
+            end
         elseif assign_node.name isa IndexAccessNode
             # Indexed assignment: count[0] = 1
             # Extract the base identifier and index expressions

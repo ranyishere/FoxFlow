@@ -1,0 +1,31 @@
+simulations NeuralNetwork {
+
+    # Loading parameters
+    params : SimulationParameters := load("params.fflow")
+    
+    # Types (shared across all stages)
+    simTypes : SimulationTypes := load("types.fflow")
+
+    # Observables
+    simObservables : SimulationObservables := load("observables.fflow")
+
+    latticeTime : Float := 20
+    flowTime : Float := 10
+
+    # Build Network
+    latticeRules : SimulationRules := load("rules_lattice.fflow")
+
+    initialState : State := load("default")
+
+    buildLattice : Simulation := RunSimulation(initialState, params,
+                latticeRules, simTypes, latticeTime, simObservables)
+
+    # Load state
+    nextState : State := load("simulation_state_latest.bin")
+
+    # backprop and learn
+    flowRules : SimulationRules := load("rules_flow.fflow")
+    flowSimulation : Simulation := RunSimulation(nextState, params,
+                flowRules, simTypes, flowTime, simObservables)
+
+}

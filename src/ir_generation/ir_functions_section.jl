@@ -52,6 +52,65 @@ function _ir_array_literal_inner(node)
     end
 end
 
+"""
+    builtin_to_cpp(func_name, arg_str) -> String
+
+Maps a FoxFlow built-in function name and its already-rendered C++ argument
+string to the corresponding C++ expression.  Returns `nothing` when the name
+is not a known built-in (caller should fall back to a raw call).
+"""
+function builtin_to_cpp(func_name, arg_str)
+    if func_name == "heaviside"
+        return "DGGML::heaviside($arg_str)"
+    elseif func_name == "sqrt"
+        return "sqrt($arg_str)"
+    elseif func_name == "normal_distr"
+        return "DGGML::normal_distr()"
+    elseif func_name == "uniform_distr"
+        return "DGGML::uniform_distr()"
+    elseif func_name == "indicator"
+        parts = split(arg_str, ", ", limit=2)
+        return length(parts) == 2 ? "(($(parts[1])) > 0 ? ($(parts[2])) : 0.0)" : "($arg_str)"
+    elseif func_name == "zeros_matrix"
+        return "torch::zeros({$arg_str}, torch::kFloat64)"
+    elseif func_name == "ones_matrix"
+        return "torch::ones({$arg_str}, torch::kFloat64)"
+    elseif func_name == "rand_matrix"
+        return "torch::rand({$arg_str}, torch::kFloat64)"
+    elseif func_name == "eye_matrix"
+        return "torch::eye($arg_str, torch::kFloat64)"
+    elseif func_name == "mat_dot"
+        return "torch::mm($arg_str)"
+    elseif func_name == "mat_add"
+        parts = split(arg_str, ", ", limit=2)
+        return length(parts) == 2 ? "($(parts[1]) + $(parts[2]))" : "($arg_str)"
+    elseif func_name == "mat_mul"
+        parts = split(arg_str, ", ", limit=2)
+        return length(parts) == 2 ? "($(parts[1]) * $(parts[2]))" : "($arg_str)"
+    elseif func_name == "transpose"
+        return "$arg_str.t()"
+    elseif func_name == "einsum"
+        return "torch::einsum($arg_str)"
+    elseif func_name == "permute"
+        parts = split(arg_str, ", ", limit=2)
+        return length(parts) == 2 ? "$(parts[1]).permute({$(parts[2])})" : "($arg_str)"
+    elseif func_name == "sum"
+        return "$arg_str.sum()"
+    elseif func_name == "argmax"
+        return "$arg_str.argmax()"
+    elseif func_name == "softmax"
+        parts = split(arg_str, ", ", limit=2)
+        return length(parts) == 2 ? "torch::softmax($(parts[1]), $(parts[2]))" : "torch::softmax($arg_str, 0)"
+    elseif func_name == "relu"
+        return "torch::relu($arg_str)"
+    elseif func_name == "forward"
+        parts = split(arg_str, ", ", limit=2)
+        return length(parts) == 2 ? "$(parts[1]).forward($(parts[2]))" : "$arg_str.forward()"
+    else
+        return nothing  # unknown — caller emits raw call
+    end
+end
+
 function traverse_group_node_expr(group_node, variables=Set{String}())
     """
     Traverses a group node and gets the expression inside
@@ -79,7 +138,7 @@ function traverse_group_node_expr(group_node, variables=Set{String}())
     elseif group_node.expression isa CallNode
 
         call_node = group_node.expression
-        func_name = get_value(call_node.function_node.name)
+        func_name = get_value(call_node.function_node)
         args = call_node.args
         arg_str = join(map( (arg) -> begin
             if arg isa LiteralNode
@@ -98,11 +157,18 @@ function traverse_group_node_expr(group_node, variables=Set{String}())
                 return traverse_group_node_expr(GroupNode(arg), variables)
             elseif arg isa ArrayLiteralNode
                 return ir_array_literal(arg)
+            elseif arg isa CallNode || arg isa BinaryOpNode
+                return traverse_group_node_expr(GroupNode(arg), variables)
+            elseif arg isa FloatNode || arg isa IntegerNode
+                return string(get_value(arg))
+            elseif arg isa StringNode
+                return "\"$(arg.token.position.value)\""
             else
-                return arg.token
+                return traverse_group_node_expr(GroupNode(arg), variables)
             end
             end, args), ", ")
-        return "$func_name($arg_str)"
+        cpp = builtin_to_cpp(func_name, arg_str)
+        return cpp !== nothing ? cpp : "$func_name($arg_str)"
 
     elseif group_node.expression isa LiteralNode
         return string(get_value(group_node.expression))
@@ -161,8 +227,14 @@ function ir_expr_builtin_func!(func_name, args, ir_builder, scope)
             return traverse_group_node_expr(GroupNode(arg), variables)
         elseif arg isa ArrayLiteralNode
             return ir_array_literal(arg)
+        elseif arg isa CallNode
+            return traverse_group_node_expr(GroupNode(arg), variables)
+        elseif arg isa FloatNode || arg isa IntegerNode
+            return string(get_value(arg))
+        elseif arg isa StringNode
+            return "\"$(arg.token.position.value)\""
         else
-            return arg.token
+            return traverse_group_node_expr(GroupNode(arg), variables)
         end
     end, args), ", ")
 
@@ -176,17 +248,7 @@ function ir_expr_builtin_func!(func_name, args, ir_builder, scope)
         collect(variables)
     )
 
-    if func_name == "heaviside"
-        # arg_str = parse_func_args(args)
-        ir = "DGGML::$func_name($arg_str)"
-
-    elseif func_name == "sqrt"
-        ir = "sqrt($arg_str)"
-    elseif func_name == "normal_distr"
-        ir = "DGGML::normal_distr()"
-    elseif func_name == "uniform_distr"
-        ir = "DGGML::uniform_distr()"
-    elseif func_name == "cos"
+    if func_name == "cos"
         ir = "cos($arg_str)"
     elseif func_name == "arccos"
         ir = "acos($arg_str)"
@@ -198,10 +260,16 @@ function ir_expr_builtin_func!(func_name, args, ir_builder, scope)
         ir = "pow()"
     elseif func_name == "abs"
         ir = "abs($arg_str)"
-    elseif func_name == "indicator"
-        ir = ir_indicator_func(arg_str)
+    elseif func_name == "argmax"
+        # returns an integer index
+        ir = "$arg_str.argmax().template item<int64_t>()"
     else
-        throw("Unknown built-in function: $func_name")
+        cpp = builtin_to_cpp(func_name, arg_str)
+        if cpp !== nothing
+            ir = cpp
+        else
+            throw("Unknown built-in function: $func_name")
+        end
     end
 
     emit(ir_builder, ir)

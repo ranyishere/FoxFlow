@@ -4,6 +4,7 @@ function get_value_sim_node(node)
         || node isa SimulationNode 
         || node isa SimulationRulesNode 
         || node isa SimulationTypesNode 
+        || node isa SimulationObservablesNode
         || node isa SimulationStateNode)
         return node.value.filepath
     elseif node isa FloatNode
@@ -21,6 +22,7 @@ function populate_sim_table(node_name, node_value, sim_table)
     if (node_value isa SimulationParametersNode  ||
           node_value isa SimulationNode 
           || node_value isa  SimulationRulesNode || node_value isa  SimulationTypesNode ||
+          node_value isa SimulationObservablesNode ||
           node_value isa SimulationStateNode)
         value = get_value(node_value.value.filepath)
         sim_table[node_name] = value
@@ -62,12 +64,19 @@ function ir_run_simulation_node!(ast, sim_table)
     types_value = sim_table[str_types_val]
     steps_value = sim_table[str_steps_val]
 
+    observables_value = nothing
+    if run_sim_node.observables !== nothing
+        str_obs_val = get_value(run_sim_node.observables)
+        observables_value = sim_table[str_obs_val]
+    end
+
     ir_run_sim = Dict(
         "initial_state" => is_value,
         "parameters" => params_value,
         "rules" => rules_value,
         "types" => types_value,
-        "steps" => steps_value
+        "steps" => steps_value,
+        "observables" => observables_value
     )
 
 end
@@ -101,10 +110,10 @@ function ir_simulation_section!(ast, sim_table)
     Generates the simulation
     """
 
-    sim_section_name = ast.name
+    sim_section_name = get_value(ast.name)
     sim_declarations = ast.declarations
 
     # Return the list of simulation executions needed.
     ir_run_sims = ir_sim_declarations!(sim_declarations, sim_table)
-    return ir_run_sims
+    return sim_section_name, ir_run_sims
 end

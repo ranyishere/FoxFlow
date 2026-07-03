@@ -1,10 +1,10 @@
-#ifndef DGGML_Dissolution_TYPES_HPP
-#define DGGML_Dissolution_TYPES_HPP
+#ifndef DGGML_NeuralNetwork_TYPES_HPP
+#define DGGML_NeuralNetwork_TYPES_HPP
 #include "YAGL_Graph.hpp" 
 #include "YAGL_Node.hpp" 
 #include "SpatialData3D.hpp" 
 #include "torch/torch.h"
-namespace Dissolution {
+namespace NeuralNetwork {
 struct Type {
 	template <class Archive>
 	void serialize(Archive& archive) {
@@ -24,68 +24,42 @@ struct Boundary {
 		archive(boundary_location);
 	}
 };
-	struct Fluid : Type {
+	struct InputLayer : Type {
 		torch::Tensor Position = torch::zeros({3}, torch::kFloat64);
-		torch::Tensor Unit = torch::zeros({3}, torch::kFloat64);
-		torch::Tensor FCount = torch::zeros({1}, torch::kInt64);
-		double Pressure;
-		double Concentration;
+		torch::Tensor ImageBatch = torch::zeros({64, 1, 28, 28}, torch::kFloat64);
+		int InputID;
 
 	template <class Archive>
 	void serialize(Archive& archive) {
 		archive(Position);
-		archive(Unit);
-		archive(FCount);
-		archive(Pressure);
-		archive(Concentration);
+		archive(ImageBatch);
+		archive(InputID);
 	}
 
-};	struct FluidSource : Type {
+};	struct Layer : Type {
 		torch::Tensor Position = torch::zeros({3}, torch::kFloat64);
-		torch::Tensor Unit = torch::zeros({3}, torch::kFloat64);
-		torch::Tensor FCount = torch::zeros({1}, torch::kInt64);
-		double Pressure;
-		double Concentration;
+		torch::Tensor Weights = torch::zeros({100}, torch::kFloat64);
+		int LayerID;
 
 	template <class Archive>
 	void serialize(Archive& archive) {
 		archive(Position);
-		archive(Unit);
-		archive(FCount);
-		archive(Pressure);
-		archive(Concentration);
+		archive(Weights);
+		archive(LayerID);
 	}
 
-};	struct FluidSink : Type {
+};	struct OutputLayer : Type {
 		torch::Tensor Position = torch::zeros({3}, torch::kFloat64);
-		torch::Tensor Unit = torch::zeros({3}, torch::kFloat64);
-		torch::Tensor FCount = torch::zeros({1}, torch::kInt64);
-		double Pressure;
-		double Concentration;
+		torch::Tensor DigitClass = torch::zeros({10}, torch::kFloat64);
+		int OutputID;
 
 	template <class Archive>
 	void serialize(Archive& archive) {
 		archive(Position);
-		archive(Unit);
-		archive(FCount);
-		archive(Pressure);
-		archive(Concentration);
+		archive(DigitClass);
+		archive(OutputID);
 	}
 
-};	struct RockStart : Type {
-		torch::Tensor Position = torch::zeros({3}, torch::kFloat64);
-		torch::Tensor Count = torch::zeros({3}, torch::kInt64);
-		torch::Tensor Dir = torch::zeros({3}, torch::kInt64);
-		double Density;
-
-	template <class Archive>
-	void serialize(Archive& archive) {
-		archive(Position);
-		archive(Count);
-		archive(Dir);
-		archive(Density);
-	}
-
-};	using graph_type = YAGL::Graph<std::size_t,	SpatialNode3D<StartType,Boundary,Fluid,FluidSource,FluidSink,RockStart>>;
+};	using graph_type = YAGL::Graph<std::size_t,	SpatialNode3D<StartType,Boundary,InputLayer,Layer,OutputLayer>>;
 };
 #endif

@@ -1,0 +1,96 @@
+rules NeuralNetwork {
+
+    # Builds Neural Network
+    build_nn := (start : StartType) << (start_pos : FixedList<<3, Float>>) >> -> 
+        (input: InputLayer) << 
+            (pos : FixedList<<3, Float>>,
+            image_batch : FixedList <<(64, 1, 28, 28), Float>>, input_id : Integer)
+		>> 
+        with (1.0) where {
+
+            input_id = 0
+
+            pos = [1.0, 1.0, 1.0]
+            some_vec : FixedList<<4, Float>> := [1.0, 2.0, 3.0, 4.0]
+
+            W : FixedList<<4, 4, Float>> := zeros_matrix(4, 4)
+            out : FixedList<<4, Float>>  := mat_dot(W, some_vec)
+
+            W2 : FixedList<<4, 4, Float>> := mat_add(W, rand_matrix(4, 4))
+
+            W3 : FixedList<<4, 4, Float>> := mat_mul(W, transpose(W2))
+
+            # weights = [0, 0, 0]
+            # count_id = [10, 10, 10]
+
+            A : FixedList<<2, 3, Float>> := rand_matrix(2, 3)
+            B : FixedList<<3, 4, Float>> := rand_matrix(3, 4)
+
+            # 2-D matmul via einsum: (2,3) x (3,4) -> (2,4)
+            C : FixedList<<2, 4, Float>> := einsum("ij,jk->ik", A, B)
+
+            # batched matmul: need 3-D tensors (8,2,3) x (8,3,4) -> (8,2,4)
+            A3 : FixedList<<8, 2, 3, Float>> := rand_matrix(8, 2, 3)
+            B3 : FixedList<<8, 3, 4, Float>> := rand_matrix(8, 3, 4)
+            C3 : FixedList<<8, 2, 4, Float>> := einsum("bij,bjk->bik", A3, B3)
+
+            # swap first two axes of a 3-D tensor: (8,2,3) -> (2,8,3)
+            E : FixedList<<2, 8, 3, Float>> := permute(A3, 1, 0, 2)
+
+            # Let image batch be just all zeroes
+            # image_batch = zeros_matrix(64, 1, 28, 28)
+            image_batch = images[0:64]
+
+            W0 : FixedList<<4, 4, Float>> := rand_matrix(4, 4)
+            v : FixedList<<4, Float>> := rand_matrix(4)
+
+            # TODO: Add regular sum support?
+            dloss_dW : FixedList<<4, 4, Float>> := autodiff(einsum("i->", mat_dot(W0, v)), W0)
+
+    }
+
+
+    add_layer := (input : InputLayer) << (input_pos : FixedList<<3, Float>>,
+                            image_batch : FixedList <<(64, 1, 28, 28), Float>> , input_id : Integer)>>
+-> (input : InputLayer) -- (layer : Layer) << (input_pos : FixedList<<3, Float>>,
+                            image_batch : FixedList <<(64, 1, 28, 28), Float>>, new_input_id : Integer),
+                            (layer_pos : FixedList<<3, Float>>,
+                            weights : FixedList<<100, Float>>,
+                            layer_id : Integer)
+        >> with (1.0 * indicator(input_id == 0) ) where {
+
+            new_input_id = input_id + 1
+
+            # Just a dummy rule to test that we can match on the input and layer types
+            # weights = zeros_matrix(100)
+            # random weights for testing
+            weights = rand_matrix(100)
+            layer_id = 0
+            layer_pos = [1.0, 1.0, 1.5]
+
+    }
+
+    add_output_layer := (input : InputLayer) -- (layer : Layer) << (input_pos : FixedList<<3, Float>>,
+                            image_batch : FixedList <<(64, 1, 28, 28), Float>>, input_id : Integer),
+                            (layer_pos : FixedList<<3, Float>>,
+                            weights : FixedList<<100, Float>>,
+                            layer_id : Integer)
+        >> -> (input : InputLayer) -- (layer : Layer) -- (output_layer : OutputLayer) << 
+                    (input_pos : FixedList<<3, Float>>,
+                    image_batch : FixedList <<(64, 1, 28, 28), Float>>, input_id : Integer),
+                    (layer_pos : FixedList<<3, Float>>,
+                    weights : FixedList<<100, Float>>,
+                    new_layer_id : Integer),
+                    (output_pos : FixedList<<3, Float>>,
+                    digit_class : FixedList<<10, Float>>, output_id : Integer)
+        >> with (1.0 * indicator(layer_id == 0 ) ) where {
+
+            new_layer_id = layer_id + 1
+            output_id = 0
+
+            # Just a dummy rule to test that we can match on the layer and output layer types
+            output_pos = [1.0, 1.0, 2.0]
+            digit_class = zeros_matrix(10)
+    }
+
+}

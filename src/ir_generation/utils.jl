@@ -33,6 +33,8 @@ module IRUtils
             # return "int"
         elseif type_name == "FixedList"
             return "torch::Tensor"
+        elseif type_name == "Tensor"
+            return "torch::Tensor"
         else
             return type_name
         end

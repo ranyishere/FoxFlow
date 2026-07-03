@@ -148,6 +148,10 @@ module Tokens
         position::PositionToken
     end
 
+    struct SimulationObservablesToken <: Token
+        position::PositionToken
+    end
+
     struct DoubleColonToken <: Token
         position::PositionToken
     end

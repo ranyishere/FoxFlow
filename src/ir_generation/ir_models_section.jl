@@ -184,148 +184,226 @@ function ir_vtk_file_writer(ast, type_namespace, symbol_tables)
     models_ir = IRBuilder([])
 end
 
-function ir_get_type_attr(ast, type_namespace, symbol_tables)
+# ---- Observable expression → C++ string ----
+# Built-in function names that map to torch tensor methods returning a scalar
+const OBS_BUILTIN_METHODS = Dict(
+    "mean" => "mean()",
+    "norm" => "norm()",
+    "min"  => "min()",
+    "max"  => "max()",
+    "sum"  => "sum()",
+)
+
+"""
+Build a Dict{alias => cpp_expr} from an ObservableDestructuredParamNode.
+`alias_map` maps the user's field alias name → C++ access expression.
+Fields are matched by position to the ordered attributes in symbol_tables.
+e.g. `p1 : Layer << position: FixedList, cur_weights: FixedList, layer_id: Integer >>`
+  → { "position" => "alt.Position", "cur_weights" => "alt.Weights", "layer_id" => "alt.LayerID" }
+The param_var_name is what the user calls the node in the body (e.g. "p1"), which maps to "alt"
+when we are in the top-level observable, or to the lambda arg name in a local function.
+"""
+function _build_alias_map(param, symbol_tables, cpp_var)
+    type_name = get_value(param.type_name)
+    attrs = get(symbol_tables, type_name, Dict())
+    # attrs is ordered dict: index → (cpp_type, field_name, attr_info)
+    ordered_fields = sort(collect(attrs), by = x -> x[1])
+
+    alias_map = Dict{String, String}()
+    param_name = get_value(param.name)
+    # The param name itself maps to the C++ variable
+    alias_map[param_name] = cpp_var
+
+    for (i, binding) in enumerate(param.fields)
+        alias = get_value(binding.name)
+        if i <= length(ordered_fields)
+            _, attr_info = ordered_fields[i]
+            field_name = attr_info[2]
+            alias_map[alias] = "$cpp_var.$field_name"
+        end
+    end
+    return alias_map
+end
+
+"""
+Recursively emit a C++ expression from an observable body AST node.
+alias_map maps FoxFlow identifier names → C++ expressions.
+"""
+function _emit_obs_expr(node, alias_map)
+    if node isa CallNode
+        fname = get_value(node.function_node)
+        args_cpp = [_emit_obs_expr(a, alias_map) for a in node.args]
+        if haskey(OBS_BUILTIN_METHODS, fname)
+            # e.g. mean(cur_weights) → cur_weights.mean().template item<double>()
+            return "$(args_cpp[1]).$(OBS_BUILTIN_METHODS[fname]).template item<double>()"
+        else
+            # local function call: mean_layer(p1) → mean_layer(alt)
+            return "$fname($(join(args_cpp, ", ")))"
+        end
+    elseif node isa IdentifierNode
+        name = get_value(node)
+        return get(alias_map, name, name)
+    elseif node isa BinaryOpNode
+        lhs = _emit_obs_expr(node.lhs, alias_map)
+        rhs = _emit_obs_expr(node.rhs, alias_map)
+        op  = node.expression.position.value
+        return "($lhs $op $rhs)"
+    elseif node isa GroupNode
+        return "(" * _emit_obs_expr(node.expression, alias_map) * ")"
+    elseif node isa FloatNode || node isa IntegerNode
+        return get_value(node)
+    else
+        return "/* unhandled $(typeof(node)) */"
+    end
+end
+
+function _emit_obs_local_fn(fn_node, type_namespace, symbol_tables)
+    """Emit a C++ auto lambda for an ObservableLocalFunctionNode.
+    The lambda takes the node by reference and binds field aliases as local refs."""
+    fn_name      = get_value(fn_node.name)
+    param        = fn_node.param
+    ctx_type     = get_value(param.type_name)
+    ctx_var      = get_value(param.name)
+    ret_type_str = get_value(fn_node.return_type)
+    cpp_ret      = ret_type_str == "Float" ? "double" :
+                   ret_type_str == "Integer" ? "int64_t" : "double"
+    cpp_ctx_type = "$type_namespace::$ctx_type"
+
+    # Build alias map: alias → ctx_var.FieldName
+    alias_map = _build_alias_map(param, symbol_tables, ctx_var)
+
+    lines = String[]
+    push!(lines, "auto $fn_name = [&]($cpp_ctx_type& $ctx_var) -> $cpp_ret {")
+
+    # Emit local refs for each field alias
+    for (alias, cpp_expr) in alias_map
+        if alias != ctx_var  # skip the node itself
+            push!(lines, "    auto& $alias = $cpp_expr;")
+        end
+    end
+
+    # Pre-return body expressions
+    if fn_node.body !== nothing
+        for expr_node in fn_node.body.expressions
+            expr_name = get_value(expr_node.name)
+            expr_cpp  = _emit_obs_expr(expr_node.value, alias_map)
+            push!(lines, "    auto $expr_name = $expr_cpp;")
+        end
+    end
+
+    ret_cpp = _emit_obs_expr(fn_node.body_return.value, alias_map)
+    push!(lines, "    return $ret_cpp;")
+    push!(lines, "};")
+    return join(lines, "\n")
+end
+
+function ir_get_type_attr(ast, type_namespace, symbol_tables, observable_section=nothing)
     """
     IR Get Type Attribute
 
     Generates a C++ function that collects all node attributes into
-    a vector of (name, values) pairs for VTK output. Tensor attributes
-    are expanded element-wise at C++ runtime via a loop, so this works
-    for tensors of any size.
+    a vector of (name, values) pairs for VTK output.
+
+    Scalar (Float/Integer) attributes are always emitted as columns.
+
+    If an ObservableSectionNode is provided, each ObservableDefinitionNode
+    generates one additional column (named after the observable) computed
+    by evaluating the user's expression over each matching node.
     """
 
-    function ir_loop_type_attr(type_to_attrs, type_namespace)
-        """
-        Loop through type attributes and generate code
-        that fetches attributes for all types.
-        Tensor attributes emit a C++ runtime loop over flattened elements.
-        """
+    # ---- Build type_to_attrs: list of (attr_name, is_tensor) per type ----
+    type_to_attrs = Dict{String, Vector{Tuple{String, Bool}}}()
+    for (key, value) in symbol_tables
+        attrs = Tuple{String, Bool}[]
+        for (_, attr) in value
+            attr_type = attr[1]
+            is_tensor = (attr_type == "torch::Tensor" && attr[3][1] == true)
+            push!(attrs, (attr[2], is_tensor))
+        end
+        type_to_attrs[String(key)] = attrs
+    end
 
+    # ---- Fill loop: scalar attrs + observable-computed columns ----
+    function ir_loop_type_attr(type_to_attrs, observable_section, type_namespace)
         ir_loop = IRBuilder([])
         emit(ir_loop, "std::size_t row = 0;")
         emit(ir_loop, "for (auto it = system_graph.node_list_begin(); it != system_graph.node_list_end(); ++it, ++row) {")
-
         emit(ir_loop, "auto &n = it->second.getData();")
-
         emit(ir_loop, "std::visit([&](auto &alt) {")
         emit(ir_loop, "using T = std::decay_t<decltype(alt)>;")
 
-        for (key, value) in type_to_attrs
+        for (key, attrs) in type_to_attrs
             emit(ir_loop, "if constexpr (std::is_same_v<T, $type_namespace::$key>) {")
-            for attr_info in value
-                attr_name, is_tensor, tensor_size = attr_info
-                if is_tensor
-                    # Emit a C++ runtime loop over flattened tensor elements
+            # Scalar attrs
+            for (attr_name, is_tensor) in attrs
+                if !is_tensor
+                    emit(ir_loop, "set(\"$key.$attr_name\", row, static_cast<double>(alt.$attr_name));")
+                end
+            end
+            # Observable-defined columns targeting this type
+            if observable_section !== nothing
+                for def in observable_section.definitions
+                    if get_value(def.param.type_name) != key; continue; end
+                    obs_name  = get_value(def.name)
+                    alias_map = _build_alias_map(def.param, symbol_tables, "alt")
                     emit(ir_loop, "{")
-                    emit(ir_loop, "auto flat_tensor = alt.$attr_name.contiguous().view(-1);")
-                    emit(ir_loop, "for (int64_t j = 0; j < flat_tensor.size(0); ++j) {")
-                    emit(ir_loop, "std::string col_key = \"$key.$attr_name.\" + std::to_string(j);")
-                    emit(ir_loop, "set(col_key, row, flat_tensor[j].template item<double>());")
+                    for fn in def.local_fns
+                        emit(ir_loop, _emit_obs_local_fn(fn, type_namespace, symbol_tables))
+                    end
+                    ret_cpp = _emit_obs_expr(def.body_return.value, alias_map)
+                    emit(ir_loop, "set(\"$obs_name\", row, static_cast<double>($ret_cpp));")
                     emit(ir_loop, "}")
-                    emit(ir_loop, "}")
-                else
-                    emit(ir_loop, "set(\"$key.$attr_name\", row, alt.$attr_name);")
                 end
             end
             emit(ir_loop, "}")
         end
 
         emit(ir_loop, "}, n.data);")
-
         emit(ir_loop, "}")
-
         return build(ir_loop)
     end
 
-    # ---- Build type_to_attrs: list of (attr_name, is_tensor, tensor_size) per type ----
-    type_to_attrs = Dict{Any, Any}()
-    for (key, value) in symbol_tables
-        attrs = []
-        for (i, attr) in value
-            attr_type = attr[1]
-            attr_name = attr[2]
-            attr_info = attr[3]  # (is_list_bool, size_array, elem_type)
-
-            is_tensor = (attr_type == "torch::Tensor" && attr_info[1] == true)
-
-            # Extract the flat tensor size from the type definition
-            tensor_size = 0
-            if is_tensor
-                dim_info = attr_info[2]
-                if dim_info isa AbstractVector || dim_info isa AbstractArray
-                    tensor_size = prod([parse(Int64, d) for d in dim_info])
-                else
-                    tensor_size = parse(Int64, get_value(dim_info))
-                end
-            end
-
-            push!(attrs, (attr_name, is_tensor, tensor_size))
-        end
-        type_to_attrs[key] = attrs
-    end
-
     ir_get_type_attr_fn = IRBuilder([])
-    ir_hdr = "template <typename GraphType>"
-    emit(ir_get_type_attr_fn, ir_hdr)
-
-    ir_func = "auto get_type_attributes(GraphType &system_graph) {"
-    emit(ir_get_type_attr_fn, ir_func)
-
+    emit(ir_get_type_attr_fn, "template <typename GraphType>")
+    emit(ir_get_type_attr_fn, "auto get_type_attributes(GraphType &system_graph) {")
     emit(ir_get_type_attr_fn, "std::vector<std::pair<std::string, std::vector<double>>> type_attributes;")
-
-    ir_nan_value = "double nan_value = std::numeric_limits<double>::quiet_NaN();"
-    emit(ir_get_type_attr_fn, ir_nan_value)
-
-    # ---- Build col_names statically from type definitions ----
-    # Tensor sizes are known at compile time, so we emit them directly
-    # instead of scanning the graph at runtime.
-
+    emit(ir_get_type_attr_fn, "double nan_value = std::numeric_limits<double>::quiet_NaN();")
     emit(ir_get_type_attr_fn, "std::vector<std::string> col_names;")
     emit(ir_get_type_attr_fn, "std::size_t N = system_graph.numNodes();")
+    emit(ir_get_type_attr_fn, "// Register column names")
 
-    emit(ir_get_type_attr_fn, "// Register column names from type definitions")
-
+    # Scalar attrs (always emitted)
     for (key, attrs) in type_to_attrs
-        for (attr_name, is_tensor, tensor_size) in attrs
-            if is_tensor
-                # Tensor size is known at compile time — emit static column names
-                for j in 0:(tensor_size - 1)
-                    emit(ir_get_type_attr_fn, "col_names.push_back(\"$key.$attr_name.$j\");")
-                end
-            else
+        for (attr_name, is_tensor) in attrs
+            if !is_tensor
                 emit(ir_get_type_attr_fn, "col_names.push_back(\"$key.$attr_name\");")
             end
         end
     end
 
-    # ---- Allocate columns and build index map ----
+    # Observable-defined columns
+    if observable_section !== nothing
+        for def in observable_section.definitions
+            obs_name = get_value(def.name)
+            emit(ir_get_type_attr_fn, "col_names.push_back(\"$obs_name\");")
+        end
+    end
+
     emit(ir_get_type_attr_fn, "std::vector<std::vector<double>> columns(col_names.size());")
-
-    emit(ir_get_type_attr_fn, "for (auto &col : columns) {
-        col.resize(N, nan_value);
-    }")
-
+    emit(ir_get_type_attr_fn, "for (auto &col : columns) { col.resize(N, nan_value); }")
     emit(ir_get_type_attr_fn, "std::unordered_map<std::string, std::size_t> col_idx;")
-    emit(ir_get_type_attr_fn, "for (std::size_t i = 0; i < col_names.size(); ++i) {
-        col_idx[col_names[i]] = i;
-    }")
-
-    # Setter helper
+    emit(ir_get_type_attr_fn, "for (std::size_t i = 0; i < col_names.size(); ++i) { col_idx[col_names[i]] = i; }")
     emit(ir_get_type_attr_fn, """
         auto set = [&](const std::string &col_name, std::size_t row, double value) {
             columns[col_idx.at(col_name)][row] = value;
         };
     """)
 
-    # ---- Main loop: fill column data ----
-    ir_loop_type_attr_code = ir_loop_type_attr(type_to_attrs, type_namespace)
-    emit(ir_get_type_attr_fn, ir_loop_type_attr_code)
+    emit(ir_get_type_attr_fn, ir_loop_type_attr(type_to_attrs, observable_section, type_namespace))
 
-    # Emplace back
     emit(ir_get_type_attr_fn, "for (std::size_t i = 0; i < col_names.size(); ++i) {
         type_attributes.emplace_back(col_names[i], std::move(columns[i]));
     }")
-    
     emit(ir_get_type_attr_fn, "return type_attributes;}")
     return build(ir_get_type_attr_fn)
 end
@@ -391,7 +469,8 @@ end
 
 
 function ir_models_section_multistage(all_stages, type_namespace, symbol_tables,
-                                       stage_rules_tables, rules_includes)
+                                       stage_rules_tables, rules_includes;
+                                       observable_section=nothing)
     """
     Generate model.h with one Model_N class per simulation stage.
     Each Model_N only registers the rules for its stage.
@@ -404,7 +483,7 @@ function ir_models_section_multistage(all_stages, type_namespace, symbol_tables,
     first_stage = all_stages[1]
 
     ir_load_graph_ir = ir_load_graph(symbol_tables, type_namespace)
-    ir_get_type_fn = ir_get_type_attr(first_stage, type_namespace, symbol_tables)
+    ir_get_type_fn = ir_get_type_attr(first_stage, type_namespace, symbol_tables, observable_section)
 
     serializer_spatialnode_ir = ir_serialize_spatialnode()
     serializer_torch_tensor_ir = ir_serialize_torch_tensor()

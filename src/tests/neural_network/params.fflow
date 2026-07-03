@@ -1,10 +1,11 @@
-parameters Dissolution {
+parameters NeuralNetwork {
 
     # Simulate time in seconds
-    TOTAL_TIME : Float := 10.0
+    # TOTAL_TIME : Float := 30.0
+    TOTAL_TIME : Float := 100.0
 
     # How often the simulation is updated
-    DELTA : Float := 0.1
+    DELTA : Float := 0.5
 
     # 1 -> is 1 micrometer (um)
     # MAXIMAL_REACTION_RADIUS : Float := 0.1
@@ -14,7 +15,7 @@ parameters Dissolution {
     # Number of steps in the simulation
     NUM_STEPS : Integer := TOTAL_TIME / DELTA
 
-    MIN_DELTA_STEPS : Integer := 5
+    MIN_DELTA_STEPS : Integer := 1
     DELTA_DELTA_T : Float := DELTA / MIN_DELTA_STEPS
 
     # Prevents solver from shrinking too much.
@@ -54,7 +55,6 @@ parameters Dissolution {
     # NOTE: It is currently freezing at this value. Probably the ODE is failing again?
     # Need to check.
 
-
     # ---- Dissolution physics parameters ----
     # Dissolution reaction rate constant
     # k_r : Float := 5.0
@@ -77,5 +77,9 @@ parameters Dissolution {
     #   pressure diffusion:  k/(mu*c*dx^2) = 1.0/(1.0*0.09) = 11.11
     #  NOTE: Allow kappa to change along the fracture
     #   Darcy velocity:      k/(mu*dx)     = 1.0/0.3        =  3.33
+
+    # Dataset tensors - memory mapped via torch::from_file, only paged in when indexed
+    images : FixedList<<60000, 1, 28, 28, Float>> := from_file("mnist_images.bin")
+    labels : FixedList<<60000, Integer>>           := from_file("mnist_labels.bin")
 
 }

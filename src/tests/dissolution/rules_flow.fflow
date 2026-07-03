@@ -65,8 +65,13 @@ rules Dissolution {
            (fp1n : FixedList<<3, Float>>, fu1n : FixedList<<3, Float>>, fc1n : FixedList<<1, Integer>>, P1n : Float, C1n : Float),
            (rposn : FixedList<<3, Float>>, rcn : FixedList<<3, Integer>>, rdirn : FixedList<<3, Integer>>, rhon : Float) >>
         with (
-            10.0 * P0 * indicator( rho > 0.1 ) * indicator( HELP::distance(fp0[0], fp0[1], fp0[2], rpos[0], rpos[1], rpos[2]) <= 0.35 )
+            1.0 * P0 * indicator( rho > 0.1 ) * indicator( HELP::distance(fp0[0], fp0[1], fp0[2], rpos[0], rpos[1], rpos[2]) <= 0.35 )
         ) where {
+
+         # Distance is originally 0.35, but we can increase it to 0.5 to allow erosion 
+         # of rock nodes that are adjacent to fluid nodes, 
+         # since the reaction radius determines how far the dissolution effect can reach, 
+         # and if it is too small compared to the cell size, it won't affect neighboring rock nodes effectively.
 
         fp0n = fp0
         fu0n = fu0
@@ -90,36 +95,36 @@ rules Dissolution {
     #    has been eroded below the threshold (Density <= 0.1),
     #    the rock transforms into a new Fluid node and connects
     #    to the existing fluid via an edge, extending the fluid network.
-#     rock_to_fluid := (f0 : Fluid) -- (f1 : Fluid) (rock0 : RockStart)
-#         << (fp0 : FixedList<<3, Float>>, fu0 : FixedList<<3, Float>>, fc0 : FixedList<<1, Integer>>, P0 : Float, C0 : Float),
-#            (fp1 : FixedList<<3, Float>>, fu1 : FixedList<<3, Float>>, fc1 : FixedList<<1, Integer>>, P1 : Float, C1 : Float),
-#            (rpos : FixedList<<3, Float>>, rc : FixedList<<3, Integer>>, rdir : FixedList<<3, Integer>>, rho : Float) >> ->
-#         (f0 : Fluid) -- (f1 : Fluid) -- (fnew : Fluid)
-#         << (fp0n : FixedList<<3, Float>>, fu0n : FixedList<<3, Float>>, fc0n : FixedList<<1, Integer>>, P0n : Float, C0n : Float),
-#            (fp1n : FixedList<<3, Float>>, fu1n : FixedList<<3, Float>>, fc1n : FixedList<<1, Integer>>, P1n : Float, C1n : Float),
-#            (fpnew : FixedList<<3, Float>>, funew : FixedList<<3, Float>>, fcnew : FixedList<<1, Integer>>, Pnew : Float, Cnew : Float) >>
-#         with (
-#             10000.0 * indicator( rho <= 0.1 ) * indicator( HELP::distance(fp0[0], fp0[1], fp0[2], rpos[0], rpos[1], rpos[2]) <= 0.35 )
-#         ) where {
-# 
-#         fp0n = fp0
-#         fu0n = fu0
-#         fc0n = fc0
-#         P0n = P0
-#         C0n = C0
-# 
-#         fp1n = fp1
-#         fu1n = fu1
-#         fc1n = fc1
-#         P1n = P1
-#         C1n = C1
-# 
-#         fpnew = rpos
-#         funew = [0.0, 0.0, 0.0]
-#         fcnew = [0]
-#         Pnew = (P0 + P1) / 2.0
-#         Cnew = 0.0
-#     }
+    rock_to_fluid := (f0 : Fluid) -- (f1 : Fluid) (rock0 : RockStart)
+        << (fp0 : FixedList<<3, Float>>, fu0 : FixedList<<3, Float>>, fc0 : FixedList<<1, Integer>>, P0 : Float, C0 : Float),
+           (fp1 : FixedList<<3, Float>>, fu1 : FixedList<<3, Float>>, fc1 : FixedList<<1, Integer>>, P1 : Float, C1 : Float),
+           (rpos : FixedList<<3, Float>>, rc : FixedList<<3, Integer>>, rdir : FixedList<<3, Integer>>, rho : Float) >> ->
+        (f0 : Fluid) -- (f1 : Fluid) -- (fnew : Fluid)
+        << (fp0n : FixedList<<3, Float>>, fu0n : FixedList<<3, Float>>, fc0n : FixedList<<1, Integer>>, P0n : Float, C0n : Float),
+           (fp1n : FixedList<<3, Float>>, fu1n : FixedList<<3, Float>>, fc1n : FixedList<<1, Integer>>, P1n : Float, C1n : Float),
+           (fpnew : FixedList<<3, Float>>, funew : FixedList<<3, Float>>, fcnew : FixedList<<1, Integer>>, Pnew : Float, Cnew : Float) >>
+        with (
+            1.0 * indicator( rho <= 0.1 ) * indicator( HELP::distance(fp0[0], fp0[1], fp0[2], rpos[0], rpos[1], rpos[2]) <= 0.35 )
+        ) where {
+
+        fp0n = fp0
+        fu0n = fu0
+        fc0n = fc0
+        P0n = P0
+        C0n = C0
+
+        fp1n = fp1
+        fu1n = fu1
+        fc1n = fc1
+        P1n = P1
+        C1n = C1
+
+        fpnew = rpos
+        funew = [0.0, 0.0, 0.0]
+        fcnew = [0]
+        Pnew = (P1)
+        Cnew = 0.0
+    }
 
    # TODO: Add Continuity Equation?
 }

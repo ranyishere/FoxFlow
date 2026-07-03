@@ -1,0 +1,33 @@
+# Stage 2: Pressure-driven fluid flow (ODE solve rules)
+# Runs on the lattice built by Stage 1
+rules Dissolution {
+
+    # Connect fluid lines.
+    connect_fluid := (rock0 : Fluid) (rock1 : Fluid) <<
+            (pos0 : FixedList<<3, Float>>,
+            dir0 : FixedList<<3, Integer>>,
+            f0 : Float,
+            c_count0 : FixedList<<3, Integer>>),
+
+            (pos1 : FixedList<<3, Float>>,
+            dir1 : FixedList<<3, Integer>>,
+            f1 : Float,
+            c_count1 : FixedList<<3, Integer>>)
+        >> -> 
+        (rock0 : Fluid) -- (rock1 : Fluid)
+        << 
+            (pos0 : FixedList<<3, Float>>,
+            dir0 : FixedList<<3, Integer>>,
+            f0 : Float,
+            c_count0 : FixedList<<3, Integer>>),
+
+            (pos1 : FixedList<<3, Float>>,
+            dir1 : FixedList<<3, Integer>>,
+            f1 : Float,
+            c_count1 : FixedList<<3, Integer>>)
+        >> 
+        with ( 10000.0 ) where {
+        }
+
+   # TODO: Add Continuity Equation?
+}

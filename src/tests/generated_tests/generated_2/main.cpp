@@ -13,16 +13,16 @@ int main(int argc, char **argv) {
 
 	 // ===== Stage 0 =====
 	 {
-		 DGGML::SimulatorInterface<Dissolution::Model_0> simulator_0;
-		 Dissolution::Model_0 model_0;
+		 DGGML::SimulatorInterface<NeuralNetwork::Model_0> simulator_0;
+		 NeuralNetwork::Model_0 model_0;
 		 simulator_0.setModel(model_0);
 		 simulator_0.simulate();
 	 }
 
 	 // ===== Stage 1 =====
 	 {
-		 DGGML::SimulatorInterface<Dissolution::Model_1> simulator_1;
-		 Dissolution::Model_1 model_1;
+		 DGGML::SimulatorInterface<NeuralNetwork::Model_1> simulator_1;
+		 NeuralNetwork::Model_1 model_1;
 		 simulator_1.setModel(model_1);
 		 simulator_1.simulate();
 	 }

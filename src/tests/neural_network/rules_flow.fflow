@@ -1,0 +1,24 @@
+# Stage 2: Pressure-driven fluid flow (ODE solve rules)
+# Runs on the lattice built by Stage 1
+rules NeuralNetwork {
+
+    # Back propagation and learn
+    backprop := (input : InputLayer) -- (layer : Layer) -- (output : OutputLayer) << (input_pos : FixedList<<3, Float>>,
+                            image_batch : FixedList <<(64, 1, 28, 28), Float>>, input_id : Integer),
+                            (layer_pos : FixedList<<3, Float>>,
+                            weights : FixedList<<100, Float>>, layer_id : Integer),
+                            (output_pos : FixedList<<3, Float>>,
+                            digit_class : FixedList<<10, Float>>, output_id : Integer)
+    >> -> (input : InputLayer) -- (layer : Layer) -- (output : OutputLayer) << (input_pos : FixedList<<3, Float>>,
+                            image_batch : FixedList <<(64, 1, 28, 28), Float>>, input_id : Integer),
+                            (layer_pos : FixedList<<3, Float>>,
+                            dw : FixedList<<100, Float>>, layer_id : Integer),
+                            (output_pos : FixedList<<3, Float>>,
+                            digit_class : FixedList<<10, Float>>, output_id : Integer)  >>
+solving ( dw := D(weights, t) ) {
+
+            # dummy
+            dw : ODE = HELP::activation(100, weights, weights)
+        }
+
+}

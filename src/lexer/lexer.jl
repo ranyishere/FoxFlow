@@ -78,6 +78,7 @@ function tokenize(source::String, line_no::Integer)
                      "Function", "Rule",
                      "Observable", "State",
                      "RunSimulation", "SimulationRules", "SimulationTypes",
+                     "SimulationObservables",
                      "Parameter", "Simulation"
                 ]
                 if value == "Type"
@@ -103,6 +104,8 @@ function tokenize(source::String, line_no::Integer)
                     push!(tokens, RulesToken(PositionToken(value, line_no, i-1)))
                 elseif value == "SimulationTypes"
                     push!(tokens, SimulationTypesToken(PositionToken(value, line_no, i-1)))
+                elseif value == "SimulationObservables"
+                    push!(tokens, SimulationObservablesToken(PositionToken(value, line_no, i-1)))
             end
 
             elseif value in ["Float", "Integer", "ODE"]

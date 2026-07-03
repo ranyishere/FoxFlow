@@ -86,7 +86,6 @@ endif()
 
 # Try to find LibTorch first
 find_package(Torch QUIET)
-
 if(NOT Torch_FOUND)
 
     message(STATUS "LibTorch not found, fetching with FetchContent...")

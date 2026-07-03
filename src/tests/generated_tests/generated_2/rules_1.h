@@ -3,250 +3,166 @@
 #include "types.h"
 #include "parameters.h"
 #include "functions.h"
-namespace Dissolution {
-using GT = Dissolution::graph_type;
-void source_flow(DGGML::Grammar<Dissolution::graph_type> &gamma,
-           Dissolution::graph_type &system_graph,
+namespace NeuralNetwork {
+using GT = NeuralNetwork::graph_type;
+void backprop(DGGML::Grammar<NeuralNetwork::graph_type> &gamma,
+           NeuralNetwork::graph_type &system_graph,
            Parameters &settings) {
 
-GT source_flow_lhs;
-source_flow_lhs.addNode({1, {Dissolution::FluidSource{} }});
+GT backprop_lhs;
+backprop_lhs.addNode({1, {NeuralNetwork::InputLayer{} }});
 
-source_flow_lhs.addNode({2, {Dissolution::Fluid{} }});
+backprop_lhs.addNode({2, {NeuralNetwork::Layer{} }});
 
-source_flow_lhs.addEdge(1, 2);
+backprop_lhs.addEdge(1, 2);
 
-GT source_flow_rhs;
-source_flow_rhs.addNode({1, {Dissolution::FluidSource{} }});
+backprop_lhs.addNode({3, {NeuralNetwork::OutputLayer{} }});
 
-source_flow_rhs.addNode({2, {Dissolution::Fluid{} }});
+backprop_lhs.addEdge(2, 3);
 
-source_flow_rhs.addEdge(1, 2);
+GT backprop_rhs;
+backprop_rhs.addNode({1, {NeuralNetwork::InputLayer{} }});
 
-DGGML::SolvingRule<GT> source_flow("source_flow", source_flow_lhs, source_flow_lhs,
-2,
+backprop_rhs.addNode({2, {NeuralNetwork::Layer{} }});
+
+backprop_rhs.addEdge(1, 2);
+
+backprop_rhs.addNode({3, {NeuralNetwork::OutputLayer{} }});
+
+backprop_rhs.addEdge(2, 3);
+
+DGGML::SolvingRule<GT> backprop("backprop", backprop_lhs, backprop_lhs,
+103,
 [](auto &lhs, auto &m1, auto &varset) {
-auto &node_2_4 = std::get<Dissolution::Fluid>(lhs[m1[2]].data).Pressure;
-varset.insert(&node_2_4);
-auto &node_1_4 = std::get<Dissolution::FluidSource>(lhs[m1[1]].data).Pressure;
-varset.insert(&node_1_4);
+auto &tensor_ref_2_2 = std::get<NeuralNetwork::Layer>(lhs[m1[2]].data).Weights;
+double* tensor_ptr_2_2 = tensor_ref_2_2.template data_ptr<double>();
+varset.insert(&tensor_ptr_2_2[0]);
+varset.insert(&tensor_ptr_2_2[1]);
+varset.insert(&tensor_ptr_2_2[2]);
+varset.insert(&tensor_ptr_2_2[3]);
+varset.insert(&tensor_ptr_2_2[4]);
+varset.insert(&tensor_ptr_2_2[5]);
+varset.insert(&tensor_ptr_2_2[6]);
+varset.insert(&tensor_ptr_2_2[7]);
+varset.insert(&tensor_ptr_2_2[8]);
+varset.insert(&tensor_ptr_2_2[9]);
+varset.insert(&tensor_ptr_2_2[10]);
+varset.insert(&tensor_ptr_2_2[11]);
+varset.insert(&tensor_ptr_2_2[12]);
+varset.insert(&tensor_ptr_2_2[13]);
+varset.insert(&tensor_ptr_2_2[14]);
+varset.insert(&tensor_ptr_2_2[15]);
+varset.insert(&tensor_ptr_2_2[16]);
+varset.insert(&tensor_ptr_2_2[17]);
+varset.insert(&tensor_ptr_2_2[18]);
+varset.insert(&tensor_ptr_2_2[19]);
+varset.insert(&tensor_ptr_2_2[20]);
+varset.insert(&tensor_ptr_2_2[21]);
+varset.insert(&tensor_ptr_2_2[22]);
+varset.insert(&tensor_ptr_2_2[23]);
+varset.insert(&tensor_ptr_2_2[24]);
+varset.insert(&tensor_ptr_2_2[25]);
+varset.insert(&tensor_ptr_2_2[26]);
+varset.insert(&tensor_ptr_2_2[27]);
+varset.insert(&tensor_ptr_2_2[28]);
+varset.insert(&tensor_ptr_2_2[29]);
+varset.insert(&tensor_ptr_2_2[30]);
+varset.insert(&tensor_ptr_2_2[31]);
+varset.insert(&tensor_ptr_2_2[32]);
+varset.insert(&tensor_ptr_2_2[33]);
+varset.insert(&tensor_ptr_2_2[34]);
+varset.insert(&tensor_ptr_2_2[35]);
+varset.insert(&tensor_ptr_2_2[36]);
+varset.insert(&tensor_ptr_2_2[37]);
+varset.insert(&tensor_ptr_2_2[38]);
+varset.insert(&tensor_ptr_2_2[39]);
+varset.insert(&tensor_ptr_2_2[40]);
+varset.insert(&tensor_ptr_2_2[41]);
+varset.insert(&tensor_ptr_2_2[42]);
+varset.insert(&tensor_ptr_2_2[43]);
+varset.insert(&tensor_ptr_2_2[44]);
+varset.insert(&tensor_ptr_2_2[45]);
+varset.insert(&tensor_ptr_2_2[46]);
+varset.insert(&tensor_ptr_2_2[47]);
+varset.insert(&tensor_ptr_2_2[48]);
+varset.insert(&tensor_ptr_2_2[49]);
+varset.insert(&tensor_ptr_2_2[50]);
+varset.insert(&tensor_ptr_2_2[51]);
+varset.insert(&tensor_ptr_2_2[52]);
+varset.insert(&tensor_ptr_2_2[53]);
+varset.insert(&tensor_ptr_2_2[54]);
+varset.insert(&tensor_ptr_2_2[55]);
+varset.insert(&tensor_ptr_2_2[56]);
+varset.insert(&tensor_ptr_2_2[57]);
+varset.insert(&tensor_ptr_2_2[58]);
+varset.insert(&tensor_ptr_2_2[59]);
+varset.insert(&tensor_ptr_2_2[60]);
+varset.insert(&tensor_ptr_2_2[61]);
+varset.insert(&tensor_ptr_2_2[62]);
+varset.insert(&tensor_ptr_2_2[63]);
+varset.insert(&tensor_ptr_2_2[64]);
+varset.insert(&tensor_ptr_2_2[65]);
+varset.insert(&tensor_ptr_2_2[66]);
+varset.insert(&tensor_ptr_2_2[67]);
+varset.insert(&tensor_ptr_2_2[68]);
+varset.insert(&tensor_ptr_2_2[69]);
+varset.insert(&tensor_ptr_2_2[70]);
+varset.insert(&tensor_ptr_2_2[71]);
+varset.insert(&tensor_ptr_2_2[72]);
+varset.insert(&tensor_ptr_2_2[73]);
+varset.insert(&tensor_ptr_2_2[74]);
+varset.insert(&tensor_ptr_2_2[75]);
+varset.insert(&tensor_ptr_2_2[76]);
+varset.insert(&tensor_ptr_2_2[77]);
+varset.insert(&tensor_ptr_2_2[78]);
+varset.insert(&tensor_ptr_2_2[79]);
+varset.insert(&tensor_ptr_2_2[80]);
+varset.insert(&tensor_ptr_2_2[81]);
+varset.insert(&tensor_ptr_2_2[82]);
+varset.insert(&tensor_ptr_2_2[83]);
+varset.insert(&tensor_ptr_2_2[84]);
+varset.insert(&tensor_ptr_2_2[85]);
+varset.insert(&tensor_ptr_2_2[86]);
+varset.insert(&tensor_ptr_2_2[87]);
+varset.insert(&tensor_ptr_2_2[88]);
+varset.insert(&tensor_ptr_2_2[89]);
+varset.insert(&tensor_ptr_2_2[90]);
+varset.insert(&tensor_ptr_2_2[91]);
+varset.insert(&tensor_ptr_2_2[92]);
+varset.insert(&tensor_ptr_2_2[93]);
+varset.insert(&tensor_ptr_2_2[94]);
+varset.insert(&tensor_ptr_2_2[95]);
+varset.insert(&tensor_ptr_2_2[96]);
+varset.insert(&tensor_ptr_2_2[97]);
+varset.insert(&tensor_ptr_2_2[98]);
+varset.insert(&tensor_ptr_2_2[99]);
 },
 [&](auto &lhs, auto &m1, auto y, auto ydot, auto &varmap) {
-auto &ix_P1 = std::get<Dissolution::Fluid>(lhs[m1[2]].data).Pressure;
-auto &ix_P0 = std::get<Dissolution::FluidSource>(lhs[m1[1]].data).Pressure;
-NV_Ith_S(ydot, varmap[&ix_P1]) += 11.11 * (NV_Ith_S(y, varmap.at(&ix_P0)) - NV_Ith_S(y, varmap.at(&ix_P1)));
-NV_Ith_S(ydot, varmap[&ix_P0]) +=  0.0 ;
+double* tensor_ptr_2_2 = std::get<NeuralNetwork::Layer>(lhs[m1[2]].data).Weights.template data_ptr<double>();
+{  // Neural ODE: dw
+const int _base_dw = varmap.at(&tensor_ptr_2_2[0]);
+// Zero-copy views into SUNDIALS y / ydot memory
+torch::Tensor _y_dw = torch::from_blob(
+    N_VGetArrayPointer(y) + _base_dw, {100}, torch::kFloat64);
+torch::Tensor _ydot_dw = torch::from_blob(
+    N_VGetArrayPointer(ydot) + _base_dw, {100}, torch::kFloat64);
+auto& Weights = _y_dw;
+torch::Tensor weights = std::get<NeuralNetwork::Layer>(lhs[m1[2]].data).Weights;
+
+torch::Tensor _rhs_dw = HELP::activation(100, weights, weights);
+_ydot_dw += _rhs_dw;
+}  // end Neural ODE: dw
 // ── Symbolic ODE system ──
-// d(dP1)/dt += 11.11 * (P0 - P1)
-// d(dP0)/dt += 0.0
+// d(dw[0..99])/dt += HELP::activation(100, weights, weights)
 { static bool _sym_dumped = false;
   if (!_sym_dumped && std::getenv("ODE_DUMP")) { _sym_dumped = true;
     std::cout << "  ── Symbolic ODE ──" << std::endl;
-    std::cout << "    d(dP1)/dt += 11.11 * (P0 - P1)" << std::endl;
-    std::cout << "    d(dP0)/dt += 0.0" << std::endl;
+    std::cout << "    d(dw[0..99])/dt += HELP::activation(100, weights, weights)" << std::endl;
   }
 }
 }
 );
-gamma.addRule(source_flow);
-};
-void fluid_flow(DGGML::Grammar<Dissolution::graph_type> &gamma,
-           Dissolution::graph_type &system_graph,
-           Parameters &settings) {
-
-GT fluid_flow_lhs;
-fluid_flow_lhs.addNode({1, {Dissolution::Fluid{} }});
-
-fluid_flow_lhs.addNode({2, {Dissolution::Fluid{} }});
-
-fluid_flow_lhs.addEdge(1, 2);
-
-GT fluid_flow_rhs;
-fluid_flow_rhs.addNode({1, {Dissolution::Fluid{} }});
-
-fluid_flow_rhs.addNode({2, {Dissolution::Fluid{} }});
-
-fluid_flow_rhs.addEdge(1, 2);
-
-DGGML::SolvingRule<GT> fluid_flow("fluid_flow", fluid_flow_lhs, fluid_flow_lhs,
-2,
-[](auto &lhs, auto &m1, auto &varset) {
-auto &node_2_4 = std::get<Dissolution::Fluid>(lhs[m1[2]].data).Pressure;
-varset.insert(&node_2_4);
-auto &node_1_4 = std::get<Dissolution::Fluid>(lhs[m1[1]].data).Pressure;
-varset.insert(&node_1_4);
-},
-[&](auto &lhs, auto &m1, auto y, auto ydot, auto &varmap) {
-auto &ix_P1 = std::get<Dissolution::Fluid>(lhs[m1[2]].data).Pressure;
-auto &ix_P0 = std::get<Dissolution::Fluid>(lhs[m1[1]].data).Pressure;
-NV_Ith_S(ydot, varmap[&ix_P1]) += 11.11 * (NV_Ith_S(y, varmap.at(&ix_P0)) - NV_Ith_S(y, varmap.at(&ix_P1)));
-NV_Ith_S(ydot, varmap[&ix_P0]) +=  0.0 ;
-// ── Symbolic ODE system ──
-// d(dP1)/dt += 11.11 * (P0 - P1)
-// d(dP0)/dt += 0.0
-{ static bool _sym_dumped = false;
-  if (!_sym_dumped && std::getenv("ODE_DUMP")) { _sym_dumped = true;
-    std::cout << "  ── Symbolic ODE ──" << std::endl;
-    std::cout << "    d(dP1)/dt += 11.11 * (P0 - P1)" << std::endl;
-    std::cout << "    d(dP0)/dt += 0.0" << std::endl;
-  }
-}
-}
-);
-gamma.addRule(fluid_flow);
-};
-void sink_flow(DGGML::Grammar<Dissolution::graph_type> &gamma,
-           Dissolution::graph_type &system_graph,
-           Parameters &settings) {
-
-GT sink_flow_lhs;
-sink_flow_lhs.addNode({1, {Dissolution::Fluid{} }});
-
-sink_flow_lhs.addNode({2, {Dissolution::FluidSink{} }});
-
-sink_flow_lhs.addEdge(1, 2);
-
-GT sink_flow_rhs;
-sink_flow_rhs.addNode({1, {Dissolution::Fluid{} }});
-
-sink_flow_rhs.addNode({2, {Dissolution::FluidSink{} }});
-
-sink_flow_rhs.addEdge(1, 2);
-
-DGGML::SolvingRule<GT> sink_flow("sink_flow", sink_flow_lhs, sink_flow_lhs,
-2,
-[](auto &lhs, auto &m1, auto &varset) {
-auto &node_1_4 = std::get<Dissolution::Fluid>(lhs[m1[1]].data).Pressure;
-varset.insert(&node_1_4);
-auto &node_2_4 = std::get<Dissolution::FluidSink>(lhs[m1[2]].data).Pressure;
-varset.insert(&node_2_4);
-},
-[&](auto &lhs, auto &m1, auto y, auto ydot, auto &varmap) {
-auto &ix_P1 = std::get<Dissolution::FluidSink>(lhs[m1[2]].data).Pressure;
-auto &ix_P0 = std::get<Dissolution::Fluid>(lhs[m1[1]].data).Pressure;
-NV_Ith_S(ydot, varmap[&ix_P0]) += 11.11 * (NV_Ith_S(y, varmap.at(&ix_P1)) - NV_Ith_S(y, varmap.at(&ix_P0)));
-NV_Ith_S(ydot, varmap[&ix_P1]) +=  0.0 ;
-// ── Symbolic ODE system ──
-// d(dP0)/dt += 11.11 * (P1 - P0)
-// d(dP1)/dt += 0.0
-{ static bool _sym_dumped = false;
-  if (!_sym_dumped && std::getenv("ODE_DUMP")) { _sym_dumped = true;
-    std::cout << "  ── Symbolic ODE ──" << std::endl;
-    std::cout << "    d(dP0)/dt += 11.11 * (P1 - P0)" << std::endl;
-    std::cout << "    d(dP1)/dt += 0.0" << std::endl;
-  }
-}
-}
-);
-gamma.addRule(sink_flow);
-};
-void erode_rock(DGGML::Grammar<Dissolution::graph_type> &gamma,
-           Dissolution::graph_type &system_graph,
-           Parameters &settings) {
-
-GT erode_rock_lhs;
-erode_rock_lhs.addNode({1, {Dissolution::Fluid{} }});
-
-erode_rock_lhs.addNode({2, {Dissolution::Fluid{} }});
-
-erode_rock_lhs.addEdge(1, 2);
-
-erode_rock_lhs.addNode({3, {Dissolution::RockStart{} }});
-
-GT erode_rock_rhs;
-erode_rock_rhs.addNode({1, {Dissolution::Fluid{} }});
-
-erode_rock_rhs.addNode({2, {Dissolution::Fluid{} }});
-
-erode_rock_rhs.addEdge(1, 2);
-
-erode_rock_rhs.addNode({3, {Dissolution::RockStart{} }});
-
-DGGML::WithRule<GT> erode_rock("erode_rock", erode_rock_lhs, erode_rock_rhs,
-[&](auto &lhs, auto &m1) {
-
-double P0 = std::get<Dissolution::Fluid>(lhs[m1[1]].data).Pressure;
-
-double rho = std::get<Dissolution::RockStart>(lhs[m1[3]].data).Density;
-
-torch::Tensor fp0 = std::get<Dissolution::Fluid>(lhs[m1[1]].data).Position;
-
-torch::Tensor rpos = std::get<Dissolution::RockStart>(lhs[m1[3]].data).Position;
-
-return 
-(
-10.0
- * 
-P0
- * 
-( (rho > 0.1) ? 1.0 : 0.0)
- * 
-( (HELP::distance(fp0[0].template item<double>(), fp0[1].template item<double>(), fp0[2].template item<double>(), rpos[0].template item<double>(), rpos[1].template item<double>(), rpos[2].template item<double>()) <= 0.35) ? 1.0 : 0.0)
-)
-;},
-[&](auto &lhs, auto &rhs, auto &m1, auto &m2) {
-torch::Tensor fp0 = std::get<Dissolution::Fluid>(lhs[m1[1]].data).Position;
-
-torch::Tensor fp0n = (fp0);
-for (int _i = 0; _i < 3 && _i < fp0n.numel(); _i++) { rhs[m2[1]].position[_i] = fp0n[_i].template item<double>(); }
-std::get<Dissolution::Fluid>(rhs[m2[ 1 ]].data).Position = fp0n;
-torch::Tensor fu0 = std::get<Dissolution::Fluid>(lhs[m1[1]].data).Unit;
-
-torch::Tensor fu0n = (fu0);
-std::get<Dissolution::Fluid>(rhs[m2[ 1 ]].data).Unit = fu0n;
-torch::Tensor fc0 = std::get<Dissolution::Fluid>(lhs[m1[1]].data).FCount;
-
-torch::Tensor fc0n = (fc0);
-std::get<Dissolution::Fluid>(rhs[m2[ 1 ]].data).FCount = fc0n;
-double P0 = std::get<Dissolution::Fluid>(lhs[m1[1]].data).Pressure;
-
-double P0n = (P0);
-std::get<Dissolution::Fluid>(rhs[m2[ 1 ]].data).Pressure = P0n;
-double C0 = std::get<Dissolution::Fluid>(lhs[m1[1]].data).Concentration;
-
-double C0n = (C0);
-std::get<Dissolution::Fluid>(rhs[m2[ 1 ]].data).Concentration = C0n;
-torch::Tensor fp1 = std::get<Dissolution::Fluid>(lhs[m1[2]].data).Position;
-
-torch::Tensor fp1n = (fp1);
-for (int _i = 0; _i < 3 && _i < fp1n.numel(); _i++) { rhs[m2[2]].position[_i] = fp1n[_i].template item<double>(); }
-std::get<Dissolution::Fluid>(rhs[m2[ 2 ]].data).Position = fp1n;
-torch::Tensor fu1 = std::get<Dissolution::Fluid>(lhs[m1[2]].data).Unit;
-
-torch::Tensor fu1n = (fu1);
-std::get<Dissolution::Fluid>(rhs[m2[ 2 ]].data).Unit = fu1n;
-torch::Tensor fc1 = std::get<Dissolution::Fluid>(lhs[m1[2]].data).FCount;
-
-torch::Tensor fc1n = (fc1);
-std::get<Dissolution::Fluid>(rhs[m2[ 2 ]].data).FCount = fc1n;
-double P1 = std::get<Dissolution::Fluid>(lhs[m1[2]].data).Pressure;
-
-double P1n = (P1);
-std::get<Dissolution::Fluid>(rhs[m2[ 2 ]].data).Pressure = P1n;
-double C1 = std::get<Dissolution::Fluid>(lhs[m1[2]].data).Concentration;
-
-double C1n = (C1);
-std::get<Dissolution::Fluid>(rhs[m2[ 2 ]].data).Concentration = C1n;
-torch::Tensor rpos = std::get<Dissolution::RockStart>(lhs[m1[3]].data).Position;
-
-torch::Tensor rposn = (rpos);
-for (int _i = 0; _i < 3 && _i < rposn.numel(); _i++) { rhs[m2[3]].position[_i] = rposn[_i].template item<double>(); }
-std::get<Dissolution::RockStart>(rhs[m2[ 3 ]].data).Position = rposn;
-torch::Tensor rc = std::get<Dissolution::RockStart>(lhs[m1[3]].data).Count;
-
-torch::Tensor rcn = (rc);
-std::get<Dissolution::RockStart>(rhs[m2[ 3 ]].data).Count = rcn;
-torch::Tensor rdir = std::get<Dissolution::RockStart>(lhs[m1[3]].data).Dir;
-
-torch::Tensor rdirn = (rdir);
-std::get<Dissolution::RockStart>(rhs[m2[ 3 ]].data).Dir = rdirn;
-double rho = std::get<Dissolution::RockStart>(lhs[m1[3]].data).Density;
-
-double rhon = (rho - 0.1);
-std::get<Dissolution::RockStart>(rhs[m2[ 3 ]].data).Density = rhon;
-}
-);
-gamma.addRule(erode_rock);
+gamma.addRule(backprop);
 };
 }
 #endif

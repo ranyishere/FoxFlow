@@ -245,12 +245,37 @@ function parse_run_simulation!(tokens)
         throw(ErrorException("Expected IntegerToken got $(lookahead(tokens))"))
     end
 
+    # Optional observables argument: , observablesVar
+    remove_endlines_func_args!(tokens)
+    sim_observables = nothing
+    if isa(lookahead(tokens), PunctuationToken)
+        popfirst!(tokens)  # pop CommaToken
+        remove_endlines_func_args!(tokens)
+        if lookahead(tokens) isa IdentifierToken
+            sim_observables = IdentifierNode(popfirst!(tokens))
+        else
+            throw(ErrorException("Expected IdentifierToken for observables arg got $(lookahead(tokens))"))
+        end
+    end
+
     if !(lookahead(tokens) isa RightParenthesisToken)
         throw(ErrorException("Expected RightParenthesisToken got $(lookahead(tokens))"))
     end
     popfirst!(tokens)  # pop RightParenthesisToken
 
-    return RunSimulationNode(initial_state, sim_paramters, sim_rules, sim_types, sim_iterations)
+    return RunSimulationNode(initial_state, sim_paramters, sim_rules, sim_types, sim_iterations, sim_observables)
+end
+
+function parse_sim_observables!(tokens)
+    if !(lookahead(tokens) isa DefineToken)
+        throw(ErrorException("Expected := got $(lookahead(tokens))"))
+    end
+    popfirst!(tokens)  # pop DefineToken
+    if !(lookahead(tokens) isa LoadFileToken)
+        throw(ErrorException("Expected LoadFileToken got $(lookahead(tokens))"))
+    end
+    load_node = parse_load_file!(tokens)
+    return SimulationObservablesNode(load_node)
 end
 
 function parse_simulation_declaration!(tokens)
@@ -288,6 +313,9 @@ function parse_simulation_declaration!(tokens)
     elseif (lookahead(tokens) isa SimulationTypesToken)
         popfirst!(tokens)
         node_value = parse_sim_types!(tokens)
+    elseif (lookahead(tokens) isa SimulationObservablesToken)
+        popfirst!(tokens)
+        node_value = parse_sim_observables!(tokens)
     elseif lookahead(tokens) isa SimulationToken
         popfirst!(tokens)  # pop SimulationToken
         node_value = parse_run_simulation!(tokens)

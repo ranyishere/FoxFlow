@@ -55,8 +55,8 @@ namespace cereal {
             ar(binary_data(tensor.data_ptr(), tensor.nbytes()));
         }
     }
-namespace Dissolution {
-using graph_grammar_t = DGGML::Grammar<Dissolution::graph_type>;
+namespace NeuralNetwork {
+using graph_grammar_t = DGGML::Grammar<NeuralNetwork::graph_type>;
 class Model_0 : public DGGML::Model3D<graph_grammar_t> {
 	public:
 	Parameters settings;
@@ -96,8 +96,8 @@ template<typename GraphType, typename CplexType, typename ParamType, typename Ge
 
             double center_x, center_y, center_z;
             reaction_grid.cardinalCellToPoint(center_x, center_y, center_z, centerCardinal);
-            Dissolution::graph_type tg;
-            Dissolution::StartType tmp = Dissolution::StartType{};
+            NeuralNetwork::graph_type tg;
+            NeuralNetwork::StartType tmp = NeuralNetwork::StartType{};
 
             tmp.start_location[0] = center_x;
             tmp.start_location[1] = center_y;
@@ -115,58 +115,16 @@ std::vector<std::pair<std::string, std::vector<double>>> type_attributes;
 double nan_value = std::numeric_limits<double>::quiet_NaN();
 std::vector<std::string> col_names;
 std::size_t N = system_graph.numNodes();
-// Register column names from type definitions
-col_names.push_back("FluidSource.Concentration");
-col_names.push_back("FluidSource.Pressure");
-col_names.push_back("FluidSource.Unit.0");
-col_names.push_back("FluidSource.Unit.1");
-col_names.push_back("FluidSource.Unit.2");
-col_names.push_back("FluidSource.FCount.0");
-col_names.push_back("FluidSource.Position.0");
-col_names.push_back("FluidSource.Position.1");
-col_names.push_back("FluidSource.Position.2");
-col_names.push_back("FluidSink.Concentration");
-col_names.push_back("FluidSink.Pressure");
-col_names.push_back("FluidSink.Unit.0");
-col_names.push_back("FluidSink.Unit.1");
-col_names.push_back("FluidSink.Unit.2");
-col_names.push_back("FluidSink.FCount.0");
-col_names.push_back("FluidSink.Position.0");
-col_names.push_back("FluidSink.Position.1");
-col_names.push_back("FluidSink.Position.2");
-col_names.push_back("RockStart.Density");
-col_names.push_back("RockStart.Count.0");
-col_names.push_back("RockStart.Count.1");
-col_names.push_back("RockStart.Count.2");
-col_names.push_back("RockStart.Dir.0");
-col_names.push_back("RockStart.Dir.1");
-col_names.push_back("RockStart.Dir.2");
-col_names.push_back("RockStart.Position.0");
-col_names.push_back("RockStart.Position.1");
-col_names.push_back("RockStart.Position.2");
-col_names.push_back("StartType.start_location.0");
-col_names.push_back("StartType.start_location.1");
-col_names.push_back("StartType.start_location.2");
-col_names.push_back("Boundary.boundary_location.0");
-col_names.push_back("Boundary.boundary_location.1");
-col_names.push_back("Boundary.boundary_location.2");
-col_names.push_back("Fluid.Concentration");
-col_names.push_back("Fluid.Pressure");
-col_names.push_back("Fluid.Unit.0");
-col_names.push_back("Fluid.Unit.1");
-col_names.push_back("Fluid.Unit.2");
-col_names.push_back("Fluid.FCount.0");
-col_names.push_back("Fluid.Position.0");
-col_names.push_back("Fluid.Position.1");
-col_names.push_back("Fluid.Position.2");
+// Register column names
+col_names.push_back("Layer.LayerID");
+col_names.push_back("InputLayer.InputID");
+col_names.push_back("OutputLayer.OutputID");
+col_names.push_back("layer_mean_weight");
+col_names.push_back("output_norm");
 std::vector<std::vector<double>> columns(col_names.size());
-for (auto &col : columns) {
-        col.resize(N, nan_value);
-    }
+for (auto &col : columns) { col.resize(N, nan_value); }
 std::unordered_map<std::string, std::size_t> col_idx;
-for (std::size_t i = 0; i < col_names.size(); ++i) {
-        col_idx[col_names[i]] = i;
-    }
+for (std::size_t i = 0; i < col_names.size(); ++i) { col_idx[col_names[i]] = i; }
     auto set = [&](const std::string &col_name, std::size_t row, double value) {
         columns[col_idx.at(col_name)][row] = value;
     };
@@ -176,121 +134,23 @@ for (auto it = system_graph.node_list_begin(); it != system_graph.node_list_end(
 auto &n = it->second.getData();
 std::visit([&](auto &alt) {
 using T = std::decay_t<decltype(alt)>;
-if constexpr (std::is_same_v<T, Dissolution::FluidSource>) {
-set("FluidSource.Concentration", row, alt.Concentration);
-set("FluidSource.Pressure", row, alt.Pressure);
+if constexpr (std::is_same_v<T, NeuralNetwork::StartType>) {
+}
+if constexpr (std::is_same_v<T, NeuralNetwork::Layer>) {
+set("Layer.LayerID", row, static_cast<double>(alt.LayerID));
 {
-auto flat_tensor = alt.Unit.contiguous().view(-1);
-for (int64_t j = 0; j < flat_tensor.size(0); ++j) {
-std::string col_key = "FluidSource.Unit." + std::to_string(j);
-set(col_key, row, flat_tensor[j].template item<double>());
+set("layer_mean_weight", row, static_cast<double>(alt.Weights.mean().template item<double>()));
 }
 }
+if constexpr (std::is_same_v<T, NeuralNetwork::InputLayer>) {
+set("InputLayer.InputID", row, static_cast<double>(alt.InputID));
+}
+if constexpr (std::is_same_v<T, NeuralNetwork::Boundary>) {
+}
+if constexpr (std::is_same_v<T, NeuralNetwork::OutputLayer>) {
+set("OutputLayer.OutputID", row, static_cast<double>(alt.OutputID));
 {
-auto flat_tensor = alt.FCount.contiguous().view(-1);
-for (int64_t j = 0; j < flat_tensor.size(0); ++j) {
-std::string col_key = "FluidSource.FCount." + std::to_string(j);
-set(col_key, row, flat_tensor[j].template item<double>());
-}
-}
-{
-auto flat_tensor = alt.Position.contiguous().view(-1);
-for (int64_t j = 0; j < flat_tensor.size(0); ++j) {
-std::string col_key = "FluidSource.Position." + std::to_string(j);
-set(col_key, row, flat_tensor[j].template item<double>());
-}
-}
-}
-if constexpr (std::is_same_v<T, Dissolution::FluidSink>) {
-set("FluidSink.Concentration", row, alt.Concentration);
-set("FluidSink.Pressure", row, alt.Pressure);
-{
-auto flat_tensor = alt.Unit.contiguous().view(-1);
-for (int64_t j = 0; j < flat_tensor.size(0); ++j) {
-std::string col_key = "FluidSink.Unit." + std::to_string(j);
-set(col_key, row, flat_tensor[j].template item<double>());
-}
-}
-{
-auto flat_tensor = alt.FCount.contiguous().view(-1);
-for (int64_t j = 0; j < flat_tensor.size(0); ++j) {
-std::string col_key = "FluidSink.FCount." + std::to_string(j);
-set(col_key, row, flat_tensor[j].template item<double>());
-}
-}
-{
-auto flat_tensor = alt.Position.contiguous().view(-1);
-for (int64_t j = 0; j < flat_tensor.size(0); ++j) {
-std::string col_key = "FluidSink.Position." + std::to_string(j);
-set(col_key, row, flat_tensor[j].template item<double>());
-}
-}
-}
-if constexpr (std::is_same_v<T, Dissolution::RockStart>) {
-set("RockStart.Density", row, alt.Density);
-{
-auto flat_tensor = alt.Count.contiguous().view(-1);
-for (int64_t j = 0; j < flat_tensor.size(0); ++j) {
-std::string col_key = "RockStart.Count." + std::to_string(j);
-set(col_key, row, flat_tensor[j].template item<double>());
-}
-}
-{
-auto flat_tensor = alt.Dir.contiguous().view(-1);
-for (int64_t j = 0; j < flat_tensor.size(0); ++j) {
-std::string col_key = "RockStart.Dir." + std::to_string(j);
-set(col_key, row, flat_tensor[j].template item<double>());
-}
-}
-{
-auto flat_tensor = alt.Position.contiguous().view(-1);
-for (int64_t j = 0; j < flat_tensor.size(0); ++j) {
-std::string col_key = "RockStart.Position." + std::to_string(j);
-set(col_key, row, flat_tensor[j].template item<double>());
-}
-}
-}
-if constexpr (std::is_same_v<T, Dissolution::StartType>) {
-{
-auto flat_tensor = alt.start_location.contiguous().view(-1);
-for (int64_t j = 0; j < flat_tensor.size(0); ++j) {
-std::string col_key = "StartType.start_location." + std::to_string(j);
-set(col_key, row, flat_tensor[j].template item<double>());
-}
-}
-}
-if constexpr (std::is_same_v<T, Dissolution::Boundary>) {
-{
-auto flat_tensor = alt.boundary_location.contiguous().view(-1);
-for (int64_t j = 0; j < flat_tensor.size(0); ++j) {
-std::string col_key = "Boundary.boundary_location." + std::to_string(j);
-set(col_key, row, flat_tensor[j].template item<double>());
-}
-}
-}
-if constexpr (std::is_same_v<T, Dissolution::Fluid>) {
-set("Fluid.Concentration", row, alt.Concentration);
-set("Fluid.Pressure", row, alt.Pressure);
-{
-auto flat_tensor = alt.Unit.contiguous().view(-1);
-for (int64_t j = 0; j < flat_tensor.size(0); ++j) {
-std::string col_key = "Fluid.Unit." + std::to_string(j);
-set(col_key, row, flat_tensor[j].template item<double>());
-}
-}
-{
-auto flat_tensor = alt.FCount.contiguous().view(-1);
-for (int64_t j = 0; j < flat_tensor.size(0); ++j) {
-std::string col_key = "Fluid.FCount." + std::to_string(j);
-set(col_key, row, flat_tensor[j].template item<double>());
-}
-}
-{
-auto flat_tensor = alt.Position.contiguous().view(-1);
-for (int64_t j = 0; j < flat_tensor.size(0); ++j) {
-std::string col_key = "Fluid.Position." + std::to_string(j);
-set(col_key, row, flat_tensor[j].template item<double>());
-}
+set("output_norm", row, static_cast<double>(alt.DigitClass.norm().template item<double>()));
 }
 }
 }, n.data);
@@ -299,8 +159,8 @@ for (std::size_t i = 0; i < col_names.size(); ++i) {
         type_attributes.emplace_back(col_names[i], std::move(columns[i]));
     }
 return type_attributes;}
-void load_graph(DGGML::Grammar<Dissolution::graph_type> &grammar,
-               Dissolution::graph_type &system_graph,
+void load_graph(DGGML::Grammar<NeuralNetwork::graph_type> &grammar,
+               NeuralNetwork::graph_type &system_graph,
                Parameters &settings, DGGML::KeyGenerator<key_type> &gen,
                std::string filename = "simulation_state.bin"
                ) {
@@ -328,7 +188,7 @@ void load_graph(DGGML::Grammar<Dissolution::graph_type> &grammar,
 
         key_type old_key;
 
-        SpatialNode3D<Dissolution::StartType, Dissolution::Boundary, Dissolution::Fluid, Dissolution::FluidSource, Dissolution::FluidSink, Dissolution::RockStart> node_data;
+        SpatialNode3D<NeuralNetwork::StartType, NeuralNetwork::Boundary, NeuralNetwork::InputLayer, NeuralNetwork::Layer, NeuralNetwork::OutputLayer> node_data;
         std::unordered_set<key_type> out_neighbors;
         std::unordered_set<key_type> in_neighbors;
 
@@ -345,28 +205,24 @@ void load_graph(DGGML::Grammar<Dissolution::graph_type> &grammar,
 
         std::visit([&](auto &alt) {
 using T = std::decay_t<decltype(alt)>;
-if constexpr (std::is_same_v<T, Dissolution::StartType>) {
-Dissolution::StartType copy = alt;
+if constexpr (std::is_same_v<T, NeuralNetwork::StartType>) {
+NeuralNetwork::StartType copy = alt;
 system_graph.addNode({new_node_key, {copy,
         node_data.position[0], node_data.position[1], node_data.position[2]} });
-} else if constexpr (std::is_same_v<T, Dissolution::Boundary>) {
-Dissolution::Boundary copy = alt;
+} else if constexpr (std::is_same_v<T, NeuralNetwork::Boundary>) {
+NeuralNetwork::Boundary copy = alt;
 system_graph.addNode({new_node_key, {copy,
         node_data.position[0], node_data.position[1], node_data.position[2]} });
-} else if constexpr (std::is_same_v<T, Dissolution::Fluid>) {
-Dissolution::Fluid copy = alt;
+} else if constexpr (std::is_same_v<T, NeuralNetwork::InputLayer>) {
+NeuralNetwork::InputLayer copy = alt;
 system_graph.addNode({new_node_key, {copy,
         node_data.position[0], node_data.position[1], node_data.position[2]} });
-} else if constexpr (std::is_same_v<T, Dissolution::FluidSource>) {
-Dissolution::FluidSource copy = alt;
+} else if constexpr (std::is_same_v<T, NeuralNetwork::Layer>) {
+NeuralNetwork::Layer copy = alt;
 system_graph.addNode({new_node_key, {copy,
         node_data.position[0], node_data.position[1], node_data.position[2]} });
-} else if constexpr (std::is_same_v<T, Dissolution::FluidSink>) {
-Dissolution::FluidSink copy = alt;
-system_graph.addNode({new_node_key, {copy,
-        node_data.position[0], node_data.position[1], node_data.position[2]} });
-} else if constexpr (std::is_same_v<T, Dissolution::RockStart>) {
-Dissolution::RockStart copy = alt;
+} else if constexpr (std::is_same_v<T, NeuralNetwork::OutputLayer>) {
+NeuralNetwork::OutputLayer copy = alt;
 system_graph.addNode({new_node_key, {copy,
         node_data.position[0], node_data.position[1], node_data.position[2]} });
 } else {
@@ -396,7 +252,7 @@ std::cout << "  Type: Unknown\n";exit(0);
 void initialize() override {
 
              // Per-stage simulation time override
-             settings.TOTAL_TIME = 3;
+             settings.TOTAL_TIME = 20;
              settings.NUM_STEPS = static_cast<int>(settings.TOTAL_TIME / settings.DELTA);
             int geoplex_size = settings.CELL_NX;
              int cell_nx = geoplex_size;
@@ -418,14 +274,9 @@ void initialize() override {
                             false,
                             geoplex_epsilon
                     );
-            	Dissolution::propagate_rock_y(gamma, this->system_graph, settings);
-	Dissolution::propagate_from_source(gamma, this->system_graph, settings);
-	Dissolution::propagate_source_to_sink(gamma, this->system_graph, settings);
-	Dissolution::propagate_rock_x(gamma, this->system_graph, settings);
-	Dissolution::propagate_rock_z(gamma, this->system_graph, settings);
-	Dissolution::propagate_initial_fluid(gamma, this->system_graph, settings);
-	Dissolution::propagate_final_fluid(gamma, this->system_graph, settings);
-	Dissolution::start_rock_prop(gamma, this->system_graph, settings);
+            	NeuralNetwork::build_nn(gamma, this->system_graph, settings);
+	NeuralNetwork::add_layer(gamma, this->system_graph, settings);
+	NeuralNetwork::add_output_layer(gamma, this->system_graph, settings);
 
 		 if (load_initial_state == false) {this->add_default_type(this->system_graph,
                         geoplex2D,
@@ -433,8 +284,8 @@ void initialize() override {
                         this->gen);} else {load_graph(gamma, this->system_graph, settings, this->gen, 
                         this->initial_state_filename);}
 }
-void save_graph(DGGML::Grammar<Dissolution::graph_type> &grammar,
-            Dissolution::graph_type &system_graph,
+void save_graph(DGGML::Grammar<NeuralNetwork::graph_type> &grammar,
+            NeuralNetwork::graph_type &system_graph,
             Parameters &settings, std::string filename = "simulation_state.bin"
         ) {
 
@@ -498,7 +349,7 @@ class Model_1 : public DGGML::Model3D<graph_grammar_t> {
 	Parameters settings;
 bool save_system_graph = true;
 bool load_initial_state = true;
-std::string initial_state_filename = "my_results/simulation_state_latest.bin";
+std::string initial_state_filename = "simulation_state_latest.bin";
 template<typename GraphType, typename CplexType, typename ParamType, typename GenType>
     void add_default_type(
                     GraphType &graph,
@@ -532,8 +383,8 @@ template<typename GraphType, typename CplexType, typename ParamType, typename Ge
 
             double center_x, center_y, center_z;
             reaction_grid.cardinalCellToPoint(center_x, center_y, center_z, centerCardinal);
-            Dissolution::graph_type tg;
-            Dissolution::StartType tmp = Dissolution::StartType{};
+            NeuralNetwork::graph_type tg;
+            NeuralNetwork::StartType tmp = NeuralNetwork::StartType{};
 
             tmp.start_location[0] = center_x;
             tmp.start_location[1] = center_y;
@@ -551,58 +402,16 @@ std::vector<std::pair<std::string, std::vector<double>>> type_attributes;
 double nan_value = std::numeric_limits<double>::quiet_NaN();
 std::vector<std::string> col_names;
 std::size_t N = system_graph.numNodes();
-// Register column names from type definitions
-col_names.push_back("FluidSource.Concentration");
-col_names.push_back("FluidSource.Pressure");
-col_names.push_back("FluidSource.Unit.0");
-col_names.push_back("FluidSource.Unit.1");
-col_names.push_back("FluidSource.Unit.2");
-col_names.push_back("FluidSource.FCount.0");
-col_names.push_back("FluidSource.Position.0");
-col_names.push_back("FluidSource.Position.1");
-col_names.push_back("FluidSource.Position.2");
-col_names.push_back("FluidSink.Concentration");
-col_names.push_back("FluidSink.Pressure");
-col_names.push_back("FluidSink.Unit.0");
-col_names.push_back("FluidSink.Unit.1");
-col_names.push_back("FluidSink.Unit.2");
-col_names.push_back("FluidSink.FCount.0");
-col_names.push_back("FluidSink.Position.0");
-col_names.push_back("FluidSink.Position.1");
-col_names.push_back("FluidSink.Position.2");
-col_names.push_back("RockStart.Density");
-col_names.push_back("RockStart.Count.0");
-col_names.push_back("RockStart.Count.1");
-col_names.push_back("RockStart.Count.2");
-col_names.push_back("RockStart.Dir.0");
-col_names.push_back("RockStart.Dir.1");
-col_names.push_back("RockStart.Dir.2");
-col_names.push_back("RockStart.Position.0");
-col_names.push_back("RockStart.Position.1");
-col_names.push_back("RockStart.Position.2");
-col_names.push_back("StartType.start_location.0");
-col_names.push_back("StartType.start_location.1");
-col_names.push_back("StartType.start_location.2");
-col_names.push_back("Boundary.boundary_location.0");
-col_names.push_back("Boundary.boundary_location.1");
-col_names.push_back("Boundary.boundary_location.2");
-col_names.push_back("Fluid.Concentration");
-col_names.push_back("Fluid.Pressure");
-col_names.push_back("Fluid.Unit.0");
-col_names.push_back("Fluid.Unit.1");
-col_names.push_back("Fluid.Unit.2");
-col_names.push_back("Fluid.FCount.0");
-col_names.push_back("Fluid.Position.0");
-col_names.push_back("Fluid.Position.1");
-col_names.push_back("Fluid.Position.2");
+// Register column names
+col_names.push_back("Layer.LayerID");
+col_names.push_back("InputLayer.InputID");
+col_names.push_back("OutputLayer.OutputID");
+col_names.push_back("layer_mean_weight");
+col_names.push_back("output_norm");
 std::vector<std::vector<double>> columns(col_names.size());
-for (auto &col : columns) {
-        col.resize(N, nan_value);
-    }
+for (auto &col : columns) { col.resize(N, nan_value); }
 std::unordered_map<std::string, std::size_t> col_idx;
-for (std::size_t i = 0; i < col_names.size(); ++i) {
-        col_idx[col_names[i]] = i;
-    }
+for (std::size_t i = 0; i < col_names.size(); ++i) { col_idx[col_names[i]] = i; }
     auto set = [&](const std::string &col_name, std::size_t row, double value) {
         columns[col_idx.at(col_name)][row] = value;
     };
@@ -612,121 +421,23 @@ for (auto it = system_graph.node_list_begin(); it != system_graph.node_list_end(
 auto &n = it->second.getData();
 std::visit([&](auto &alt) {
 using T = std::decay_t<decltype(alt)>;
-if constexpr (std::is_same_v<T, Dissolution::FluidSource>) {
-set("FluidSource.Concentration", row, alt.Concentration);
-set("FluidSource.Pressure", row, alt.Pressure);
+if constexpr (std::is_same_v<T, NeuralNetwork::StartType>) {
+}
+if constexpr (std::is_same_v<T, NeuralNetwork::Layer>) {
+set("Layer.LayerID", row, static_cast<double>(alt.LayerID));
 {
-auto flat_tensor = alt.Unit.contiguous().view(-1);
-for (int64_t j = 0; j < flat_tensor.size(0); ++j) {
-std::string col_key = "FluidSource.Unit." + std::to_string(j);
-set(col_key, row, flat_tensor[j].template item<double>());
+set("layer_mean_weight", row, static_cast<double>(alt.Weights.mean().template item<double>()));
 }
 }
+if constexpr (std::is_same_v<T, NeuralNetwork::InputLayer>) {
+set("InputLayer.InputID", row, static_cast<double>(alt.InputID));
+}
+if constexpr (std::is_same_v<T, NeuralNetwork::Boundary>) {
+}
+if constexpr (std::is_same_v<T, NeuralNetwork::OutputLayer>) {
+set("OutputLayer.OutputID", row, static_cast<double>(alt.OutputID));
 {
-auto flat_tensor = alt.FCount.contiguous().view(-1);
-for (int64_t j = 0; j < flat_tensor.size(0); ++j) {
-std::string col_key = "FluidSource.FCount." + std::to_string(j);
-set(col_key, row, flat_tensor[j].template item<double>());
-}
-}
-{
-auto flat_tensor = alt.Position.contiguous().view(-1);
-for (int64_t j = 0; j < flat_tensor.size(0); ++j) {
-std::string col_key = "FluidSource.Position." + std::to_string(j);
-set(col_key, row, flat_tensor[j].template item<double>());
-}
-}
-}
-if constexpr (std::is_same_v<T, Dissolution::FluidSink>) {
-set("FluidSink.Concentration", row, alt.Concentration);
-set("FluidSink.Pressure", row, alt.Pressure);
-{
-auto flat_tensor = alt.Unit.contiguous().view(-1);
-for (int64_t j = 0; j < flat_tensor.size(0); ++j) {
-std::string col_key = "FluidSink.Unit." + std::to_string(j);
-set(col_key, row, flat_tensor[j].template item<double>());
-}
-}
-{
-auto flat_tensor = alt.FCount.contiguous().view(-1);
-for (int64_t j = 0; j < flat_tensor.size(0); ++j) {
-std::string col_key = "FluidSink.FCount." + std::to_string(j);
-set(col_key, row, flat_tensor[j].template item<double>());
-}
-}
-{
-auto flat_tensor = alt.Position.contiguous().view(-1);
-for (int64_t j = 0; j < flat_tensor.size(0); ++j) {
-std::string col_key = "FluidSink.Position." + std::to_string(j);
-set(col_key, row, flat_tensor[j].template item<double>());
-}
-}
-}
-if constexpr (std::is_same_v<T, Dissolution::RockStart>) {
-set("RockStart.Density", row, alt.Density);
-{
-auto flat_tensor = alt.Count.contiguous().view(-1);
-for (int64_t j = 0; j < flat_tensor.size(0); ++j) {
-std::string col_key = "RockStart.Count." + std::to_string(j);
-set(col_key, row, flat_tensor[j].template item<double>());
-}
-}
-{
-auto flat_tensor = alt.Dir.contiguous().view(-1);
-for (int64_t j = 0; j < flat_tensor.size(0); ++j) {
-std::string col_key = "RockStart.Dir." + std::to_string(j);
-set(col_key, row, flat_tensor[j].template item<double>());
-}
-}
-{
-auto flat_tensor = alt.Position.contiguous().view(-1);
-for (int64_t j = 0; j < flat_tensor.size(0); ++j) {
-std::string col_key = "RockStart.Position." + std::to_string(j);
-set(col_key, row, flat_tensor[j].template item<double>());
-}
-}
-}
-if constexpr (std::is_same_v<T, Dissolution::StartType>) {
-{
-auto flat_tensor = alt.start_location.contiguous().view(-1);
-for (int64_t j = 0; j < flat_tensor.size(0); ++j) {
-std::string col_key = "StartType.start_location." + std::to_string(j);
-set(col_key, row, flat_tensor[j].template item<double>());
-}
-}
-}
-if constexpr (std::is_same_v<T, Dissolution::Boundary>) {
-{
-auto flat_tensor = alt.boundary_location.contiguous().view(-1);
-for (int64_t j = 0; j < flat_tensor.size(0); ++j) {
-std::string col_key = "Boundary.boundary_location." + std::to_string(j);
-set(col_key, row, flat_tensor[j].template item<double>());
-}
-}
-}
-if constexpr (std::is_same_v<T, Dissolution::Fluid>) {
-set("Fluid.Concentration", row, alt.Concentration);
-set("Fluid.Pressure", row, alt.Pressure);
-{
-auto flat_tensor = alt.Unit.contiguous().view(-1);
-for (int64_t j = 0; j < flat_tensor.size(0); ++j) {
-std::string col_key = "Fluid.Unit." + std::to_string(j);
-set(col_key, row, flat_tensor[j].template item<double>());
-}
-}
-{
-auto flat_tensor = alt.FCount.contiguous().view(-1);
-for (int64_t j = 0; j < flat_tensor.size(0); ++j) {
-std::string col_key = "Fluid.FCount." + std::to_string(j);
-set(col_key, row, flat_tensor[j].template item<double>());
-}
-}
-{
-auto flat_tensor = alt.Position.contiguous().view(-1);
-for (int64_t j = 0; j < flat_tensor.size(0); ++j) {
-std::string col_key = "Fluid.Position." + std::to_string(j);
-set(col_key, row, flat_tensor[j].template item<double>());
-}
+set("output_norm", row, static_cast<double>(alt.DigitClass.norm().template item<double>()));
 }
 }
 }, n.data);
@@ -735,8 +446,8 @@ for (std::size_t i = 0; i < col_names.size(); ++i) {
         type_attributes.emplace_back(col_names[i], std::move(columns[i]));
     }
 return type_attributes;}
-void load_graph(DGGML::Grammar<Dissolution::graph_type> &grammar,
-               Dissolution::graph_type &system_graph,
+void load_graph(DGGML::Grammar<NeuralNetwork::graph_type> &grammar,
+               NeuralNetwork::graph_type &system_graph,
                Parameters &settings, DGGML::KeyGenerator<key_type> &gen,
                std::string filename = "simulation_state.bin"
                ) {
@@ -764,7 +475,7 @@ void load_graph(DGGML::Grammar<Dissolution::graph_type> &grammar,
 
         key_type old_key;
 
-        SpatialNode3D<Dissolution::StartType, Dissolution::Boundary, Dissolution::Fluid, Dissolution::FluidSource, Dissolution::FluidSink, Dissolution::RockStart> node_data;
+        SpatialNode3D<NeuralNetwork::StartType, NeuralNetwork::Boundary, NeuralNetwork::InputLayer, NeuralNetwork::Layer, NeuralNetwork::OutputLayer> node_data;
         std::unordered_set<key_type> out_neighbors;
         std::unordered_set<key_type> in_neighbors;
 
@@ -781,28 +492,24 @@ void load_graph(DGGML::Grammar<Dissolution::graph_type> &grammar,
 
         std::visit([&](auto &alt) {
 using T = std::decay_t<decltype(alt)>;
-if constexpr (std::is_same_v<T, Dissolution::StartType>) {
-Dissolution::StartType copy = alt;
+if constexpr (std::is_same_v<T, NeuralNetwork::StartType>) {
+NeuralNetwork::StartType copy = alt;
 system_graph.addNode({new_node_key, {copy,
         node_data.position[0], node_data.position[1], node_data.position[2]} });
-} else if constexpr (std::is_same_v<T, Dissolution::Boundary>) {
-Dissolution::Boundary copy = alt;
+} else if constexpr (std::is_same_v<T, NeuralNetwork::Boundary>) {
+NeuralNetwork::Boundary copy = alt;
 system_graph.addNode({new_node_key, {copy,
         node_data.position[0], node_data.position[1], node_data.position[2]} });
-} else if constexpr (std::is_same_v<T, Dissolution::Fluid>) {
-Dissolution::Fluid copy = alt;
+} else if constexpr (std::is_same_v<T, NeuralNetwork::InputLayer>) {
+NeuralNetwork::InputLayer copy = alt;
 system_graph.addNode({new_node_key, {copy,
         node_data.position[0], node_data.position[1], node_data.position[2]} });
-} else if constexpr (std::is_same_v<T, Dissolution::FluidSource>) {
-Dissolution::FluidSource copy = alt;
+} else if constexpr (std::is_same_v<T, NeuralNetwork::Layer>) {
+NeuralNetwork::Layer copy = alt;
 system_graph.addNode({new_node_key, {copy,
         node_data.position[0], node_data.position[1], node_data.position[2]} });
-} else if constexpr (std::is_same_v<T, Dissolution::FluidSink>) {
-Dissolution::FluidSink copy = alt;
-system_graph.addNode({new_node_key, {copy,
-        node_data.position[0], node_data.position[1], node_data.position[2]} });
-} else if constexpr (std::is_same_v<T, Dissolution::RockStart>) {
-Dissolution::RockStart copy = alt;
+} else if constexpr (std::is_same_v<T, NeuralNetwork::OutputLayer>) {
+NeuralNetwork::OutputLayer copy = alt;
 system_graph.addNode({new_node_key, {copy,
         node_data.position[0], node_data.position[1], node_data.position[2]} });
 } else {
@@ -854,10 +561,7 @@ void initialize() override {
                             false,
                             geoplex_epsilon
                     );
-            	Dissolution::fluid_flow(gamma, this->system_graph, settings);
-	Dissolution::source_flow(gamma, this->system_graph, settings);
-	Dissolution::erode_rock(gamma, this->system_graph, settings);
-	Dissolution::sink_flow(gamma, this->system_graph, settings);
+            	NeuralNetwork::backprop(gamma, this->system_graph, settings);
 
 		 if (load_initial_state == false) {this->add_default_type(this->system_graph,
                         geoplex2D,
@@ -865,8 +569,8 @@ void initialize() override {
                         this->gen);} else {load_graph(gamma, this->system_graph, settings, this->gen, 
                         this->initial_state_filename);}
 }
-void save_graph(DGGML::Grammar<Dissolution::graph_type> &grammar,
-            Dissolution::graph_type &system_graph,
+void save_graph(DGGML::Grammar<NeuralNetwork::graph_type> &grammar,
+            NeuralNetwork::graph_type &system_graph,
             Parameters &settings, std::string filename = "simulation_state.bin"
         ) {
 

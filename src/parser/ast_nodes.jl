@@ -103,7 +103,7 @@ module AstNodes
                       Union{Token, IntegerNode, FloatNode,
                             IdentifierNode, BinaryOpNode, GroupNode,
                             UnaryOpNode, CallNode, IndexAccessNode,
-                            ArrayLiteralNode
+                            ArrayLiteralNode, StringNode
                            }
                      }
     end
@@ -263,9 +263,57 @@ module AstNodes
         rules_list ::Array{RuleNode}
     end
 
-    struct ObservableSectionNode <: Node
+    struct FunctionArgNode <: Node
         name :: IdentifierNode
-        # types ::Array{TypeInstanceNode}
+        type :: TypeClassNode
+    end
+
+    # A destructured param:  name : TypeName << alias1 : T1, alias2 : T2, ... >>
+    # The field aliases are in scope inside the body without dot access.
+    # Reuses FunctionArgNode for each alias binding.
+    struct ObservableDestructuredParamNode <: Node
+        name      :: IdentifierNode                # e.g. p1
+        type_name :: IdentifierNode                # e.g. Layer
+        fields    :: Vector{FunctionArgNode}       # alias : TypeSig bindings
+    end
+
+    struct FunctionDefinitionExpressionNode <: Node
+        name :: IdentifierNode
+        type :: Union{IdentifierNode, FloatNode}
+        value :: Node
+    end
+
+    struct FunctionBodyExpressionNode <: Node
+        expressions :: Array{FunctionDefinitionExpressionNode}
+    end
+
+    struct ReturnNode <: Node
+        value :: Union{Node, IdentifierNode, FloatNode, CallNode, BinaryOpNode}
+    end
+
+    # A local Function inside an Observable body:
+    #   name : Function << (p1 : TypeName << alias1: T1, ... >>) >> -> RetType := { ... }
+    struct ObservableLocalFunctionNode <: Node
+        name        :: IdentifierNode
+        param       :: ObservableDestructuredParamNode
+        return_type :: IdentifierNode
+        body        :: Union{FunctionBodyExpressionNode, Nothing}
+        body_return :: ReturnNode
+    end
+
+    # A single observable definition:
+    #   name : Observable << (p1 : TypeName << alias1: T1, ... >>) >> -> RetType := { ... }
+    struct ObservableDefinitionNode <: Node
+        name        :: IdentifierNode
+        param       :: ObservableDestructuredParamNode
+        return_type :: IdentifierNode
+        local_fns   :: Vector{ObservableLocalFunctionNode}
+        body_return :: ReturnNode
+    end
+
+    struct ObservableSectionNode <: Node
+        name        :: IdentifierNode
+        definitions :: Vector{ObservableDefinitionNode}
     end
 
     struct GrammarSectionNode <: Node
@@ -307,29 +355,13 @@ module AstNodes
         rhs :: Token
     end
 
-    struct ReturnNode <: Node
-        value :: Union{Node, IdentifierNode, FloatNode, CallNode, BinaryOpNode}
-    end
 
-    struct FunctionArgNode <: Node
-        name :: IdentifierNode
-        type :: TypeClassNode
-    end
 
     struct FunctionSignatureNode <: Node
         args :: Array{FunctionArgNode}
         output :: TypeClassNode
     end
 
-    struct FunctionDefinitionExpressionNode <: Node
-        name :: IdentifierNode
-        type :: Union{IdentifierNode, FloatNode}
-        value :: Node
-    end
-
-    struct FunctionBodyExpressionNode <: Node
-        expressions :: Array{FunctionDefinitionExpressionNode}
-    end
 
     # Represents a model loaded from a file path, e.g. load("policy_net.pt")
     struct ModelLoadNode <: Node
@@ -384,6 +416,10 @@ module AstNodes
         value :: LoadNode
     end
 
+    struct SimulationObservablesNode <: Node
+        value :: LoadNode
+    end
+
     struct SimulationStateNode <: Node
         value :: LoadNode
     end
@@ -394,15 +430,14 @@ module AstNodes
         rules :: IdentifierNode
         types :: IdentifierNode
         steps :: Union{IntegerNode, FloatNode, IdentifierNode}
-	# TODO: Make saving path optional its on by default right now.
-	# savePath :: StringNode
+        observables :: Union{IdentifierNode, Nothing}
     end
 
     struct SimDeclarationNode <: Node 
         name :: IdentifierNode
         value :: Union{FloatNode, IntegerNode, SimulationParametersNode,
               SimulationNode, SimulationRulesNode, SimulationTypesNode,
-              SimulationStateNode, StringNode, RunSimulationNode}
+              SimulationObservablesNode, SimulationStateNode, StringNode, RunSimulationNode}
     end
 
     struct SimulationSectionNode <: Node

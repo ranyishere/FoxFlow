@@ -38,12 +38,17 @@ function process_arg_token(arg_token)
 
     popfirst!(arg_token)  # Consume ':'
 
-    if ((lookahead(arg_token) isa IdentifierToken) || (lookahead(arg_token) isa FloatToken) ) == false
+    if !((lookahead(arg_token) isa IdentifierToken) || (lookahead(arg_token) isa FloatToken) || (lookahead(arg_token) isa IntegerToken))
         throw("Expected argument type identifier after ':' in function definition got : $(lookahead(arg_token))")
     end
 
     arg_node = nothing
-    arg_node = convert_token_to_node(popfirst!(arg_token))
+    raw_tok = popfirst!(arg_token)
+    # Treat keyword tokens used as type names (e.g. IntegerToken with value "Integer") as identifiers
+    if raw_tok isa IntegerToken && tryparse(Int, raw_tok.position.value) === nothing
+        raw_tok = IdentifierToken(raw_tok.position)
+    end
+    arg_node = convert_token_to_node(raw_tok)
 
     # Check if this is a FixedList<<...>> type
     param_nodes = ParameterNode(nothing)
@@ -208,6 +213,40 @@ function parse_function_body!(tokens)
     return FunctionBodyExpressionNode(body_expressions)
 end
 
+function parse_function_definition_named!(tokens, name_token)
+    """
+    Parse a local function definition inside a where body.
+    'name :' has already been consumed; name_token is an IdentifierNode.
+    Expects: Function <<params>> -> RetType := { body }
+    """
+    function_name_node = name_token isa IdentifierNode ? name_token : IdentifierNode(name_token)
+
+    function_signature = parse_function_type_signature!(tokens)
+
+    if (lookahead(tokens) isa DefineToken) == false
+        throw("Expected ':=' after function type signature in local function definition, got: $(lookahead(tokens))")
+    end
+    popfirst!(tokens)  # Consume ':='
+
+    function_body = parse_function_body!(tokens)
+
+    if (lookahead(tokens) isa ReturnToken) == false
+        throw("Expected 'return' at end of local function body")
+    end
+    popfirst!(tokens)  # Consume 'return'
+    ret_val = ReturnNode(parse_expression!(tokens))
+
+    while !isempty(tokens) && lookahead(tokens) isa EndLineToken
+        popfirst!(tokens)
+    end
+
+    if !isempty(tokens) && lookahead(tokens) isa RightBracketToken
+        popfirst!(tokens)  # Consume '}'
+    end
+
+    return FunctionDefinitionNode(function_name_node, function_signature, function_body, ret_val, nothing)
+end
+
 function parse_function_definition!(tokens)
 
     if (lookahead(tokens) isa IdentifierToken) == false
@@ -282,12 +321,16 @@ function parse_functions_list!(tokens)
 
     functions = []
     while isempty(tokens) == false && (lookahead(tokens) isa RightBracketToken) == false
-        while lookahead(tokens) isa EndLineToken
+        while !isempty(tokens) && lookahead(tokens) isa EndLineToken
             popfirst!(tokens) # Consume endline tokens
+        end
+        # After consuming newlines we may have hit the closing '}'
+        if isempty(tokens) || lookahead(tokens) isa RightBracketToken
+            break
         end
         func = parse_function_definition!(tokens)
         push!(functions, func)
-        while lookahead(tokens) isa EndLineToken
+        while !isempty(tokens) && lookahead(tokens) isa EndLineToken
             popfirst!(tokens) # Consume endline tokens
         end
     end

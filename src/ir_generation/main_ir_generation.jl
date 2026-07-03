@@ -74,8 +74,6 @@ end
 
 function ir_parameter(ast)
 
-    println("ast ========> ", ast)
-
     params = []
     param_names = []
     param_types = []
@@ -514,9 +512,6 @@ function do_simulation()
     Do Simulation — supports multiple sequential RunSimulation stages.
     """
 
-    # name_space = "Microtubule"
-    name_space = "Dissolution"
-
     sim_table = Dict()
     symbol_tables = OrderedDict()
     function_table = OrderedDict()
@@ -524,8 +519,9 @@ function do_simulation()
     # test_folder = "fracture_network"
     # test_folder = "cell_competition"
     # test_folder = "microtubules"
-    # test_folder = "matrices_array"
-    test_folder = "dissolution"
+    # test_folder = "lattice"
+    # test_folder = "dissolution"
+    test_folder = "neural_network"
 
     test_base = "../tests/"
     base = "../tests/generated_tests/generated_2/"
@@ -534,9 +530,11 @@ function do_simulation()
     tokens_sim = tokenize_file(test_base*"$test_folder/simulation.fflow")
     ast = parse_file!(tokens_sim)
 
-    # ir_simulation_section! returns a list of ir_run_sim dicts (one per RunSimulation call)
-    all_stages = ir_simulation_section!(ast[1], sim_table)
+    # ir_simulation_section! returns the namespace name and a list of ir_run_sim dicts (one per RunSimulation call)
+    name_space, all_stages = ir_simulation_section!(ast[1], sim_table)
+    global type_namespace = name_space
     num_stages = length(all_stages)
+    println("Simulation namespace: ", name_space)
     println("Found $num_stages simulation stage(s)")
 
     # ===== Parse functions (shared across stages) =====
@@ -601,10 +599,27 @@ function do_simulation()
         push!(all_rules_includes, rules_filename)
     end
 
+    # ===== Parse observables (optional — per stage via RunSimulation, or auto-detected) =====
+    observable_section = nothing
+    obs_file_from_stage = get(all_stages[1], "observables", nothing)
+    obs_file = obs_file_from_stage !== nothing ? test_base*"$test_folder/$obs_file_from_stage" :
+                   test_base*"$test_folder/observables.fflow"
+    if isfile(obs_file)
+        tokens_obs = tokenize_file(obs_file)
+        ast_obs = parse_file!(tokens_obs)
+        if !isempty(ast_obs)
+            observable_section = ast_obs[1]
+            println("Loaded observables section: $(get_value(observable_section.name))")
+        end
+    else
+        println("No observables file found — tensor attributes will be skipped in VTK output")
+    end
+
     # ===== Generate Model (one Model_N class per stage) =====
     println("Generating Model")
     ir_models = ir_models_section_multistage(all_stages, name_space, symbol_tables,
-                                             stage_rules_tables, all_rules_includes)
+                                             stage_rules_tables, all_rules_includes;
+                                             observable_section=observable_section)
     write_file(base*"model.h", ir_models)
 
     # ===== Grammar Entry Point =====

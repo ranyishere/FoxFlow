@@ -8,7 +8,7 @@ import ..Tokens:
     LtToken, GtToken, LtEqToken, GtEqToken, EqEqToken, NotEqToken,
     NotToken, AndAndToken, OrOrToken, TypeToken, FunctionSectionToken, FunctionToken, CaretToken, ReturnToken,
     StateToken, SimulationTypesToken, RulesToken, DotToken, ParameterToken, SimulationToken, RunSimulationToken, QuoteToken, SimulationSectionToken, LoadFileToken, StringToken, SimulationParametersToken, DoubleColonToken,
-    LeftSquareBracketToken, RightSquareBracketToken
+    LeftSquareBracketToken, RightSquareBracketToken, ObservableSectionToken, ObservableToken, SimulationObservablesToken
 import ..AstNodes:
     Node, IdentifierNode, ParameterNode, TypeInstanceNode, TypeInstanceUpdateNode, TypeClassNode,
     TypeSectionNode, ParameterSectionNode, RuleSectionNode, RuleNode,
@@ -17,8 +17,9 @@ import ..AstNodes:
     BindingVariableNode, ODENode, UnaryOpNode, DefinitionNode, FunctionArgNode, FunctionSignatureNode,
     FunctionBodyExpressionNode, FunctionDefinitionExpressionNode, FunctionDefinitionNode,
     ReturnNode, FunctionSectionNode, SimulationSectionNode, StringNode, LoadNode, SimDeclarationNode,
-    SimulationNode, SimulationRulesNode, SimulationTypesNode, SimulationStateNode, SimulationParametersNode,
-    RunSimulationNode, NamedParameterNode, IndexAccessNode, ArrayLiteralNode, ModelLoadNode, SliceNode
+    SimulationNode, SimulationRulesNode, SimulationTypesNode, SimulationObservablesNode, SimulationStateNode, SimulationParametersNode,
+    RunSimulationNode, NamedParameterNode, IndexAccessNode, ArrayLiteralNode, ModelLoadNode, SliceNode,
+    ObservableDestructuredParamNode, ObservableLocalFunctionNode, ObservableDefinitionNode, ObservableSectionNode
 
 include("expression_parser.jl")
 include("function_parser.jl")
@@ -38,7 +39,7 @@ function expect_token!(tokens, ::Type{T}) where T <: Token
     token = popfirst!(tokens)
 
     if !(token isa T)
-        error("Expected $(T), got $(typeof(token))")
+        error("Expected $(T), got $(typeof(token)), $token")
     end
     return token
 end
@@ -101,7 +102,6 @@ function parse_symbol_parameters!(tokens)
 
         while !isempty(tokens) && !isa(lookahead(tokens), RightAngleBracketToken)
 
-            println("lookahead tokens: $(lookahead(tokens))")
             # Handling nested parameters
             if isa(lookahead(tokens), LeftAngleBracketToken)
                 nested_params = parse_symbol_parameters!(tokens)
@@ -366,6 +366,25 @@ end
 function parse_type_update!(tokens)
     # Updates to existing types done by a rule or sees a definition of a tmp variable
 
+    # ── Bare call statement: e.g. backward(loss) ──
+    # If the next two tokens are Identifier then '(', parse it as a bare
+    # expression statement (no assignment, no type annotation).  This lets
+    # users write side-effecting calls like `backward(loss)` directly in a
+    # where body without needing `_ = ...`.
+    if !isempty(tokens) && lookahead(tokens) isa IdentifierToken
+        saved = copy(tokens)
+        peek_name = popfirst!(tokens)  # consume identifier
+        if !isempty(tokens) && lookahead(tokens) isa LeftParenthesisToken
+            # It's a bare call — put the name back and parse as expression
+            prepend!(tokens, [peek_name])
+            expr = parse_expression!(tokens)
+            return expr   # CallNode — ir_where_assignment! will handle it
+        else
+            # Not a bare call — restore and fall through to normal parsing
+            prepend!(tokens, [peek_name])
+        end
+    end
+
     symbol_name = parse_symbol_name!(tokens)
 
     # Check for indexed LHS: name[idx] = expr
@@ -393,6 +412,11 @@ function parse_type_update!(tokens)
     # Its a definition node
     if lookahead(tokens) isa SingleColonToken
         popfirst!(tokens)  # Consume `:`
+
+        # Local function definition: name : Function <<params>> -> RetType := { ... }
+        if !isempty(tokens) && lookahead(tokens) isa FunctionToken
+            return parse_function_definition_named!(tokens, symbol_name)
+        end
 
         type_signature_list = parse_type_signature_list!(tokens)
 
@@ -588,6 +612,9 @@ function parse_factor!(tokens)
         end
 
         return result
+
+    elseif lookahead(tokens) isa StringToken
+        return StringNode(popfirst!(tokens))
 
     elseif lookahead(tokens) isa IntegerToken
         return IntegerNode(popfirst!(tokens))
@@ -1249,6 +1276,176 @@ function parse_function_section!(tokens)
     popfirst!(tokens)
 end
 
+"""
+Parse a destructured parameter:  name : TypeName << alias1 : T1, alias2 : T2, ... >>
+The token stream starts just after the opening '('.
+Consumes up to (but not including) the closing ')'.
+"""
+function parse_observable_destructured_param!(tokens)
+    while isa(lookahead(tokens), EndLineToken); popfirst!(tokens); end
+    name = IdentifierNode(expect_token!(tokens, IdentifierToken))
+    expect_token!(tokens, SingleColonToken)
+    while isa(lookahead(tokens), EndLineToken); popfirst!(tokens); end
+    type_tok = expect_token!(tokens, IdentifierToken)
+    type_name = IdentifierNode(type_tok)
+
+    # Optional field destructuring: << alias1 : T1, alias2 : T2, ... >>
+    fields = FunctionArgNode[]
+    while isa(lookahead(tokens), EndLineToken); popfirst!(tokens); end
+    if isa(lookahead(tokens), LeftAngleBracketToken)
+        popfirst!(tokens)  # consume <<
+        # parse_function_args! reads until RightAngleBracketToken, skipping commas/parens/newlines
+        fields = parse_function_args!(tokens)
+        expect_token!(tokens, RightAngleBracketToken)  # >>
+    end
+
+    return ObservableDestructuredParamNode(name, type_name, fields)
+end
+
+"""
+Parse a local Function definition inside an Observable body:
+    name : Function << (p1 : TypeName << alias1 : T1, ... >>) >> -> RetType := { body; return expr }
+"""
+function parse_observable_local_fn!(tokens)
+    while isa(lookahead(tokens), EndLineToken); popfirst!(tokens); end
+    name = IdentifierNode(expect_token!(tokens, IdentifierToken))
+    expect_token!(tokens, SingleColonToken)
+    expect_token!(tokens, FunctionToken)
+
+    # << (p1 : TypeName) << fields... >> >>
+    while isa(lookahead(tokens), EndLineToken); popfirst!(tokens); end
+    expect_token!(tokens, LeftAngleBracketToken)  # outer <<
+    while isa(lookahead(tokens), Union{EndLineToken, LeftParenthesisToken}); popfirst!(tokens); end
+    # Parse name : TypeName (fields come after the closing ')')
+    fn_param_name = IdentifierNode(expect_token!(tokens, IdentifierToken))
+    expect_token!(tokens, SingleColonToken)
+    while isa(lookahead(tokens), EndLineToken); popfirst!(tokens); end
+    fn_param_type = IdentifierNode(expect_token!(tokens, IdentifierToken))
+    # consume closing ')'
+    while isa(lookahead(tokens), Union{EndLineToken, RightParenthesisToken}); popfirst!(tokens); end
+    # Optional fields: << alias1 : T1, alias2 : T2, ... >>
+    fn_fields = FunctionArgNode[]
+    while isa(lookahead(tokens), EndLineToken); popfirst!(tokens); end
+    if isa(lookahead(tokens), LeftAngleBracketToken)
+        popfirst!(tokens)  # consume <<
+        fn_fields = parse_function_args!(tokens)
+        expect_token!(tokens, RightAngleBracketToken)  # >>
+    end
+    while isa(lookahead(tokens), EndLineToken); popfirst!(tokens); end
+    expect_token!(tokens, RightAngleBracketToken)  # outer >>
+    param = ObservableDestructuredParamNode(fn_param_name, fn_param_type, fn_fields)
+
+    # -> RetType
+    while isa(lookahead(tokens), EndLineToken); popfirst!(tokens); end
+    expect_token!(tokens, RightArrowToken)
+    while isa(lookahead(tokens), EndLineToken); popfirst!(tokens); end
+    ret_tok = popfirst!(tokens)
+    ret_type = IdentifierNode(IdentifierToken(ret_tok.position))
+
+    # :=
+    while isa(lookahead(tokens), EndLineToken); popfirst!(tokens); end
+    expect_token!(tokens, DefineToken)
+
+    # { body; return expr; }
+    fn_body = parse_function_body!(tokens)
+    expect_token!(tokens, ReturnToken)
+    body_ret = ReturnNode(parse_expression!(tokens))
+    while isa(lookahead(tokens), EndLineToken); popfirst!(tokens); end
+    expect_token!(tokens, RightBracketToken)
+
+    return ObservableLocalFunctionNode(name, param, ret_type, fn_body, body_ret)
+end
+
+"""
+Parse an observables section:
+
+    observables <Name> {
+        obs_name : Observable << (p1 : TypeName << alias1: T1, ... >>) >> -> RetType := {
+            fn_name : Function << (p1 : TypeName << alias1: T1, ... >>) >> -> RetType := {
+                return expr
+            }
+            return expr
+        }
+    }
+"""
+function parse_observables_section!(tokens)
+    expect_token!(tokens, ObservableSectionToken)
+    while isa(lookahead(tokens), EndLineToken); popfirst!(tokens); end
+    section_name = IdentifierNode(expect_token!(tokens, IdentifierToken))
+    while isa(lookahead(tokens), EndLineToken); popfirst!(tokens); end
+    expect_token!(tokens, LeftBracketToken)
+
+    definitions = ObservableDefinitionNode[]
+
+    while true
+        while isa(lookahead(tokens), EndLineToken); popfirst!(tokens); end
+        if isa(lookahead(tokens), RightBracketToken)
+            popfirst!(tokens); break
+        end
+
+        # obs_name : Observable << (p1 : TypeName << fields... >>) >> -> RetType := { ... }
+        obs_name = IdentifierNode(expect_token!(tokens, IdentifierToken))
+        expect_token!(tokens, SingleColonToken)
+        expect_token!(tokens, ObservableToken)
+
+        # << (p1 : TypeName) << fields... >> >>
+        while isa(lookahead(tokens), EndLineToken); popfirst!(tokens); end
+        expect_token!(tokens, LeftAngleBracketToken)  # outer <<
+        while isa(lookahead(tokens), Union{EndLineToken, LeftParenthesisToken}); popfirst!(tokens); end
+        # Parse name : TypeName (fields come after the closing ')')
+        param_name = IdentifierNode(expect_token!(tokens, IdentifierToken))
+        expect_token!(tokens, SingleColonToken)
+        while isa(lookahead(tokens), EndLineToken); popfirst!(tokens); end
+        param_type = IdentifierNode(expect_token!(tokens, IdentifierToken))
+        # consume closing ')'
+        while isa(lookahead(tokens), Union{EndLineToken, RightParenthesisToken}); popfirst!(tokens); end
+        # Optional fields: << alias1 : T1, alias2 : T2, ... >>
+        obs_fields = FunctionArgNode[]
+        while isa(lookahead(tokens), EndLineToken); popfirst!(tokens); end
+        if isa(lookahead(tokens), LeftAngleBracketToken)
+            popfirst!(tokens)  # consume <<
+            obs_fields = parse_function_args!(tokens)
+            expect_token!(tokens, RightAngleBracketToken)  # >>
+        end
+        while isa(lookahead(tokens), EndLineToken); popfirst!(tokens); end
+        expect_token!(tokens, RightAngleBracketToken)  # outer >>
+        param = ObservableDestructuredParamNode(param_name, param_type, obs_fields)
+        println("================================")
+
+        # -> RetType
+        while isa(lookahead(tokens), EndLineToken); popfirst!(tokens); end
+        expect_token!(tokens, RightArrowToken)
+        while isa(lookahead(tokens), EndLineToken); popfirst!(tokens); end
+        ret_tok = popfirst!(tokens)
+        ret_type = IdentifierNode(IdentifierToken(ret_tok.position))
+
+        # :=
+        while isa(lookahead(tokens), EndLineToken); popfirst!(tokens); end
+        expect_token!(tokens, DefineToken)
+        while isa(lookahead(tokens), EndLineToken); popfirst!(tokens); end
+        expect_token!(tokens, LeftBracketToken)
+
+        # Body: optional local Function defs, then return expr
+        local_fns = ObservableLocalFunctionNode[]
+        while true
+            while isa(lookahead(tokens), EndLineToken); popfirst!(tokens); end
+            if isa(lookahead(tokens), ReturnToken) || isa(lookahead(tokens), RightBracketToken)
+                break
+            end
+            push!(local_fns, parse_observable_local_fn!(tokens))
+        end
+
+        expect_token!(tokens, ReturnToken)
+        body_ret = ReturnNode(parse_expression!(tokens))
+        while isa(lookahead(tokens), EndLineToken); popfirst!(tokens); end
+        expect_token!(tokens, RightBracketToken)
+
+        push!(definitions, ObservableDefinitionNode(obs_name, param, ret_type, local_fns, body_ret))
+    end
+
+    return ObservableSectionNode(section_name, definitions)
+end
+
 # Parse the entire file into AST nodes
 function parse_file!(tokens)
 
@@ -1272,6 +1469,9 @@ function parse_file!(tokens)
 
         elseif isa(cur_token, SimulationSectionToken)
             push!(ast_nodes, parse_simulations_section!(tokens))
+
+        elseif isa(cur_token, ObservableSectionToken)
+            push!(ast_nodes, parse_observables_section!(tokens))
 
         elseif isa(cur_token, EndLineToken)
             popfirst!(tokens)
