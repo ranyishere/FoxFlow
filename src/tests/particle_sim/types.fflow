@@ -1,5 +1,5 @@
 types Particles {
 
-    ParabolaParticle << FixedList<<2, Float>>, FixedList<<2, Float>>  >> : Type
+    ParabolaParticle << Position : FixedList<<2, Float>>, Velocity : FixedList<<2, Float>> >> : Type
 
 }

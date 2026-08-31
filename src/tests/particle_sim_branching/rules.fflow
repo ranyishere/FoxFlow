@@ -1,32 +1,26 @@
 
 rules particle_rules {
 
-start_to_node := (start : StartType) << start_x, start_y >> 
-        -> (p2 : ParticleNodeCreator) << x, y, counter >> with (heaviside(10, 1)) where {
-            counter : Integer = 9
-            x : Float = start_x + 1
-            y : Float = start_y + 1
+start_to_node := (start : StartType) << spos : start::start_location >> 
+        -> (p2 : ParticleNodeCreator) << pos : p2::Position, counter : p2::Counter >> with (heaviside(10, 1)) where {
+            counter = 9
+            pos = [spos[0] + 1, spos[1] + 1]
     }
 
-create_particle := (p1 : ParticleNodeCreator) << x, y, counter >> 
-        -> (p1 : ParticleNodeCreator) (p2 : ParticleNode) -- (p3 : ParticleNode) -- (p4 : ParticleNode) (p3 : ParticleNode) -- (p5 : ParticleNode) << (new_x, new_y, new_counter), (p2_x, p2_y), (p3_x, p3_y), (p4_x, p4_y), (p3_x, p3_y), (p5_x, p5_y) >> with (heaviside(counter, 1)) where {
+create_particle := (p1 : ParticleNodeCreator) << pos : p1::Position, counter : p1::Counter >> 
+        -> (p1 : ParticleNodeCreator) (p2 : ParticleNode) -- (p3 : ParticleNode) -- (p4 : ParticleNode) (p3 : ParticleNode) -- (p5 : ParticleNode) << (npos : p1::Position, new_counter : p1::Counter), (p2pos : p2::Position), (p3pos : p3::Position), (p4pos : p4::Position), (p3pos : p3::Position), (p5pos : p5::Position) >> with (heaviside(counter, 1)) where {
 
-        new_counter : Integer = counter - 1
+        new_counter = counter - 1
 
-        new_x : Float = x - 0.2
-        new_y : Float = y - 0.2
+        npos = [pos[0] - 0.2, pos[1] - 0.2]
 
-        p2_x : Float = x + 0.3
-        p2_y : Float = y + 0.3
+        p2pos = [pos[0] + 0.3, pos[1] + 0.3]
 
-        p3_x : Float = x + 0.6
-        p3_y : Float = y + 0.6
+        p3pos = [pos[0] + 0.6, pos[1] + 0.6]
 
-        p4_x : Float = x + 0.6
-        p4_y : Float = y + 0.1
+        p4pos = [pos[0] + 0.6, pos[1] + 0.1]
 
-        p5_x : Float = x + 1.0
-        p5_y : Float = y + 1.0
+        p5pos = [pos[0] + 1.0, pos[1] + 1.0]
 
     }
 

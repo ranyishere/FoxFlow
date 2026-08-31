@@ -52,7 +52,16 @@ rule nodes, and rule graph patterns with typed attribute bindings.
                      | <expression>
 
 <named-parameter> ::= <symbol-name> ":" <type-signature>
+                     | <symbol-name> ":" <vertex-attribute-access>
+
+<vertex-attribute-access> ::= <symbol-name> "::" <symbol-name>
 ```
+
+A `<vertex-attribute-access>` binds a user-chosen name to a specific
+attribute of an already-declared graph node, using `<node-name> "::"
+<attribute-name>`. This form is only meaningful in rule parameter blocks,
+where the referenced node has been introduced in the rule graph pattern
+(e.g. `rho1 : c1::rho` binds `rho1` to the `rho` attribute of node `c1`).
 
 ---
 
@@ -250,7 +259,6 @@ parser.
 <graph-element> ::= <type-instance>
                   | <type-instance> "--" <type-instance>
 
-<type-instance> ::= "(" <symbol-name> ":" <type-signature> ")"
 ```
 
 Edges can chain: when the parser sees `(a : T) -- (b : T)` followed by
@@ -273,28 +281,48 @@ Each named parameter here is a **binding** that gives the user a name to
 refer to that node's attribute in the modify clause (where body or solving
 body).
 
+A binding may take one of two forms:
+
+- **Typed binding** — `<name> ":" <type-signature>` declares a fresh name
+  with an explicit attribute type (e.g. `im_pos : FixedList<<3, Float>>`).
+- **Vertex attribute access** — `<name> ":" <node-name> "::" <attribute-name>`
+  binds a name to an existing attribute of a node introduced in the rule
+  graph pattern (e.g. `rho1 : c1::rho` binds `rho1` to the `rho` attribute of
+  node `c1`). This lets a rule reference attributes from specific vertices by
+  the node names used in the graph pattern.
+
 ### Examples
 
 ```
 # One LHS node, two RHS nodes (no edges)
-start_to_node := (start : StartType) << (start_pos : FixedList<<3, Float>>) >>
+start_to_node := (start : StartType) << (start_pos : start::Position) >>
     -> (p1 : Nucleator) (b0 : CellBoundary)
-       << (nuc_pos : FixedList<<3, Float>>, nuc_count : FixedList<<2, Integer>>),
-          (b_pos : FixedList<<3, Float>>, b_unit : FixedList<<3, Float>>) >>
+       << (nuc_pos : p1::Position, nuc_count : p1::Count),
+          (b_pos : b0::Position, b_unit : b0::Direction) >>
     with (heaviside(10, 1)) where { ... }
+
+# Vertex attribute access — bind names to attributes of nodes c1 and c2
+equalize_density := (c1 : Fluid) -- (c2 : Fluid)
+    << (rho1 : c1::rho, rho2 : c2::rho) >>
+    ->
+    (c1 : Fluid) -- (c2 : Fluid)
+    << (rho1 : c1::rho, rho2 : c2::rho) >>
+    with (1.0) where {
+        rho1 = (rho1 + rho2) / 2.0
+    }
 
 # Edge on both sides
 growing_rule := (im : Intermediate) -- (pos : Positive)
-    << (im_pos : FixedList<<3, Float>>), (p_pos : FixedList<<3, Float>>) >>
+    << (im_pos : im::Position), (p_pos : pos::Position) >>
     -> (new_im : Intermediate) -- (new_pos : Positive)
-       << (im_pos : FixedList<<3, Float>>), (dpos : FixedList<<3, Float>>) >>
+       << (im_pos : new_im::Position), (dpos : new_pos::Position) >>
     solving (...) { ... }
 
 # Multiple disconnected components (two edges)
 boundary_catastrophe := (im0 : Intermediate) -- (pos : Positive)
     (b0 : CellBoundary) -- (b1 : CellBoundary)
-    << (im_pos : FixedList<<3, Float>>), (p_pos : FixedList<<3, Float>>),
-       (b0_pos : FixedList<<3, Float>>), (b1_pos : FixedList<<3, Float>>) >>
+    << (im_pos : im0::Position), (p_pos : pos::Position),
+       (b0_pos : b0::Position), (b1_pos : b1::Position) >>
     -> (im0 : Intermediate) -- (ret : Retraction)
        (b0 : CellBoundary) -- (b1 : CellBoundary)
        << ... >>

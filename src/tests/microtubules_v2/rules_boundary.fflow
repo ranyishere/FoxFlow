@@ -1,0 +1,144 @@
+rules Microtubule {
+
+    # ===================================================================
+    # STAGE 1: Construct the rectangular boundary + the nucleator grid.
+    #
+    # This stage starts from the single built-in StartType node and
+    # builds two things:
+    #   1. A rectangular CellBoundary loop (bottom -> right -> top -> left)
+    #      that encloses the [0,0] .. [3,3] domain.
+    #   2. A regular grid of Nucleator nodes (nucleation sites) laid out
+    #      inside that rectangle.
+    #
+    # The resulting state is handed off to STAGE 2 (rules_movement.fflow)
+    # which runs the microtubule dynamics.
+    # ===================================================================
+
+    # Seed node: create the first Nucleator (grid origin) and the first
+    # CellBoundary node (rectangle origin).
+    start_to_node := (start : StartType) << (start_pos : start::start_location ) >>
+            -> (p1 : Nucleator) (b0 : CellBoundary) << (nuc_pos : p1::Position, nuc_count : p1::Direction),
+        ( b_pos : b0::Position, b_unit : b0::Direction, b_count : b0::Count ) >> with (heaviside(10,1)) where {
+
+        nuc_pos[0] = 0 + buffer
+        nuc_pos[1] = 0 + buffer
+        nuc_pos[2] = 0
+
+        # Direction is used as the remaining grid extent [countX, countY].
+        # nuc_count_n intervals per axis => the grid spans the full boundary
+        # from x=buffer to x=CELL_NX-buffer (and likewise in y).
+        nuc_count = [nuc_count_n, nuc_count_n]
+
+        # Start the rectangle inset by boundary_margin so all four walls sit
+        # inside the reaction grid ([boundary_margin, CELL_NX - boundary_margin]).
+        b_pos = [boundary_margin, boundary_margin, 0.0]
+        b_unit = [1.0, 1.0, 1.0]
+        b_count = [1, 1]
+
+    }
+
+    # ---------------- Nucleator grid ----------------
+    # Lay out a row of nucleators along +x by decrementing countX.
+    # Each firing zeroes this node's countX (so it fires once) and spawns
+    # a neighbour one step to the right carrying countX-1.
+    create_nucleator_grid_x := (p1 : Nucleator) << ( nuc_pos : p1::Position, nuc_count : p1::Direction ) >> ->
+        (p1 : Nucleator) (p2 : Nucleator)
+        << ( nuc_pos : p1::Position, nuc_count : p1::Direction ),
+           ( nuc_pos_2 : p2::Position, nuc_count_2 : p2::Direction ) >> with (indicator( 0 != nuc_count[0] )) where {
+
+        nuc_pos_2 = [ nuc_pos[0] + offset, nuc_pos[1], 0 ]
+        nuc_count_2 = [ nuc_count[0] - 1, nuc_count[1] ]
+        nuc_count[0] = 0
+
+    }
+
+    # From every fully-formed row node (countX == 0), grow a column along
+    # +y by decrementing countY. Gating on countX == 0 keeps the grid a
+    # clean lattice and avoids duplicate/combinatorial spawning.
+    create_nucleator_grid_y := (p1 : Nucleator) << ( nuc_pos : p1::Position, nuc_count : p1::Direction ) >> ->
+        (p1 : Nucleator) (p2 : Nucleator)
+        << ( nuc_pos : p1::Position, nuc_count : p1::Direction ),
+           ( nuc_pos_2 : p2::Position, nuc_count_2 : p2::Direction ) >>
+        with ( indicator( nuc_count[0] == 0 ) * indicator( 0 != nuc_count[1] ) ) where {
+
+        nuc_pos_2 = [ nuc_pos[0], nuc_pos[1] + offset, 0 ]
+        nuc_count_2 = [ nuc_count[0], nuc_count[1] - 1 ]
+        nuc_count[1] = 0
+    }
+
+    # ---------------- Rectangular boundary ----------------
+    # Bottom edge: walk +x until the corner (countX == boundary_pts).
+    make_boundary_bottom := (b0 : CellBoundary)
+        << ( cb_pos : b0::Position, cb_unit : b0::Direction, cb_count : b0::Count ) >> ->
+        (b0 : CellBoundary) -- (b1 : CellBoundary)
+        << ( cb_pos : b0::Position, cb_unit : b0::Direction, cb_count : b0::Count ),
+           ( cb_pos_1 : b1::Position, cb_unit_1 : b1::Direction, cb_count_1 : b1::Count ) >> with (
+            indicator(cb_count[0] != 0) * indicator(cb_count[0] != boundary_pts) * indicator(cb_unit[0] == 1)
+            * indicator(cb_count[0] <= boundary_pts) * BOUNDARY_BUILD_SPEED
+        ) where {
+
+        cb_pos_1 = [ cb_pos[0] + boundary_offset, cb_pos[1], cb_pos[2] ]
+        cb_unit_1 = [ cb_unit[0], cb_unit[1], cb_unit[2] ]
+        cb_count_1 = [ cb_count[0] + 1, cb_count[1] ]
+        cb_count[0] = 0
+
+    }
+
+    # Right edge: at the bottom-right corner walk +y.
+    make_boundary_right := (b0 : CellBoundary)
+        << ( cb_pos : b0::Position, cb_unit : b0::Direction, cb_count : b0::Count ) >> ->
+        (b0 : CellBoundary) -- (b1 : CellBoundary)
+        << ( cb_pos : b0::Position, cb_unit : b0::Direction, cb_count : b0::Count ),
+           ( cb_pos_1 : b1::Position, cb_unit_1 : b1::Direction, cb_count_1 : b1::Count ) >> with (
+            indicator(cb_count[0] >= boundary_pts) * indicator(cb_count[1] != 0) * indicator(cb_count[1] != boundary_pts)
+            * indicator(cb_unit[1] == 1) * BOUNDARY_BUILD_SPEED
+        ) where {
+
+        cb_pos_1 = [ cb_pos[0], cb_pos[1] + boundary_offset, cb_pos[2] ]
+        cb_unit_1 = [ -1, cb_unit[1], cb_unit[2] ]
+        cb_count_1 = [ cb_count[0], cb_count[1] + 1 ]
+        cb_count[1] = 0
+
+    }
+
+    # Top edge: at the top-right corner walk -x. Flip this node's unitX so
+    # it stops re-firing along the top.
+    make_boundary_top := (b0 : CellBoundary)
+        << ( cb_pos : b0::Position, cb_unit : b0::Direction, cb_count : b0::Count ) >> ->
+        (b0 : CellBoundary) -- (b1 : CellBoundary)
+        << ( cb_pos : b0::Position, cb_unit : b0::Direction, cb_count : b0::Count ),
+           ( cb_pos_1 : b1::Position, cb_unit_1 : b1::Direction, cb_count_1 : b1::Count ) >> with (
+            indicator( (cb_count[0]) <= (2*boundary_pts - 2) ) * indicator( (cb_count[0]) >= boundary_pts )
+            * indicator( cb_count[1] >= boundary_pts )
+            * indicator(cb_unit[0] == -1) * indicator(cb_unit[1] == 1) * BOUNDARY_BUILD_SPEED
+        ) where {
+
+        cb_pos_1 = [ cb_pos[0] - boundary_offset, cb_pos[1], cb_pos[2] ]
+        cb_unit_1 = [ -1, cb_unit[1], cb_unit[2] ]
+        cb_count_1 = [ cb_count[0] + 1, cb_count[1] ]
+        cb_unit[0] = 1
+
+    }
+
+    # Left edge: at the top-left corner walk -y, closing the rectangle.
+    make_boundary_left := (b0 : CellBoundary)
+        << ( cb_pos : b0::Position, cb_unit : b0::Direction, cb_count : b0::Count ) >> ->
+        (b0 : CellBoundary) -- (b1 : CellBoundary)
+        << ( cb_pos : b0::Position, cb_unit : b0::Direction, cb_count : b0::Count ),
+           ( cb_pos_1 : b1::Position, cb_unit_1 : b1::Direction, cb_count_1 : b1::Count ) >> with (
+            indicator( (cb_count[0]) > (2*boundary_pts - 2) ) * indicator( cb_count[1] >= boundary_pts )
+            * indicator(cb_count[1] <= (2*boundary_pts - 2)) * BOUNDARY_BUILD_SPEED
+        ) where {
+
+        cb_pos_1 = [ cb_pos[0], cb_pos[1] - boundary_offset, cb_pos[2] ]
+        cb_unit_1 = [ -1, -1, cb_unit[2] ]
+        cb_count_1 = [ cb_count[0], cb_count[1] + 1 ]
+        # Disable this node by zeroing count[1] (which IS in the guard above),
+        # so the parent stops matching after firing exactly once. Setting
+        # cb_unit[0] here would be a no-op because unit[0] is not in the guard,
+        # which previously let the left edge re-fire and spawn duplicates.
+        cb_count[1] = 0
+
+    }
+
+}

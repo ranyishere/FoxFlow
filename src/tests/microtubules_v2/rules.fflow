@@ -1,8 +1,8 @@
 rules Microtubule {
 
-    start_to_node := (start : StartType) << (start_pos : FixedList <<3, Float>> ) >> 
-            -> (p1 : Nucleator) (b0 : CellBoundary) << (nuc_pos : FixedList <<3, Float>>, nuc_count : FixedList <<2, Integer >>),
-        ( b_pos : FixedList <<3, Float >>, b_unit : FixedList <<3, Float >>, b_count : FixedList <<2, Float>> ) >> with (heaviside(10,1)) where {
+    start_to_node := (start : StartType) << (start_pos : start::start_location ) >> 
+            -> (p1 : Nucleator) (b0 : CellBoundary) << (nuc_pos : p1::Position, nuc_count : p1::Direction),
+        ( b_pos : b0::Position, b_unit : b0::Direction, b_count : b0::Count ) >> with (heaviside(10,1)) where {
 
         nuc_pos[0] = 0 + buffer
         nuc_pos[1] = 0 + buffer
@@ -107,12 +107,12 @@ rules Microtubule {
 # 
 #     }
 
-    create_microtubule := (p1 : Nucleator) << ( nuc_pos : FixedList <<3, Float>>, nuc_count : FixedList<<2, Integer >> ) >> -> 
+    create_microtubule := (p1 : Nucleator) << ( nuc_pos : p1::Position, nuc_count : p1::Direction ) >> -> 
         (p1 : Nucleator)
         (p2 : Retraction) -- (p3 : Intermediate)
-        (p3 : Intermediate) -- (p4 : Positive) << (nuc_pos : FixedList <<3, Float>>, nuc_count : FixedList<<2, Integer >> ),
-        (ret_pos : FixedList<<3, Float>>, ret_unit : FixedList<<3, Float>> ), (im_pos : FixedList<<3, Float>> , im_unit : FixedList <<3, Float>> ),
-        (im_pos : FixedList<<3, Float>> , im_unit : FixedList <<3, Float>> ), (p_pos : FixedList<<3, Float>>, p_unit : FixedList<<3, Float>> ) >> with (creation_factor * creation_rate*100) where { 
+        (p3 : Intermediate) -- (p4 : Positive) << (nuc_pos : p1::Position, nuc_count : p1::Direction ),
+        (ret_pos : p2::Position, ret_unit : p2::Direction ), (im_pos : p3::Position , im_unit : p3::Direction ),
+        (im_pos : p3::Position , im_unit : p3::Direction ), (p_pos : p4::Position, p_unit : p4::Direction ) >> with (creation_factor * creation_rate*100) where { 
 
         mt_seg_len : Float := ~UniformDistribution(mt_min_segment_init, mt_max_segment_init)
         mt_orientation : Float := ~UniformDistribution(0.0, 2.0 * 3.1415)
@@ -153,10 +153,10 @@ rules Microtubule {
     }
 
     # grow microtubule by stretching.
-    growing_rule_stretch := (im : Intermediate) -- (pos : Positive) << ( im_pos : FixedList<<3, Float>> , im_unit : FixedList<<3, Float>> ),
-        ( p_pos : FixedList<<3, Float>>, p_unit : FixedList<<3, Float>> ) >>  ->
-        (new_im : Intermediate) -- (new_pos : Positive) << (im_pos : FixedList<<3, Float>>, im_unit : FixedList<<3, Float>>),
-                                                           (dpos : FixedList<<3, Float>>, p_unit : FixedList<<3, Float>>) >>
+    growing_rule_stretch := (im : Intermediate) -- (pos : Positive) << ( im_pos : im::Position , im_unit : im::Direction ),
+        ( p_pos : pos::Position, p_unit : pos::Direction ) >>  ->
+        (new_im : Intermediate) -- (new_pos : Positive) << (im_pos : new_im::Position, im_unit : new_im::Direction),
+                                                           (dpos : new_pos::Position, p_unit : new_pos::Direction) >>
         solving (dpos[0] := D(im_pos[0],t),  dpos[1] := D(im_pos[1], t)) {
 
             check : Float := HELP::distance(im_pos[0], im_pos[1], p_pos[0], p_pos[1])
@@ -169,14 +169,14 @@ rules Microtubule {
 
     boundary_catastrophe := (im0 : Intermediate) -- (pos : Positive)
         (b0 : CellBoundary) -- (b1 : CellBoundary)
-        << (im_pos : FixedList<<3, Float>> , im_unit : FixedList<<3, Float>> ), (p_pos : FixedList<<3, Float>>, p_unit : FixedList <<3, Float>> ),
-            ( b0_pos : FixedList<<3, Float>>, b0_unit : FixedList<<3, Float>> , b0_count : FixedList<<2, Integer>> ),
-            ( b1_pos : FixedList<<3, Float>>, b1_unit : FixedList<<3, Float>> , b1_count : FixedList<<2, Integer>> )
+        << (im_pos : im0::Position , im_unit : im0::Direction ), (p_pos : pos::Position, p_unit : pos::Direction ),
+            ( b0_pos : b0::Position, b0_unit : b0::Direction , b0_count : b0::Count ),
+            ( b1_pos : b1::Position, b1_unit : b1::Direction , b1_count : b1::Count )
         >>  -> (im0 : Intermediate) -- (ret : Retraction)
         (b0 : CellBoundary) -- (b1 : CellBoundary)
-        << (im_pos : FixedList<<3, Float>>, im_unit : FixedList<<3, Float>>), (p_pos : FixedList<<3, Float>>, np_unit : FixedList<<3, Float>> ),
-            ( b0_pos : FixedList<<3, Float>>, b0_unit : FixedList<<3, Float>>, b0_count : FixedList<<2, Integer>>),
-            ( b1_pos : FixedList<<3, Float>>, b1_unit : FixedList<<3, Float>> , b1_count : FixedList<<2, Integer>> )
+        << (im_pos : im0::Position, im_unit : im0::Direction), (p_pos : ret::Position, np_unit : ret::Direction ),
+            ( b0_pos : b0::Position, b0_unit : b0::Direction, b0_count : b0::Count),
+            ( b1_pos : b1::Position, b1_unit : b1::Direction , b1_count : b1::Count )
         >>  
     with (
             indicator(HELP::minimum_distance_2d(p_pos[0], p_pos[1], b0_pos[0], b0_pos[1], b1_pos[0], b1_pos[1]) <= 1.5) * boundary_cic*100

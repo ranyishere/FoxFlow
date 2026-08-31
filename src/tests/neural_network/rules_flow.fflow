@@ -3,18 +3,18 @@
 rules NeuralNetwork {
 
     # Back propagation and learn
-    backprop := (input : InputLayer) -- (layer : Layer) -- (output : OutputLayer) << (input_pos : FixedList<<3, Float>>,
-                            image_batch : FixedList <<(64, 1, 28, 28), Float>>, input_id : Integer),
-                            (layer_pos : FixedList<<3, Float>>,
-                            weights : FixedList<<100, Float>>, layer_id : Integer),
-                            (output_pos : FixedList<<3, Float>>,
-                            digit_class : FixedList<<10, Float>>, output_id : Integer)
-    >> -> (input : InputLayer) -- (layer : Layer) -- (output : OutputLayer) << (input_pos : FixedList<<3, Float>>,
-                            image_batch : FixedList <<(64, 1, 28, 28), Float>>, input_id : Integer),
-                            (layer_pos : FixedList<<3, Float>>,
-                            dw : FixedList<<100, Float>>, layer_id : Integer),
-                            (output_pos : FixedList<<3, Float>>,
-                            digit_class : FixedList<<10, Float>>, output_id : Integer)  >>
+    backprop := (input : InputLayer) -- (layer : Layer) -- (output : OutputLayer) << (input_pos : input::Position,
+                            image_batch : input::ImageBatch, input_id : input::InputID),
+                            (layer_pos : layer::Position,
+                            weights : layer::Weights, layer_id : layer::LayerID),
+                            (output_pos : output::Position,
+                            digit_class : output::DigitClass, output_id : output::OutputID)
+    >> -> (input : InputLayer) -- (layer : Layer) -- (output : OutputLayer) << (input_pos : input::Position,
+                            image_batch : input::ImageBatch, input_id : input::InputID),
+                            (layer_pos : layer::Position,
+                            dw : layer::Weights, layer_id : layer::LayerID),
+                            (output_pos : output::Position,
+                            digit_class : output::DigitClass, output_id : output::OutputID)  >>
 solving ( dw := D(weights, t) ) {
 
             # dummy

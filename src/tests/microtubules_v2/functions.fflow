@@ -67,4 +67,14 @@ functions HELP {
         return arccos(num/denom) * deg_conversion
     }
 
+    calculate_unit_vector : Function << (x1 : Float, y1 : Float), (x2 : Float, y2 : Float) >> -> FixedList<<2, Float>> := {
+
+        dx : Float := x2 - x1
+        dy : Float := y2 - y1
+
+        len : Float := sqrt(dx^2 + dy^2)
+
+        return [dx/len, dy/len]
+    }
+
 }

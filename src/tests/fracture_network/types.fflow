@@ -1,21 +1,21 @@
 types Microtubule {
 
     # X, Y, pressure, Direction
-    FractureSegment << FixedList<<3, Float>>, Float, FixedList<<3, Float>> >> : Type
+    FractureSegment << Position : FixedList<<3, Float>>, Pressure : Float, Unit : FixedList<<3, Float>> >> : Type
 
     # X, Y, pressure, Direction
-    FractureSegmentEnd << FixedList<<3, Float>>, Float, FixedList<<3, Float>>  >> : Type
+    FractureSegmentEnd << Position : FixedList<<3, Float>>, Pressure : Float, Unit : FixedList<<3, Float>> >> : Type
 
     # X, Y, pressure, Direction
-    Junction << FixedList<<3, Float>>, Float, FixedList<<3, Float>>  >> : Type
+    Junction << Position : FixedList<<3, Float>>, Pressure : Float, Unit : FixedList<<3, Float>> >> : Type
 
-    PressureSegment<< FixedList<<3, Float>>, Float >> : Type
+    PressureSegment << Position : FixedList<<3, Float>>, Pressure : Float >> : Type
 
     # Source of pressure
-    PressureSource << FixedList<<3, Float>>, Float, FixedList<<3, Float>> >> : Type
+    PressureSource << Position : FixedList<<3, Float>>, Pressure : Float, Unit : FixedList<<3, Float>> >> : Type
 
 	# X, Y, Z, CounterX, CounterY, CounterZ
-	RockStart << FixedList<<3, Float>>, Float, Float, Float >> : Type
-	Rock<< FixedList<<3, Float>>, Float >> : Type
+	RockStart << Position : FixedList<<3, Float>>, Count : FixedList<<3, Float>> >> : Type
+	Rock << Position : FixedList<<3, Float>>, Pressure : Float >> : Type
 
 }

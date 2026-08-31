@@ -117,7 +117,21 @@ function parse_symbol_parameters!(tokens)
                 # Handle cases like `param: Type`
                 param_name = parse_symbol_name!(tokens)
                 popfirst!(tokens) # Consume `:`
-                param_type = parse_type_signature_list!(tokens)
+
+                # Vertex attribute access: `param : node::attribute`. The value
+                # after `:` is a namespaced identifier referencing a graph node
+                # attribute rather than a type signature.
+                if isa(lookahead(tokens), IdentifierToken) && length(tokens) > 1 && isa(tokens[2], DoubleColonToken)
+                    node_token = popfirst!(tokens)     # node name (namespace)
+                    popfirst!(tokens)                  # consume `::`
+                    if !isa(lookahead(tokens), IdentifierToken)
+                        throw("Expected attribute name after `::` in vertex attribute access, got $(lookahead(tokens))")
+                    end
+                    attr_token = popfirst!(tokens)     # attribute name
+                    param_type = IdentifierNode(attr_token, node_token)
+                else
+                    param_type = parse_type_signature_list!(tokens)
+                end
 
                 # println("param_name: $param_name, param_type: $param_type")
 
@@ -424,9 +438,15 @@ function parse_type_update!(tokens)
         if isa(lookahead(tokens), DefineToken)
             popfirst!(tokens)  # Consume `:=`
             expression = []
-            while !isa(lookahead(tokens), EndLineToken)
+            depth = 0  # track paren/bracket nesting so multi-line RHS isn't truncated
+            while !isempty(tokens) && !(depth == 0 && isa(lookahead(tokens), EndLineToken))
                 literal = popfirst!(tokens)  # Assume it's a literal/expression
-                push!(expression,literal)
+                if isa(literal, LeftParenthesisToken) || isa(literal, LeftSquareBracketToken)
+                    depth += 1
+                elseif isa(literal, RightParenthesisToken) || isa(literal, RightSquareBracketToken)
+                    depth -= 1
+                end
+                push!(expression, literal)
             end
 
             expression_nodes = parse_expression!(expression)
@@ -547,6 +567,11 @@ function parse_factor!(tokens)
         popfirst!(tokens)
         expr = parse_expression!(tokens)
 
+        # Skip newlines that may appear before the closing ')' in multi-line groups
+        while !isempty(tokens) && lookahead(tokens) isa EndLineToken
+            popfirst!(tokens)
+        end
+
         lookahead_token = lookahead(tokens)
         if lookahead_token isa RightParenthesisToken
             popfirst!(tokens)
@@ -580,9 +605,22 @@ function parse_factor!(tokens)
             popfirst!(tokens)  # consume '('
             args = Node[]
 
+            # Skip newlines that may appear right after '(' in multi-line calls
+            while !isempty(tokens) && lookahead(tokens) isa EndLineToken
+                popfirst!(tokens)
+            end
+
             while !(lookahead(tokens) isa RightParenthesisToken)
                 push!(args, parse_expression!(tokens))
+                # Skip newlines between an argument and the next separator or ')'
+                while !isempty(tokens) && lookahead(tokens) isa EndLineToken
+                    popfirst!(tokens)
+                end
                 if lookahead(tokens) isa PunctuationToken
+                    popfirst!(tokens)
+                end
+                # Skip newlines following a ',' separator
+                while !isempty(tokens) && lookahead(tokens) isa EndLineToken
                     popfirst!(tokens)
                 end
 

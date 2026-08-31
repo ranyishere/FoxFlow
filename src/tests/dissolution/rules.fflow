@@ -16,10 +16,10 @@ rules Dissolution {
     # }
 
     # 2. Start the rock grid generation
-    start_rock_prop := (start : StartType) << (start_pos : FixedList<<3, Float>>) >> -> 
+    start_rock_prop := (start : StartType) << (start_pos : start::start_location) >> -> 
         (start_fluid : FluidSource) (rock : RockStart) << 
-            (fpos : FixedList<<3, Float>>, funit : FixedList<<3, Float>>, fc : FixedList<<1, Integer>>, fP : Float),
-            (pos : FixedList<<3, Float>>, c_count : FixedList<<3, Integer>>, dir : FixedList<<3, Integer>>)
+            (fpos : start_fluid::Position, funit : start_fluid::Unit, fc : start_fluid::FCount, fP : start_fluid::Pressure),
+            (pos : rock::Position, c_count : rock::Count, dir : rock::Dir)
         >> 
         with (10000.0) where {
 
@@ -35,10 +35,10 @@ rules Dissolution {
     }
 
     # 3. PHASE 1: Grow the X-axis lines (edge created on propagation)
-    propagate_rock_x := (rock0 : RockStart) << (pos0 : FixedList<<3, Float>>, c_count0 : FixedList<<3, Integer>>, dir0 : FixedList<<3, Integer>>) >> -> 
+    propagate_rock_x := (rock0 : RockStart) << (pos0 : rock0::Position, c_count0 : rock0::Count, dir0 : rock0::Dir) >> -> 
         (rock0 : RockStart) (Rock1 : RockStart)
-        << (pos0n : FixedList<<3, Float>>, c_count0n : FixedList<<3, Integer>>, dir0n : FixedList<<3, Integer>>), 
-           (pos1n : FixedList<<3, Float>>, c_count1n : FixedList<<3, Integer>>, dir1n : FixedList<<3, Integer>>) >> 
+        << (pos0n : rock0::Position, c_count0n : rock0::Count, dir0n : rock0::Dir), 
+           (pos1n : Rock1::Position, c_count1n : Rock1::Count, dir1n : Rock1::Dir) >> 
         with ( 10000.0 * indicator( c_count0[0] > 0 ) ) where {
 
         offset_distance : Float := 0.3
@@ -53,10 +53,10 @@ rules Dissolution {
     }
 
     # 4. PHASE 2: Grow Y-axis lines off the completed X-nodes (edge created on propagation)
-    propagate_rock_y := (rock0 : RockStart) << (pos0 : FixedList<<3, Float>>, c_count0 : FixedList<<3, Integer>>, dir0 : FixedList<<3, Integer>>) >> -> 
+    propagate_rock_y := (rock0 : RockStart) << (pos0 : rock0::Position, c_count0 : rock0::Count, dir0 : rock0::Dir) >> -> 
         (rock0 : RockStart) (Rock1 : RockStart)
-        << (pos0n : FixedList<<3, Float>>, c_count0n : FixedList<<3, Integer>>, dir0n : FixedList<<3, Integer>>), 
-           (pos1n : FixedList<<3, Float>>, c_count1n : FixedList<<3, Integer>>, dir1n : FixedList<<3, Integer>>) >> 
+        << (pos0n : rock0::Position, c_count0n : rock0::Count, dir0n : rock0::Dir), 
+           (pos1n : Rock1::Position, c_count1n : Rock1::Count, dir1n : Rock1::Dir) >> 
         with ( 10000.0 * indicator( c_count0[0] == 0) * indicator(c_count0[1] > 0 ) ) where {
 
         offset_distance : Float := 0.3
@@ -71,10 +71,10 @@ rules Dissolution {
     }
 
     # 5. PHASE 3: Grow Z-axis lines off the completed XY-plane (edge created on propagation)
-    propagate_rock_z := (rock0 : RockStart) << (pos0 : FixedList<<3, Float>>, c_count0 : FixedList<<3, Integer>>, dir0 : FixedList<<3, Integer>>) >> -> 
+    propagate_rock_z := (rock0 : RockStart) << (pos0 : rock0::Position, c_count0 : rock0::Count, dir0 : rock0::Dir) >> -> 
         (rock0 : RockStart) (Rock1 : RockStart)
-        << (pos0n : FixedList<<3, Float>>, c_count0n : FixedList<<3, Integer>>, dir0n : FixedList<<3, Integer>>), 
-           (pos1n : FixedList<<3, Float>>, c_count1n : FixedList<<3, Integer>>, dir1n : FixedList<<3, Integer>>) >> 
+        << (pos0n : rock0::Position, c_count0n : rock0::Count, dir0n : rock0::Dir), 
+           (pos1n : Rock1::Position, c_count1n : Rock1::Count, dir1n : Rock1::Dir) >> 
         with ( 10000.0 * indicator( c_count0[0] == 0) * indicator(c_count0[1] == 0) * indicator(c_count0[2] > 0 ) ) where {
 
         offset_distance : Float := 0.3
@@ -103,10 +103,10 @@ rules Dissolution {
 #     }
 
     # 7. Source propagates its first child (count > 1 means more Fluid nodes to come)
-    propagate_from_source := (f0 : FluidSource) << (fp0 : FixedList<<3, Float>>, fu0 : FixedList<<3, Float>>, fc0 : FixedList<<1, Integer>>, fP0 : Float) >> ->
+    propagate_from_source := (f0 : FluidSource) << (fp0 : f0::Position, fu0 : f0::Unit, fc0 : f0::FCount, fP0 : f0::Pressure) >> ->
         (f0 : FluidSource) -- (f1 : Fluid)
-        << (fp0n : FixedList<<3, Float>>, fu0n : FixedList<<3, Float>>, fc0n : FixedList<<1, Integer>>, fP0n : Float),
-           (fp1n : FixedList<<3, Float>>, fu1n : FixedList<<3, Float>>, fc1n : FixedList<<1, Integer>>, fP1n : Float) >>
+        << (fp0n : f0::Position, fu0n : f0::Unit, fc0n : f0::FCount, fP0n : f0::Pressure),
+           (fp1n : f1::Position, fu1n : f1::Unit, fc1n : f1::FCount, fP1n : f1::Pressure) >>
         with ( 10000.0 * indicator(fc0[0] > 1) ) where {
 
         fluid_spacing : Float := 0.3
@@ -123,10 +123,10 @@ rules Dissolution {
     }
 
     # 8. Source propagates its only child directly to a sink (count == 1)
-    propagate_source_to_sink := (f0 : FluidSource) << (fp0 : FixedList<<3, Float>>, fu0 : FixedList<<3, Float>>, fc0 : FixedList<<1, Integer>>, fP0 : Float) >> ->
+    propagate_source_to_sink := (f0 : FluidSource) << (fp0 : f0::Position, fu0 : f0::Unit, fc0 : f0::FCount, fP0 : f0::Pressure) >> ->
         (f0 : FluidSource) -- (f1 : FluidSink)
-        << (fp0n : FixedList<<3, Float>>, fu0n : FixedList<<3, Float>>, fc0n : FixedList<<1, Integer>>, fP0n : Float),
-           (fp1n : FixedList<<3, Float>>, fu1n : FixedList<<3, Float>>, fc1n : FixedList<<1, Integer>>, fP1n : Float) >>
+        << (fp0n : f0::Position, fu0n : f0::Unit, fc0n : f0::FCount, fP0n : f0::Pressure),
+           (fp1n : f1::Position, fu1n : f1::Unit, fc1n : f1::FCount, fP1n : f1::Pressure) >>
         with ( 10000.0 * indicator(fc0[0] == 1) ) where {
 
         fluid_spacing : Float := 0.3
@@ -143,10 +143,10 @@ rules Dissolution {
     }
 
     # 9. Fluid propagates along the line (count > 1 means more nodes to come)
-    propagate_initial_fluid := (f0 : Fluid) << (fp0 : FixedList<<3, Float>>, fu0 : FixedList<<3, Float>>, fc0 : FixedList<<1, Integer>>, fP0 : Float) >> ->
+    propagate_initial_fluid := (f0 : Fluid) << (fp0 : f0::Position, fu0 : f0::Unit, fc0 : f0::FCount, fP0 : f0::Pressure) >> ->
         (f0 : Fluid)--(f1 : Fluid)
-        << (fp0n : FixedList<<3, Float>>, fu0n : FixedList<<3, Float>>, fc0n : FixedList<<1, Integer>>, fP0n : Float),
-           (fp1n : FixedList<<3, Float>>, fu1n : FixedList<<3, Float>>, fc1n : FixedList<<1, Integer>>, fP1n : Float) >>
+        << (fp0n : f0::Position, fu0n : f0::Unit, fc0n : f0::FCount, fP0n : f0::Pressure),
+           (fp1n : f1::Position, fu1n : f1::Unit, fc1n : f1::FCount, fP1n : f1::Pressure) >>
         with ( 10000.0 * indicator(fc0[0] > 1) ) where {
 
         fluid_spacing : Float := 0.3
@@ -163,10 +163,10 @@ rules Dissolution {
     }
 
     # 10. Last fluid node becomes a FluidSink (count == 1)
-    propagate_final_fluid := (f0 : Fluid) << (fp0 : FixedList<<3, Float>>, fu0 : FixedList<<3, Float>>, fc0 : FixedList<<1, Integer>>, fP0 : Float) >> ->
+    propagate_final_fluid := (f0 : Fluid) << (fp0 : f0::Position, fu0 : f0::Unit, fc0 : f0::FCount, fP0 : f0::Pressure) >> ->
         (f0 : Fluid)--(f1 : FluidSink)
-        << (fp0n : FixedList<<3, Float>>, fu0n : FixedList<<3, Float>>, fc0n : FixedList<<1, Integer>>, fP0n : Float),
-           (fp1n : FixedList<<3, Float>>, fu1n : FixedList<<3, Float>>, fc1n : FixedList<<1, Integer>>, fP1n : Float) >>
+        << (fp0n : f0::Position, fu0n : f0::Unit, fc0n : f0::FCount, fP0n : f0::Pressure),
+           (fp1n : f1::Position, fu1n : f1::Unit, fc1n : f1::FCount, fP1n : f1::Pressure) >>
         with ( 10000.0 * indicator(fc0[0] == 1) ) where {
 
         fluid_spacing : Float := 0.3
@@ -188,11 +188,11 @@ rules Dissolution {
 
     # 11. Source boundary: fixed high pressure drives adjacent fluid node
     source_flow := (f0 : FluidSource) -- (f1 : Fluid)
-        << (fp0 : FixedList<<3, Float>>, fu0 : FixedList<<3, Float>>, fc0 : FixedList<<1, Integer>>, P0 : Float),
-           (fp1 : FixedList<<3, Float>>, fu1 : FixedList<<3, Float>>, fc1 : FixedList<<1, Integer>>, P1 : Float) >> ->
+        << (fp0 : f0::Position, fu0 : f0::Unit, fc0 : f0::FCount, P0 : f0::Pressure),
+           (fp1 : f1::Position, fu1 : f1::Unit, fc1 : f1::FCount, P1 : f1::Pressure) >> ->
         (f0 : FluidSource) -- (f1 : Fluid)
-        << (fp0 : FixedList<<3, Float>>, fu0 : FixedList<<3, Float>>, fc0 : FixedList<<1, Integer>>, P0 : Float),
-           (fp1 : FixedList<<3, Float>>, fu1 : FixedList<<3, Float>>, fc1 : FixedList<<1, Integer>>, dP1 : Float) >>
+        << (fp0 : f0::Position, fu0 : f0::Unit, fc0 : f0::FCount, P0 : f0::Pressure),
+           (fp1 : f1::Position, fu1 : f1::Unit, fc1 : f1::FCount, dP1 : f1::Pressure) >>
         solving (dP1 := D(P1, t)) {
 
             # Pressure diffusion with compressibility:
@@ -208,11 +208,11 @@ rules Dissolution {
 # 
     # 12. Interior fluid: pressure diffusion + velocity between connected fluid nodes
     fluid_flow := (f0 : Fluid) -- (f1 : Fluid)
-        << (fp0 : FixedList<<3, Float>>, fu0 : FixedList<<3, Float>>, fc0 : FixedList<<1, Integer>>, P0 : Float),
-           (fp1 : FixedList<<3, Float>>, fu1 : FixedList<<3, Float>>, fc1 : FixedList<<1, Integer>>, P1 : Float) >> ->
+        << (fp0 : f0::Position, fu0 : f0::Unit, fc0 : f0::FCount, P0 : f0::Pressure),
+           (fp1 : f1::Position, fu1 : f1::Unit, fc1 : f1::FCount, P1 : f1::Pressure) >> ->
         (f0 : Fluid) -- (f1 : Fluid)
-        << (fp0 : FixedList<<3, Float>>, fu0 : FixedList<<3, Float>>, fc0 : FixedList<<1, Integer>>, dP0 : Float),
-           (fp1 : FixedList<<3, Float>>, fu1 : FixedList<<3, Float>>, fc1 : FixedList<<1, Integer>>, dP1 : Float) >>
+        << (fp0 : f0::Position, fu0 : f0::Unit, fc0 : f0::FCount, dP0 : f0::Pressure),
+           (fp1 : f1::Position, fu1 : f1::Unit, fc1 : f1::FCount, dP1 : f1::Pressure) >>
         solving (dP1 := D(P1, t)) {
 
             # Pressure diffusion with compressibility: dP/dt = (k/(mu*c*dx^2))*(Pneighbor - P)
@@ -225,11 +225,11 @@ rules Dissolution {
 
     # 13. Sink boundary: fixed low pressure drains last fluid node
     sink_flow := (f0 : Fluid) -- (f1 : FluidSink)
-        << (fp0 : FixedList<<3, Float>>, fu0 : FixedList<<3, Float>>, fc0 : FixedList<<1, Integer>>, P0 : Float),
-           (fp1 : FixedList<<3, Float>>, fu1 : FixedList<<3, Float>>, fc1 : FixedList<<1, Integer>>, P1 : Float) >> ->
+        << (fp0 : f0::Position, fu0 : f0::Unit, fc0 : f0::FCount, P0 : f0::Pressure),
+           (fp1 : f1::Position, fu1 : f1::Unit, fc1 : f1::FCount, P1 : f1::Pressure) >> ->
         (f0 : Fluid) -- (f1 : FluidSink)
-        << (fp0 : FixedList<<3, Float>>, fu0 : FixedList<<3, Float>>, fc0 : FixedList<<1, Integer>>, dP0 : Float),
-           (fp1 : FixedList<<3, Float>>, fu1 : FixedList<<3, Float>>, fc1 : FixedList<<1, Integer>>, P1 : Float) >>
+        << (fp0 : f0::Position, fu0 : f0::Unit, fc0 : f0::FCount, dP0 : f0::Pressure),
+           (fp1 : f1::Position, fu1 : f1::Unit, fc1 : f1::FCount, P1 : f1::Pressure) >>
         solving (dP0 := D(P0, t)) {
 
             # Pressure diffusion: dP/dt = (k/(mu*c*dx^2))*(Pneighbor - P)

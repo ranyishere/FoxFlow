@@ -1,14 +1,14 @@
 rules Microtubule {
 
 
-    start_to_node := (start : StartType) << position : FixedList<<3, Float>> >> 
-            -> (p1 : Nucleator) << new_position : FixedList <<3, Float>>, count : FixedList <<2, Float>> >> with (heaviside(10,1)) where {
+    start_to_node := (start : StartType) << position : start::start_location >> 
+            -> (p1 : Nucleator) << new_position : p1::Position, count : p1::Direction >> with (heaviside(10,1)) where {
 
         new_position = position + 0.1
     }
 
-    move_pt := (p1 : Nucleator) << position : FixedList<<3, Float>>, count : FixedList<<2, Float>> >> ->  
-        (p1 : Nucleator) << dx : FixedList<<3, Float>>, count : FixedList<<2, Float>> >>
+    move_pt := (p1 : Nucleator) << position : p1::Position, count : p1::Direction >> ->  
+        (p1 : Nucleator) << dx : p1::Position, count : p1::Direction >>
         solving (dx := D(position, t)) {
 
         dx[0] : ODE = 0.1
@@ -17,16 +17,16 @@ rules Microtubule {
     }
 
 
-    move_pt_2 := (p1 : Nucleator) << position : FixedList <<3, Float>>, count : FixedList <<2, Float >> >> ->  
-        (p1 : Nucleator) << new_position : FixedList <<3, Float>>, count : FixedList <<2, Float >> >>
+    move_pt_2 := (p1 : Nucleator) << position : p1::Position, count : p1::Direction >> ->  
+        (p1 : Nucleator) << new_position : p1::Position, count : p1::Direction >>
             solving (dx := D(position, t) ) {
 
             dx : ODE = 0.3
 
     }
 
-    slice_test := (p1 : Nucleator) << position : FixedList<<3, Float>>, count : FixedList<<2, Float>> >> ->
-        (p1 : Nucleator) << new_position : FixedList<<3, Float>>, count : FixedList<<2, Float>> >> with (heaviside(10,1)) where {
+    slice_test := (p1 : Nucleator) << position : p1::Position, count : p1::Direction >> ->
+        (p1 : Nucleator) << new_position : p1::Position, count : p1::Direction >> with (heaviside(10,1)) where {
 
         new_position = position[0:2] + 0.5
     }

@@ -61,10 +61,19 @@ function ir_type_declaration(ast, define_type=false, symbol_tables=nothing)
     type_class_name = ir_type_class(ast.type)
     begin_struct = []
 
+    # The first attribute of every type IS the spatial position, realized by the
+    # stable `SpatialNode3D.position[3]` node member (a plain double[3]). It is
+    # therefore NOT emitted as a variant tensor member and is excluded from the
+    # cereal serialize list; only attributes 2..N live inside the variant `.data`.
+    struct_members = (type_parameters !== nothing && length(type_parameters) >= 1) ?
+                     type_parameters[2:end] : type_parameters
+    serialize_names = (param_names !== nothing && length(param_names) >= 1) ?
+                      param_names[2:end] : param_names
+
     # TODO: Handle identifier names
     if ast.value == nothing
         begin_struct = ["\tstruct $(type_name) : $(type_class_name) {\n"]
-        begin_struct = [begin_struct;type_parameters]
+        begin_struct = [begin_struct;struct_members]
 
         # operator_like_array = ir_struct_like_array(param_names)
 
@@ -89,7 +98,7 @@ function ir_type_declaration(ast, define_type=false, symbol_tables=nothing)
     end
 
     push!(begin_struct,"\n")
-    join(begin_struct), param_names
+    join(begin_struct), serialize_names
 end
 
 

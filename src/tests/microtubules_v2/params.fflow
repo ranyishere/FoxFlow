@@ -7,8 +7,13 @@ parameters Microtubule {
     DELTA : Float := 0.1
 
     # 1 -> is 1 micrometer (um)
-    MAXIMAL_REACTION_RADIUS : Float := 0.1
+    # Widened from 0.1 so the tip<->boundary co-location match forms reliably
+    # near the walls (escaping tips were slipping through because the 4-node
+    # boundary-catastrophe match failed to form in the narrow capture window).
+    MAXIMAL_REACTION_RADIUS : Float := 0.15
     # varepsilon : Float := MAXIMAL_REACTION_RADIUS * 0.01
+
+    # Anything bigger than this is considered "infinity" for the purposes of the simulation.
     varepsilon : Float := MAXIMAL_REACTION_RADIUS
 
     # Number of steps in the simulation
@@ -41,17 +46,35 @@ parameters Microtubule {
     L_min : Float := 0.025
 
 
+    ######### Boundary Building Parameters #########
+
+    boundary_pts : Integer := 300
+    # Inset the walls this far inside the reaction-grid edges (x=0 / x=CELL_NX).
+    # A tip that slips past a wall is then still INSIDE the grid and keeps
+    # getting matched/caught, instead of exiting the grid and becoming
+    # unrecoverable. Must stay < buffer (0.3) so nucleators remain inside.
+    boundary_margin : Float := 0.2
+    # Segment length so the walls span [boundary_margin, CELL_NX - boundary_margin].
+    boundary_offset : Float := (CELL_NX - 2.0*boundary_margin) / boundary_pts
+    BOUNDARY_BUILD_SPEED : Float := 100.0
+
+    ############
+
+
     # Minimum Segment Length
     s_min : Float := 0.005
 
     # Maximum Segment Length
     s_max : Float := 0.01
 
+    # Gap left between the outermost nucleators and the boundary wall.
     buffer : Float := CELL_NX / 10.0
-    offset : Float := (3.0-buffer*2)/10.0
+    # Number of grid intervals per axis (=> nuc_count_n + 1 nucleators per axis).
 
-    boundary_pts : Integer := 21
-    boundary_offset : Float := 3.0/20.0
+    nuc_count_n : Integer := 10
+
+    # Spacing so the grid spans exactly [buffer, CELL_NX - buffer] on each axis.
+    offset : Float := (CELL_NX - buffer*2) / nuc_count_n
 
     creation_factor : Float := 1.0
     creation_rate : Float := 0.0026
@@ -62,7 +85,7 @@ parameters Microtubule {
     v_plus : Float := 0.0615
 
     # collision_distance : Float := 0.025
-    collision_distance : Float := 5.0
+    collision_distance : Float := 10.0
 
     # Collision induced catastrophe (CIC)
     boundary_cic : Float := 4000000
@@ -84,5 +107,43 @@ parameters Microtubule {
     rho_cross : Float := 200.0 * 100.0
     rho_zip_hit : Float := 4000.0
     rho_zip_guard : Float := 12000.0
+
+
+    WITH_GROWTH_RATE_FACTOR            : Float := 100.0
+    DIV_LENGTH                         : Float := 0.075
+    WOBBLE_ANGLE                       : Float := 5.0
+    ENABLE_WOBBLE                      : Integer := 1
+
+    V_PLUS                             : Float := 0.0615
+    WITH_RETRACTION_RATE_FACTOR        : Float := 10.0
+    DIV_LENGTH_RETRACT                 : Float := 0.0025
+
+    V_MINUS                            : Float := 0.05
+
+    COLLISION_DISTANCE                 : Float := 0.025
+
+    COLLISION_DISTANCE_BOUNDARY        : Float := 0.02
+
+    STANDARD_BOUNDARY_CATASTROPHE_RATE : Float := 100.0
+
+    # Deterministic boundary clamp backstop: catches any Positive tip that has
+    # slipped past the inset wall (into the band between the wall and the grid
+    # edge) using the tip's OWN position, independent of a CellBoundary match.
+    # Threshold sits half a margin past the wall so the primary catastrophe
+    # handles the wall and the clamp only mops up slippers before the grid edge.
+    BOUNDARY_CLAMP_MARGIN              : Float := boundary_margin / 2.0
+    DOMAIN_MIN                         : Float := BOUNDARY_CLAMP_MARGIN
+    DOMAIN_MAX                         : Float := CELL_NX - BOUNDARY_CLAMP_MARGIN
+    BOUNDARY_CLAMP_RATE                : Float := STANDARD_BOUNDARY_CATASTROPHE_RATE
+    INTERMEDIATE_CIC_RATE              : Float := 5.0
+
+    POSITIVE_CIC_RATE                  : Float := 5.0
+    NEGATIVE_CIC_RATE                  : Float := 5.0
+    CATASTROPHE_ANGLE                  : Float := 40.0
+    CREATION_RATE                      : Float := 0.5
+    CREATION_FACTOR                    : Float := 1.0
+    MT_MIN_SEGMENT_INIT                : Float := 0.005
+    MT_MAX_SEGMENT_INIT                : Float := 0.01
+    MT_DESTRUCTION_RATE                : Float := 100.0
 
 }

@@ -239,6 +239,80 @@ module IRRuleGeneration
     end
 
     """
+        emit_position_resync!(ir_builder, assgn_to_node, type_namespace; side, match_arr)
+
+    No-op. Historically this mirrored the stable `.position[3]` node member into a
+    per-variant `torch::Tensor Position` attribute at rule/ODE entry to keep the
+    DSL-visible tensor in sync. The tensor member has been removed: the first
+    attribute of every type IS the `SpatialNode3D.position[3]` member (single source
+    of truth), so there is nothing to resync. Kept as a no-op so existing call sites
+    remain valid.
+    """
+    function emit_position_resync!(ir_builder, assgn_to_node, type_namespace; side="lhs", match_arr="m1")
+        return nothing
+    end
+
+    """
+        refresh_position_snapshot!(ir_builder, var_name, rhs_node_idx)
+
+    Re-materialize an already-declared RHS position snapshot tensor from the
+    authoritative `.position[3]` member after a write to that position.
+
+    Since Phase 4, spatial position is the single source of truth stored on the
+    stable `SpatialNode3D.position[3]` node member, while a DSL-visible position
+    variable (e.g. `pos_pos`) is materialized as a one-time `torch::tensor({...})`
+    snapshot on first read so that FixedList index reads keep working. Position
+    writes in the where body target `.position[]` directly and do NOT update that
+    snapshot, so a variable that is written and then read later (e.g. assign a tip
+    position, then compute its direction unit vector from that position — exactly
+    like cmaRules' set_unit_vector on live references) would otherwise read a
+    stale pre-write value, making every microtubule grow the same way. Refreshing
+    the snapshot after each position write keeps subsequent reads live.
+
+    The snapshot is emitted lazily (deep in ir_builtin_func's argument handling)
+    without a reliable entry in any "declared" tracking set, so guard by scanning
+    what has actually been emitted into `ir_builder` for the snapshot's
+    declaration. Only emit the refresh when the snapshot has already been declared
+    (avoids referencing an undeclared identifier); if it hasn't been declared yet,
+    a later read materializes it fresh after the write, which is already correct.
+    """
+    function refresh_position_snapshot!(ir_builder, var_name, rhs_node_idx)
+        decl_marker = "Tensor $var_name ="
+        already_declared = any(instr -> occursin(decl_marker, instr), ir_builder.instructions)
+        if already_declared
+            emit(ir_builder,
+                 "$var_name = torch::tensor({rhs[m2[$rhs_node_idx]].position[0], rhs[m2[$rhs_node_idx]].position[1], rhs[m2[$rhs_node_idx]].position[2]}, torch::kFloat64);")
+        end
+    end
+
+    """
+        detach_tensor_attr!(ir_builder, cpp_var)
+
+    Give an RHS node's `torch::Tensor` attribute its OWN storage before it is
+    written element-wise.
+
+    `torch::Tensor` assignment/copy is SHALLOW (reference-counted shared storage).
+    DGGML copies node `.data` (the std::variant holding the tensor) when it installs
+    a rule's RHS into the system graph, so freshly created / carried-over nodes end
+    up ALIASING one shared tensor. An element-wise write (`Direction[i] = ...`) then
+    mutates every aliased node at once — e.g. all Positive tips share one Direction
+    that gets overwritten on every rule firing, so the ODE grows them all along one
+    randomly changing direction (microtubules kink instead of staying straight).
+
+    Emitting `attr = attr.clone();` before the first write rebinds the member to a
+    private deep copy of its current contents, so subsequent element writes affect
+    only this node. Guard against re-emitting (scan already-emitted instructions)
+    so the three component writes of a 3-vector detach exactly once.
+    """
+    function detach_tensor_attr!(ir_builder, cpp_var)
+        detach_line = "$cpp_var = $cpp_var.clone();"
+        already = any(instr -> occursin(detach_line, instr), ir_builder.instructions)
+        if !already
+            emit(ir_builder, detach_line)
+        end
+    end
+
+    """
         collect_ode_referenced_vars(expression, lhs_assgn_to_node) -> Set{String}
 
     Walk an ODE RHS expression tree and collect all IdentifierNode names that
@@ -281,6 +355,60 @@ module IRRuleGeneration
         elseif node isa ArrayLiteralNode
             for el in node.elements
                 _collect_ode_vars!(el, lhs_assgn_to_node, result)
+            end
+        end
+        # LiteralNode, IntegerNode, FloatNode etc. — nothing to collect
+    end
+
+    function collect_ode_varmap_read_vars(expression, lhs_assgn_to_node)
+        """
+        Collect the lhs-matched vars in an ODE RHS that are read via
+        `NV_Ith_S(y, varmap.at(&ptr))` — i.e. that appear OUTSIDE of any builtin
+        function-call argument.
+
+        traverse_ode_expr only emits a varmap read for a matched var when it is a
+        top-level reference; when the same var appears as a builtin function-call
+        argument (e.g. inside HELP::distance(...)), ir_builtin_func reads it from a
+        cloned copy of the live node data instead. A read-only var that appears ONLY
+        inside call arguments therefore never needs a varset entry. Registering it
+        anyway captures a libtorch tensor data_ptr that copy_back writes every ODE
+        step but the RHS never consumes — a dangling-pointer heap-corruption hazard.
+        """
+        result = Set{String}()
+        _collect_varmap_read_vars!(expression, lhs_assgn_to_node, result)
+        return result
+    end
+
+    function _collect_varmap_read_vars!(node, lhs_assgn_to_node, result)
+        if node isa BinaryOpNode
+            _collect_varmap_read_vars!(node.lhs, lhs_assgn_to_node, result)
+            _collect_varmap_read_vars!(node.rhs, lhs_assgn_to_node, result)
+        elseif node isa UnaryOpNode
+            _collect_varmap_read_vars!(node.operand, lhs_assgn_to_node, result)
+        elseif node isa GroupNode
+            _collect_varmap_read_vars!(node.expression, lhs_assgn_to_node, result)
+        elseif node isa CallNode
+            # Deliberately do NOT descend into call arguments: ir_builtin_func reads
+            # tensor args from cloned node data, not via varmap, so vars used only
+            # here must not be registered in the varset.
+        elseif node isa IndexAccessNode
+            if node.object isa IdentifierNode
+                name = get_value(node.object)
+                if haskey(lhs_assgn_to_node, name)
+                    push!(result, name)
+                end
+            end
+            for idx in node.indices
+                _collect_varmap_read_vars!(idx, lhs_assgn_to_node, result)
+            end
+        elseif node isa IdentifierNode
+            name = get_value(node)
+            if haskey(lhs_assgn_to_node, name)
+                push!(result, name)
+            end
+        elseif node isa ArrayLiteralNode
+            for el in node.elements
+                _collect_varmap_read_vars!(el, lhs_assgn_to_node, result)
             end
         end
         # LiteralNode, IntegerNode, FloatNode etc. — nothing to collect
@@ -431,7 +559,12 @@ module IRRuleGeneration
                 println("debug: ir after distribution: ", ir)
 
             elseif operation.position.value == "-"
-                ir = "-" * get_value(expression.operand)
+                # Recurse so the operand is resolved the same way as any other
+                # expression (parameters -> settings.X, LHS vars -> declared refs,
+                # etc.) instead of emitting the raw identifier name.
+                operand_ir = IRBuilder([])
+                ir_definition!(expression.operand, operand_ir, propensity_table, context)
+                ir = "-" * join(operand_ir.instructions)
 
             else
                 throw("Error: Unary operation $(operation.position.value) not recognized.")
@@ -507,7 +640,6 @@ module IRRuleGeneration
 
             args = call_node.args
 
-            # ── tensordot special case ──────────────────────────────────────────────
             # torch::tensordot(self, other, IntArrayRef dims_self, IntArrayRef dims_other)
             # Dim args must be rendered as {0,1} (IntArrayRef), not torch::tensor(...).
             # FoxFlow syntax: tensordot(A, B, [dims_self...], [dims_other...])
@@ -521,7 +653,6 @@ module IRRuleGeneration
                 d2 = _arr_to_intarrayref(args[4])
                 return "torch::tensordot($t1, $t2, $d1, $d2)"
             end
-            # ────────────────────────────────────────────────────────────────────────
 
             arg_str = join(map( (arg) -> begin
                 if arg isa LiteralNode
@@ -798,7 +929,32 @@ module IRRuleGeneration
                     end
 
                 elseif var in collect(keys(propensity_table["var_local_table"]["rule_rhs"]))
-                    nothing
+
+                    # RHS-only binding variable (e.g. an alias for a node created
+                    # by this rule). Emit its RHS read declaration lazily, mirroring
+                    # the flat-table branch above, so the referenced tensor is
+                    # declared before use instead of silently skipped.
+                    ir = propensity_table["var_local_table"]["rule_rhs"][var]
+
+                    if propensity == true
+                        if (ir in prop_body_ir.instructions) || (var in propensity_table["var_local_table"]["propensity"]["declared"])
+                            nothing
+                        else
+                            push!(propensity_table["var_local_table"]["propensity"]["declared"], var)
+                            emit(prop_body_ir, ir)
+                        end
+                    else
+                        if var in propensity_table["var_local_table"]["rule_rhs"]["declared"]
+                            nothing
+                        else
+                            push!(propensity_table["var_local_table"]["rule_rhs"]["declared"], var)
+                            if where_clause == true
+                                emit(prop_body_ir, ir)
+                            else
+                                emit(ir_builder, ir)
+                            end
+                        end
+                    end
 
                 # NOTE: It's already been declared do nothing.
                 elseif var in propensity_table["var_local_table"]["rule_rhs"]["declared"]
@@ -909,6 +1065,18 @@ module IRRuleGeneration
 
         propensity_table["var_local_table"] = var_local_table
 
+        # Clear stale per-rule binding-variable reads. ir_where_left_clause!
+        # stores flat LHS reads in propensity_table keyed by the binding alias
+        # (e.g. "pos_pos"). These are never scoped to a rule, so without this a
+        # later rule that reuses the same alias for an RHS-only node would pick
+        # up the previous rule's LHS read (e.g. std::get<Positive>(lhs[m1[2]]))
+        # and dereference a node/type absent from this rule's LHS -> segfault.
+        for k in collect(keys(propensity_table))
+            if !(k in ("parameter_table", "var_local_table", "function_table"))
+                delete!(propensity_table, k)
+            end
+        end
+
         ir_rule!(rules_ir, rule,
              type_namespace,
              symbol_tables,
@@ -921,12 +1089,6 @@ module IRRuleGeneration
         build(rules_ir)
     end
 
-    # ── Symbolic ODE pretty-printer ──────────────────────────────────────
-    # Walks the same ODE AST that traverse_ode_expr uses, but instead of
-    # emitting C++ IR it returns a human-readable algebraic string like
-    #   "11.11 * (P0 - P1)"
-    # This is used to emit comments and runtime debug prints showing the
-    # symbolic form of each ODE equation.
     function symbolic_ode_expr(expression, assgn_info, dep_vars, bv_to_dep)::String
 
         if expression isa BinaryOpNode
@@ -940,7 +1102,7 @@ module IRRuleGeneration
             return "($inner)"
 
         elseif expression isa UnaryOpNode
-            op = get_value(expression.expression)
+            op = expression.expression.position.value
             operand = symbolic_ode_expr(expression.operand, assgn_info, dep_vars, bv_to_dep)
             return "$op$operand"
 
@@ -1135,6 +1297,28 @@ module IRRuleGeneration
             elseif expression isa ArrayLiteralNode
                 emit(ir_builder, ir_array_literal(expression, propensity_table, context))
 
+            elseif expression isa IdentifierNode
+                # Bare identifier as the whole ODE RHS (e.g. `dpos[i] : ODE = V_PLUS`).
+                # Resolve it the same way as an identifier operand inside a binary op,
+                # otherwise a lone parameter would be emitted unqualified (missing the
+                # `settings.` prefix) and fail to compile.
+                if get_value(expression) in dep_vars
+                    ix_ir = "ix_"*get_value(expression)
+                    emit(ir_builder, "NV_Ith_S(y, varmap.at(&$ix_ir))")
+                elseif get_value(expression) in collect(keys(assgn_info))
+                    cur_info = assgn_info[get_value(expression)]
+                    pos = cur_info.cpp_var.index
+                    if pos <= 3 && cur_info.cpp_var.type != "torch::Tensor"
+                        emit(ir_builder, create_pos_cpp_var(cur_info, "lhs", "m1"))
+                    else
+                        emit(ir_builder, create_cpp_var(cur_info, "lhs", "m1"))
+                    end
+                elseif get_value(expression) in collect(keys(propensity_table["parameter_table"]))
+                    emit(ir_builder, "settings."*get_value(expression))
+                else
+                    emit(ir_builder, " $(get_value(expression)) ")
+                end
+
             else
                 emit(ir_builder, " $(get_value(expression)) ")
             end
@@ -1179,6 +1363,9 @@ module IRRuleGeneration
                     emit(ir_builder, ir)
                     println("Variable $(get_value(expression.lhs)) is a regular attribute.")
                 end
+
+            elseif get_value(expression.lhs) in collect(keys(propensity_table["parameter_table"]))
+                emit(ir_builder, "settings."*get_value(expression.lhs))
 
             else
                 throw("Variable $(get_value(expression.lhs)) not found in dependent variables or assignment info.")
@@ -1285,6 +1472,23 @@ module IRRuleGeneration
             elseif expression.rhs isa IndexAccessNode
                 traverse_ode_expr(expression.rhs, ir_builder, var_loc_attr,
                   assgn_info, dep_vars, propensity_table, context)
+            elseif expression.rhs isa CallNode
+
+                ir_value = IRBuilder([])
+
+                func_node = expression.rhs.function_node
+                func_name = get_value(func_node)
+                namespace = func_node.namespace
+                if !(namespace isa Nothing)
+                    namespace = namespace.position.value
+                end
+                args = expression.rhs.args
+
+                ir_builtin_func(func_name, args, namespace, ir_value,
+                    propensity_table, context, true, false)
+
+                emit(ir_builder, build(ir_value))
+
             elseif expression.rhs isa ArrayLiteralNode
                 emit(ir_builder, ir_array_literal(expression.rhs, propensity_table, context))
             else
@@ -1310,6 +1514,10 @@ module IRRuleGeneration
 
         var_bind_ir = "[](auto &lhs, auto &m1, auto &varset) {"
         emit(ir_builder, var_bind_ir)
+        # Ensure the DSL-visible Position tensor is in sync with the authoritative
+        # .position before the solver captures raw data pointers, so the ODE's initial
+        # condition is taken from the live spatial value rather than a stale tensor.
+        emit_position_resync!(ir_builder, lhs_assgn_to_node, type_namespace)
         var_attr_loc = Dict()
         # Takes the binding variable and returns the
         # dependency. For tensors, also tracks per-element info.
@@ -1362,36 +1570,42 @@ module IRRuleGeneration
                         bv_node_type = lhs_assgn_to_node[dep_vars].type
                         bv_attr_pos = lhs_assgn_to_node[dep_vars].cpp_var.index
 
-                        # Fetch the tensor reference
-                        tensor_ref = "std::get<$type_namespace::$bv_node_type>(lhs[m1[$bv_pos]].data).$bv_attr"
                         ptr_name = "tensor_ptr_$(bv_pos)_$(bv_attr_pos)"
 
-                        # Get raw double* pointer from tensor
-                        emit(ir_builder, "auto &tensor_ref_$(bv_pos)_$(bv_attr_pos) = $tensor_ref;")
-                        emit(ir_builder, "double* $ptr_name = tensor_ref_$(bv_pos)_$(bv_attr_pos).template data_ptr<double>();")
-
-                        # Register each element with varset
-                        for i in 0:(tensor_size - 1)
-                            emit(ir_builder, "varset.insert(&$(ptr_name)[$i]);")
-                        end
-
-                        # Only sync position[0..2] if this is the Position attribute (first FixedList, index 1)
                         if bv_attr_pos == 1
-                            pos_count = min(3, tensor_size)
-                            for i in 0:(pos_count - 1)
-                                emit(ir_builder, "varset.insert(&lhs[m1[$bv_pos]].position[$i]);")
+                            # === POSITION TENSOR: integrate the stable .position[] only ===
+                            # The spatial Position attribute is integrated through the node's
+                            # authoritative double[3] .position member, which has a stable
+                            # address. The libtorch Position tensor data_ptr is deliberately
+                            # NOT registered: its storage can be rebound across rewrites,
+                            # leaving a dangling pointer in the varmap that copy_back
+                            # dereferences every ODE step -> SIGSEGV. Registering both the
+                            # tensor and .position would also double-count the same physical
+                            # quantity in the solver. emit_position_resync! keeps the
+                            # DSL-visible Position tensor in sync with .position at rule entry.
+                            reg_count = min(3, tensor_size)
+                            emit(ir_builder, "double* $ptr_name = &lhs[m1[$bv_pos]].position[0];")
+                            for i in 0:(reg_count - 1)
+                                emit(ir_builder, "varset.insert(&$(ptr_name)[$i]);")
                             end
+                            tensor_binding_info[dep_vars] = (reg_count, ptr_name, bv_pos)
+                        else
+                            # === NON-POSITION TENSOR (e.g. Direction): use tensor storage ===
+                            tensor_ref = "std::get<$type_namespace::$bv_node_type>(lhs[m1[$bv_pos]].data).$bv_attr"
+                            emit(ir_builder, "auto &tensor_ref_$(bv_pos)_$(bv_attr_pos) = $tensor_ref;")
+                            emit(ir_builder, "double* $ptr_name = tensor_ref_$(bv_pos)_$(bv_attr_pos).template data_ptr<double>();")
+                            for i in 0:(tensor_size - 1)
+                                emit(ir_builder, "varset.insert(&$(ptr_name)[$i]);")
+                            end
+                            tensor_binding_info[dep_vars] = (tensor_size, ptr_name, bv_pos)
                         end
-
-                        # Store tensor info for use in ODE lambda
-                        tensor_binding_info[dep_vars] = (tensor_size, ptr_name, bv_pos)
 
                         # var_attr_loc maps dep_var to a per-element accessor pattern
                         var_attr_loc[dep_vars] = ptr_name
                     end
 
                 elseif attr_pos > 3
-                    # === NON-TENSOR, NON-POSITION SCALAR ATTRIBUTE ===
+                    # NON-TENSOR, NON-POSITION SCALAR ATTRIBUTE
                     bv_attr = lhs_assgn_to_node[dep_vars].cpp_var.name
                     bv_node_type = lhs_assgn_to_node[dep_vars].type
                     bv_attr_pos = lhs_assgn_to_node[dep_vars].cpp_var.index
@@ -1425,7 +1639,7 @@ module IRRuleGeneration
             solve_clause.variables
            )
 
-        # === REGISTER READ-ONLY ODE VARIABLES ===
+        # REGISTER READ-ONLY ODE VARIABLES 
         # These are LHS-matched variables referenced in ODE RHS expressions
         # but NOT solving variables. They must be in varset so the ODE lambda
         # reads their current values from the SUNDIALS y vector (via varmap)
@@ -1443,14 +1657,26 @@ module IRRuleGeneration
                     # Tensor read-only variable
                     ro_attr = ro_info.cpp_var.name
                     ro_node_type = ro_info.type
-                    tensor_ref = "std::get<$type_namespace::$ro_node_type>(lhs[m1[$ro_pos]].data).$ro_attr"
                     ptr_name = "tensor_ptr_$(ro_pos)_$(ro_attr_pos)"
-                    emit(ir_builder, "auto &tensor_ref_$(ro_pos)_$(ro_attr_pos) = $tensor_ref;")
-                    emit(ir_builder, "double* $ptr_name = tensor_ref_$(ro_pos)_$(ro_attr_pos).template data_ptr<double>();")
-                    for i in 0:(ro_tensor_size - 1)
-                        emit(ir_builder, "varset.insert(&$(ptr_name)[$i]);")
+                    if ro_attr_pos == 1
+                        # Position read-only var: bind to the stable .position[] member
+                        # (see the solving-variable branch) so no dangling libtorch
+                        # data_ptr ends up in the varmap for copy_back to dereference.
+                        reg_count = min(3, ro_tensor_size)
+                        emit(ir_builder, "double* $ptr_name = &lhs[m1[$ro_pos]].position[0];")
+                        for i in 0:(reg_count - 1)
+                            emit(ir_builder, "varset.insert(&$(ptr_name)[$i]);")
+                        end
+                        tensor_binding_info[ro_var] = (reg_count, ptr_name, ro_pos)
+                    else
+                        tensor_ref = "std::get<$type_namespace::$ro_node_type>(lhs[m1[$ro_pos]].data).$ro_attr"
+                        emit(ir_builder, "auto &tensor_ref_$(ro_pos)_$(ro_attr_pos) = $tensor_ref;")
+                        emit(ir_builder, "double* $ptr_name = tensor_ref_$(ro_pos)_$(ro_attr_pos).template data_ptr<double>();")
+                        for i in 0:(ro_tensor_size - 1)
+                            emit(ir_builder, "varset.insert(&$(ptr_name)[$i]);")
+                        end
+                        tensor_binding_info[ro_var] = (ro_tensor_size, ptr_name, ro_pos)
                     end
-                    tensor_binding_info[ro_var] = (ro_tensor_size, ptr_name, ro_pos)
                     var_attr_loc[ro_var] = ptr_name
                     push!(readonly_registered, ro_var)
 
@@ -1503,7 +1729,7 @@ module IRRuleGeneration
           - dx : ODE = expr      (scalar, original behavior)
         """
 
-        # ── Collect all variables referenced in ODE RHS expressions ──
+        # Collect all variables referenced in ODE RHS expressions
         # Walk ALL nodes in the solve clause body (ODENode values AND
         # DefinitionNode values) so that tensor vertex attributes referenced
         # in temporary definitions are also registered as read-only vars
@@ -1529,9 +1755,47 @@ module IRRuleGeneration
 
         # Read-only vars = referenced in ODE RHS but not solving variables
         readonly_vars = setdiff(all_ode_referenced, solving_var_names)
+
+        # Restrict read-only registration to vars actually read via varmap in the
+        # RHS (i.e. referenced outside builtin function-call arguments). Vars used
+        # only inside call args are read from cloned node data, so registering them
+        # would create an orphan libtorch data_ptr in the varset that copy_back
+        # writes every step but the RHS never consumes — a dangling-pointer heap
+        # corruption hazard.
+        varmap_read_vars = Set{String}()
+        for assgn_node in solve_clause.clause
+            if assgn_node isa ODENode
+                union!(varmap_read_vars,
+                       collect_ode_varmap_read_vars(assgn_node.value, lhs_assgn_to_node))
+            elseif assgn_node isa DefinitionNode
+                union!(varmap_read_vars,
+                       collect_ode_varmap_read_vars(assgn_node.value, lhs_assgn_to_node))
+            end
+        end
+        readonly_vars = intersect(readonly_vars, varmap_read_vars)
+
+        # Do NOT bind non-position tensor coefficients into the solver
+        # A read-only ODE coefficient that is a non-position libtorch tensor
+        # attribute (e.g. Direction) must be read as a plain constant from live
+        # node data, NOT registered as a SUNDIALS state via its tensor data_ptr().
+        # Binding tensor.data_ptr() into varset makes copy_back write back into
+        # the tensor's storage buffer; that buffer is reallocated/freed across
+        # graph rewrites, leaving a dangling pointer in the varmap -> heap
+        # corruption (free(): invalid pointer on N_Vector destroy). This mirrors
+        # cmaRules ode_mt_growth, which registers only position[] (num_eq=3) and
+        # reads unit_vec[i] directly as a constant. Excluded vars fall through
+        # traverse_ode_expr to the direct node-data read (pos_dir[i].item<double>()).
+        # Position tensor read-only vars (index==1) stay bound: they register the
+        # stable .position[] member, which has no dangling hazard.
+        readonly_vars = Set(rv for rv in readonly_vars if !(
+            haskey(lhs_assgn_to_node, rv) &&
+            lhs_assgn_to_node[rv].cpp_var.type == "torch::Tensor" &&
+            lhs_assgn_to_node[rv].cpp_var.index != 1
+        ))
+
         println("  ODE referenced vars: ", all_ode_referenced)
         println("  Solving vars: ", solving_var_names)
-        println("  Read-only ODE vars: ", readonly_vars)
+        println("  Read-only ODE vars (after excluding non-position tensors): ", readonly_vars)
 
         var_attr_loc, bv_to_dep, tensor_binding_info, readonly_registered = ir_solve_variable_binding(
                 ir_builder, solve_clause, lhs_assgn_to_node,
@@ -1561,10 +1825,18 @@ module IRRuleGeneration
             if haskey(tensor_binding_info, dep_var)
                 # Tensor: fetch the double* pointer in the ODE lambda
                 tsize, ptr_name, bv_pos = tensor_binding_info[dep_var]
-                bv_attr = lhs_assgn_to_node[dep_var].cpp_var.name
-                bv_node_type = lhs_assgn_to_node[dep_var].type
-                tensor_ref = "std::get<$type_namespace::$bv_node_type>(lhs[m1[$bv_pos]].data).$bv_attr"
-                emit(ir_builder, "double* $ptr_name = $tensor_ref.template data_ptr<double>();")
+                attr_pos = lhs_assgn_to_node[dep_var].cpp_var.index
+                if attr_pos == 1
+                    # Position: the ODE reads/writes go through the stable .position[]
+                    # member (matching the varset registration in the ic lambda), never
+                    # the rebindable libtorch tensor data_ptr.
+                    emit(ir_builder, "double* $ptr_name = &lhs[m1[$bv_pos]].position[0];")
+                else
+                    bv_attr = lhs_assgn_to_node[dep_var].cpp_var.name
+                    bv_node_type = lhs_assgn_to_node[dep_var].type
+                    tensor_ref = "std::get<$type_namespace::$bv_node_type>(lhs[m1[$bv_pos]].data).$bv_attr"
+                    emit(ir_builder, "double* $ptr_name = $tensor_ref.template data_ptr<double>();")
+                end
                 # Register per-element refs so traverse_ode_expr can read them via NV_Ith_S
                 for i in 0:(tsize - 1)
                     push!(dep_vars, "$(ptr_name)[$i]")
@@ -1610,7 +1882,6 @@ module IRRuleGeneration
                 ode_value = assgn_node.value
 
                 if ode_name_node isa IndexAccessNode
-                    # === INDEXED TENSOR ODE: dx[i] : ODE = expr ===
                     bv_name = get_value(ode_name_node.object)
                     idx_val = get_value(ode_name_node.indices[1])  # integer index
 
@@ -1641,7 +1912,7 @@ module IRRuleGeneration
                     bv_name = get_value(ode_name_node)
 
                     if haskey(bv_to_dep, bv_name) && haskey(tensor_binding_info, bv_to_dep[bv_name])
-                        # === UNINDEXED TENSOR ODE (Neural ODE): dw : ODE = f(weights) ===
+                        # UNINDEXED TENSOR ODE (Neural ODE): dw : ODE = f(weights)
                         # Pattern:
                         #   1. Reconstruct the tensor from SUNDIALS y (so it reflects ODE state)
                         #   2. Evaluate the RHS once into a temp torch::Tensor
@@ -1651,7 +1922,6 @@ module IRRuleGeneration
                         bv_attr     = lhs_assgn_to_node[dep_var_name].cpp_var.name
                         bv_node_type = lhs_assgn_to_node[dep_var_name].type
 
-                        # === from_blob zero-copy pattern ===
                         # SUNDIALS stores this tensor's elements contiguously starting at
                         # varmap[&ptr[0]].  We wrap y/ydot memory directly into LibTorch
                         # tensors — no copy in either direction.
@@ -1686,7 +1956,6 @@ module IRRuleGeneration
                         push!(symbolic_equations, "d($bv_name[0..$( tsize-1 )])/dt += $sym_rhs")
 
                     elseif haskey(bv_to_dep, bv_name)
-                        # === SCALAR ODE: dx : ODE = expr (original behavior) ===
                         dep_var_name = bv_to_dep[bv_name]
 
                         # Look up from lhs_assgn_to_node since this is a binding var
@@ -1728,24 +1997,14 @@ module IRRuleGeneration
             end, solve_clause.clause
         )
 
-        # Emit position sync ODEs for tensor bindings.
-        # SUNDIALS tracks .position[i] as independent variables, so their ydot
-        # must mirror the corresponding tensor element's ydot to stay in lockstep.
-        # Only sync for the Position attribute (first FixedList, attr_pos == 1).
-        for (dep_var, info) in tensor_binding_info
-            tsize, ptr_name, bv_pos = info
-            attr_pos = lhs_assgn_to_node[dep_var].cpp_var.index
-            if attr_pos == 1
-                pos_count = min(3, tsize)
-                for i in 0:(pos_count - 1)
-                    tensor_ref = "$(ptr_name)[$i]"
-                    pos_ref = "lhs[m1[$bv_pos]].position[$i]"
-                    emit(ir_builder, "NV_Ith_S(ydot, varmap[&$pos_ref]) += NV_Ith_S(ydot, varmap[&$tensor_ref]);")
-                end
-            end
-        end
+        # NOTE: No tensor->.position sync ODEs are emitted any more. The spatial
+        # Position attribute is now integrated directly through the stable
+        # .position[] member (see ir_solve_variable_binding), so there is no
+        # separate libtorch tensor variable in the solver to mirror. The
+        # DSL-visible Position tensor is refreshed from .position by
+        # emit_position_resync! at rule entry.
 
-        # ── Emit symbolic ODE equations as C++ comments ──
+        # Emit symbolic ODE equations as C++ comments
         if !isempty(symbolic_equations)
             # Print to Julia stdout during codegen
             println("  ── Symbolic ODE system ──")
@@ -1781,10 +2040,15 @@ module IRRuleGeneration
         """
 
         function visit_rule_node!(each_node, graph_table, ir_builder,
-            graph_name, type_namespace=type_namespace)
+            graph_name, type_namespace=type_namespace; key_map=nothing)
             """
             Visits each node in the rule and builds the graph
-            for the lhs and rhs of the rule
+            for the lhs and rhs of the rule.
+
+            `key_map` (optional) maps a node NAME to the graph key it must be
+            assigned. It is used so that RHS nodes preserved from the LHS reuse
+            their LHS keys (DGGML matches LHS<->RHS nodes by key), while
+            genuinely new RHS nodes get fresh keys beyond all LHS keys.
             """
 
             # NOTE: Shouldn't this include adding
@@ -1795,10 +2059,10 @@ module IRRuleGeneration
                 right_node = each_node.right_vertex
 
                 visit_rule_node!(left_node, graph_table,
-                                ir_builder, graph_name, type_namespace)
+                                ir_builder, graph_name, type_namespace; key_map=key_map)
 
                 visit_rule_node!(right_node, graph_table,
-                                ir_builder, graph_name, type_namespace)
+                                ir_builder, graph_name, type_namespace; key_map=key_map)
 
                 rhs_node_count_0 = graph_table[(get_value(left_node.name), get_value(left_node.type.name))]
                 rhs_node_count_1 = graph_table[(get_value(right_node.name), get_value(right_node.type.name))]
@@ -1835,7 +2099,11 @@ module IRRuleGeneration
                         throw("Duplicate node name found in rule $graph_name: $node_name, type: $node_type. Are you sure you want to do this?")
                     end
 
-                    res = res + 1
+                    if !isnothing(key_map) && haskey(key_map, node_name)
+                        res = key_map[node_name]
+                    else
+                        res = res + 1
+                    end
                     graph_table[(node_name, node_type)] = res
                     # Grab from symbol table
                     # cur_count = graph_table[(node_name, node_type)]
@@ -1866,27 +2134,69 @@ module IRRuleGeneration
         lhs_name = "$(rule_name)_lhs"
         emit(ir_builder, "GT $lhs_name;")
 
+        rhs_node_type = rule_node.rhs
+        rhs_param = rule_node.rhs_parameter
+
+        # Align RHS node keys with the LHS
+        # DGGML matches LHS<->RHS graph nodes BY KEY: keys present on both
+        # sides are rewritten in place, LHS-only keys are destroyed and
+        # RHS-only keys are created. If a newly-inserted RHS node were given
+        # a key already used by a preserved LHS node, DGGML would reuse the
+        # preserved node in place (force-changing its type) and spawn a fresh
+        # node for the displaced one -- e.g. inserting an Intermediate between
+        # (im)--(pos) would turn the Positive tip into an Intermediate and
+        # create a brand-new Positive elsewhere. To avoid this, preserved RHS
+        # nodes (same NAME as an LHS node) reuse their LHS key, and genuinely
+        # new RHS nodes get keys numbered after the maximum LHS key.
+        _, _, lhs_order_of_nodes = build_node_pos_to_type(lhs_node_type)
+        _, _, rhs_order_of_nodes0 = build_node_pos_to_type(rhs_node_type)
+        lhs_key_map = lhs_order_of_nodes
+        rhs_key_map = OrderedDict{String, Any}()
+        let used_keys = Set{Any}(values(lhs_order_of_nodes)),
+            # LHS keys whose node is NOT preserved by name on the RHS. Reusing
+            # one of these keys for an RHS-only node makes DGGML retype that node
+            # IN PLACE (e.g. a Positive tip becoming a Negative) instead of
+            # destroying it and creating a brand-new node. Retype-in-place keeps
+            # the node's identity and spatial position[] and, crucially, keeps any
+            # ODE match bound to that node valid (destroying an ODE-matched node
+            # would leave a stale deterministic match behind).
+            lhs_only_keys = Any[lhs_order_of_nodes[name] for name in keys(lhs_order_of_nodes)
+                                if !haskey(rhs_order_of_nodes0, name)],
+            reuse_idx = 1,
+            next_key = isempty(values(lhs_order_of_nodes)) ? 1 : maximum(values(lhs_order_of_nodes)) + 1
+            for name in keys(rhs_order_of_nodes0)
+                if haskey(lhs_order_of_nodes, name)
+                    # preserved node: keep its LHS key
+                    rhs_key_map[name] = lhs_order_of_nodes[name]
+                elseif reuse_idx <= length(lhs_only_keys)
+                    # converted node: reuse a displaced LHS key -> retype in place
+                    rhs_key_map[name] = lhs_only_keys[reuse_idx]
+                    reuse_idx += 1
+                else
+                    # genuinely new node: fresh key after the maximum LHS key
+                    rhs_key_map[name] = next_key
+                    next_key += 1
+                end
+            end
+        end
+
         # Generating lhs graph
         lhs_symbol = Dict()
         # lhs_count = 1
         for each_node in lhs_node_type
-            visit_rule_node!(each_node, lhs_symbol, ir_builder, lhs_name, type_namespace)
+            visit_rule_node!(each_node, lhs_symbol, ir_builder, lhs_name, type_namespace; key_map=lhs_key_map)
         end
 
         # emit_add_nodes(ir_builder, lhs_name, lhs_node_type, type_namespace, lhs_symbol)
 
         # Generating rhs graph
-        rhs_node_type = rule_node.rhs
-        rhs_param = rule_node.rhs_parameter
-
-        rhs_node_type = rule_node.rhs
         rhs_symbol = Dict()
         # rhs_count = 1
         rhs_name = "$(rule_name)_rhs"
         emit(ir_builder, "GT $rhs_name;")
         for each_node in rhs_node_type
             visit_rule_node!(each_node, rhs_symbol,
-                            ir_builder, rhs_name, type_namespace)
+                            ir_builder, rhs_name, type_namespace; key_map=rhs_key_map)
         end
         # rhs_symbol = visit_rule_node!(rhs_node_type, rhs_symbol)
         # emit_add_nodes(ir_builder, rhs_name, rhs_node_type, type_namespace, rhs_symbol)
@@ -1908,13 +2218,14 @@ module IRRuleGeneration
 
         # println("lhs_types: ", lhs_types)
 
-        lhs_names, lhs_types, lhs_order_of_nodes = build_node_pos_to_type(lhs_node_type)
+        lhs_names, lhs_types, _ = build_node_pos_to_type(lhs_node_type)
 
 
         lhs_param_to_node, lhs_assgn_to_node = link_param_to_nodes(lhs_param,
                                                     lhs_types,
                                                     symbol_tables,
-                                                    lhs_names)
+                                                    lhs_names;
+                                                    node_key_map=lhs_key_map)
         # exit(0)
 
         # rhs_node_ix_to_type, rhs_names, rhs_types = build_node_pos_to_type(rhs_node_type)
@@ -1924,7 +2235,8 @@ module IRRuleGeneration
         rhs_param_to_node, rhs_assgn_to_node = link_param_to_nodes(rhs_param,
                                                 rhs_types,
                                                 symbol_tables,
-                                                rhs_names)
+                                                rhs_names;
+                                                node_key_map=rhs_key_map)
 
         if modify_clause isa WithClauseNode
             with_clause = modify_clause
@@ -1944,6 +2256,9 @@ module IRRuleGeneration
 
             prop_hdr = "[&](auto &lhs, auto &m1) {\n"
             emit(prop_body_ir, prop_hdr)
+            # Ensure the DSL-visible Position tensor is in sync with the authoritative
+            # .position before the propensity reads any spatial attribute.
+            emit_position_resync!(prop_body_ir, lhs_assgn_to_node, type_namespace)
             emit(prop_ir_builder, "return ")
             ir_propensity!(with_clause, prop_ir_builder, propensity_table, prop_body_ir)
 
@@ -1962,7 +2277,6 @@ module IRRuleGeneration
         elseif modify_clause isa SolveClauseNode
             solve_clause = modify_clause
 
-            # ── Collect read-only ODE vars for num_vars computation ──
             # First, gather all vars referenced in ODE RHS expressions
             # AND DefinitionNode values (temporary definitions within the
             # solve clause that may reference dynamic vertex attributes).
@@ -1974,6 +2288,21 @@ module IRRuleGeneration
                 elseif assgn_node isa DefinitionNode
                     union!(all_ode_ref,
                            collect_ode_referenced_vars(assgn_node.value, lhs_assgn_to_node))
+                end
+            end
+
+            # Read-only vars are only registered (and hence only counted) when they
+            # are read via varmap in the RHS, i.e. referenced outside builtin
+            # function-call arguments. This must match the filtering done in
+            # ir_solve_variable_binding so num_vars equals the varset size.
+            varmap_read_ref = Set{String}()
+            for assgn_node in solve_clause.clause
+                if assgn_node isa ODENode
+                    union!(varmap_read_ref,
+                           collect_ode_varmap_read_vars(assgn_node.value, lhs_assgn_to_node))
+                elseif assgn_node isa DefinitionNode
+                    union!(varmap_read_ref,
+                           collect_ode_varmap_read_vars(assgn_node.value, lhs_assgn_to_node))
                 end
             end
 
@@ -1995,8 +2324,15 @@ module IRRuleGeneration
                     rp = lhs_assgn_to_node[dep_vars_name]
                     tsize = rp.cpp_var.tensor_size
                     if rp.cpp_var.type == "torch::Tensor" && tsize > 0
-                        # tensor elements + position sync
-                        num_vars += tsize + min(3, tsize)
+                        if rp.cpp_var.index == 1
+                            # Position: only the stable .position[] elements are
+                            # registered in the varset (see ir_solve_variable_binding),
+                            # never the libtorch tensor data_ptr.
+                            num_vars += min(3, tsize)
+                        else
+                            # Non-position tensor (e.g. Direction): tensor elements.
+                            num_vars += tsize
+                        end
                     else
                         num_vars += 1
                     end
@@ -2005,12 +2341,22 @@ module IRRuleGeneration
                 end
             end
             # Count read-only variables (referenced in ODE RHS but not solving)
-            for ro_var in setdiff(all_ode_ref, seen_dep_vars)
+            for ro_var in intersect(setdiff(all_ode_ref, seen_dep_vars), varmap_read_ref)
                 if haskey(lhs_assgn_to_node, ro_var)
                     rp = lhs_assgn_to_node[ro_var]
                     tsize = rp.cpp_var.tensor_size
                     if rp.cpp_var.type == "torch::Tensor" && tsize > 0
-                        num_vars += tsize
+                        if rp.cpp_var.index == 1
+                            # Position read-only var: only .position[] elements.
+                            num_vars += min(3, tsize)
+                        else
+                            # Non-position tensor coefficient (e.g. Direction) is
+                            # NOT bound into the solver — it is read directly as a
+                            # constant from node data (see ir_solve_clause!). Counting
+                            # it here would over-size num_eq, mislocating the tau /
+                            # propensity equation and corrupting root finding. Skip it.
+                            continue
+                        end
                     else
                         num_vars += 1
                     end
@@ -2427,7 +2773,124 @@ module IRRuleGeneration
         pos_to_type
     end
 
-    function link_param_to_nodes(param, node_types, symbol_tables, node_names)
+    function extract_attr_tuple(node_attr, ix_node_attr)
+        """
+        Build the (attr_type, attr_name, ix_node_attr, tensor_size) tuple for a
+        single symbol-table attribute entry, mirroring the positional path.
+        """
+        is_tensor = is_list_type_tensor(node_attr[1])
+        attr_type = convert_type_name(node_attr[1])
+        attr_name = node_attr[2]
+
+        tensor_size = 0
+        if is_tensor && length(node_attr) >= 3
+            is_list_info = node_attr[3]
+            if is_list_info[1] == true
+                dim_info = is_list_info[2]
+                if dim_info isa AbstractVector || dim_info isa AbstractArray
+                    tensor_size = prod([parse(Int64, d) for d in dim_info])
+                else
+                    tensor_size = parse(Int64, get_value(dim_info))
+                end
+            end
+        end
+
+        return (attr_type, attr_name, ix_node_attr, tensor_size)
+    end
+
+    function link_param_to_nodes_by_attr(param, node_types, symbol_tables, node_names; node_key_map=nothing)
+        """
+        Links each vertex-attribute-access binding (`alias : node::attribute`)
+        to its referenced graph node and attribute.
+
+        Unlike the positional linker, this explicitly resolves the node named by
+        the binding's namespace and looks the attribute up by name, so users do
+        not have to list every field of every node in order.
+
+        `node_key_map` (optional) maps a node NAME to the graph key it was
+        assigned when building the rule graph. When provided, node locations
+        (used to index m1/m2 in the where clauses) reuse those keys so that
+        RHS-preserved nodes align with their LHS keys instead of using plain
+        first-appearance order.
+
+        Returns the same `(zipped, linked_params_new)` structures as
+        `link_param_to_nodes`.
+        """
+
+        # Map node name -> (unique_loc, node_type) using first-appearance order,
+        # matching the `seen` numbering used to index m1/m2 in the where clauses.
+        # When a key map is supplied, use the assigned graph key instead so the
+        # numbering stays consistent with the (LHS-aligned) addNode keys.
+        node_info = Dict()
+        unique_count = 0
+        for (ix, node_name) in enumerate(node_names)
+            if !haskey(node_info, node_name)
+                unique_count += 1
+                loc = (!isnothing(node_key_map) && haskey(node_key_map, node_name)) ?
+                      node_key_map[node_name] : unique_count
+                node_info[node_name] = (loc, node_types[ix])
+            end
+        end
+
+        zipped = []
+        linked_params_new = Dict()
+        tmp_count = 0
+
+        for x in param.token
+            if !(x isa NamedParameterNode && x.parameter isa IdentifierNode)
+                throw("Vertex attribute access parameter blocks cannot be mixed " *
+                      "with positional/typed bindings. Offending entry: $x")
+            end
+
+            tmp_count += 1
+            alias = get_value(x.name)
+
+            if isnothing(x.parameter.namespace)
+                throw("Vertex attribute binding '$alias' must use the form " *
+                      "'node::attribute'.")
+            end
+
+            target_node = x.parameter.namespace.position.value
+            target_attr = get_value(x.parameter)
+
+            if !haskey(node_info, target_node)
+                throw("Vertex attribute binding '$alias' references unknown node " *
+                      "'$target_node'. Available nodes: $(collect(keys(node_info)))")
+            end
+            (node_loc, node_type) = node_info[target_node]
+
+            if !(node_type in collect(keys(symbol_tables)))
+                throw("Node type $node_type not found in symbol tables.")
+            end
+
+            total_node_attr = symbol_tables[node_type]
+
+            attr_tuple = nothing
+            for ix_node_attr in 1:length(total_node_attr)
+                node_attr = total_node_attr[ix_node_attr]
+                if node_attr[2] == target_attr
+                    attr_tuple = extract_attr_tuple(node_attr, ix_node_attr)
+                    break
+                end
+            end
+
+            if isnothing(attr_tuple)
+                available = [total_node_attr[i][2] for i in 1:length(total_node_attr)]
+                throw("Attribute '$target_attr' not found on node '$target_node' " *
+                      "(type $node_type). Available attributes: $(available)")
+            end
+
+            user_param_name = (alias, tmp_count)
+            push!(zipped, (node_loc, target_node, node_type, attr_tuple, user_param_name))
+
+            cpp_var = CPPVariable(attr_tuple[1], attr_tuple[2], attr_tuple[3], attr_tuple[4])
+            linked_params_new[alias] = RuleParam(node_loc, target_node, node_type, cpp_var)
+        end
+
+        return zipped, linked_params_new
+    end
+
+    function link_param_to_nodes(param, node_types, symbol_tables, node_names; node_key_map=nothing)
         """
         Links each parameter to its corresponding node.
         Returns a tuple of two dictionaries:
@@ -2439,12 +2902,25 @@ module IRRuleGeneration
             nodes_attr: The attributes of the nodes.
             nodes: The nodes in the graph.
             symbol_tables: The symbol tables for the nodes.
+            node_key_map: Optional map from node NAME to the graph key it was
+                assigned (so RHS m2[..] indices match the LHS-aligned addNode
+                keys instead of plain first-appearance order).
 
         Returns:
             A tuple containing two dictionaries.
         """
 
         println("param: ", param)
+
+        # ── Vertex attribute access form ────────────────────────────────
+        # Bindings of the form `alias : node::attribute` explicitly reference a
+        # named graph node and one of its attributes, instead of relying on the
+        # positional matching against every field of each node type below.
+        if !isnothing(param.token) && !isempty(param.token) && any(
+                x -> x isa NamedParameterNode && x.parameter isa IdentifierNode,
+                param.token)
+            return link_param_to_nodes_by_attr(param, node_types, symbol_tables, node_names; node_key_map=node_key_map)
+        end
 
         tmp_count = 0
         user_param_names = map(
@@ -2784,12 +3260,19 @@ module IRRuleGeneration
             user_param_name = param[end][1]
 
             ir = nothing
-            if attr_type == "torch::Tensor"
-                # Tensor attribute — always read from .data
-                ir = "$attr_type $user_param_name = std::get<$type_namespace::$node_type>(lhs[m1[$node_loc]].data).$attr_name;\n"
-            elseif attr_loc <= 3 && attr_name == "Position"
-                # Only the spatial Position attribute is mirrored in .position[]
-                ir = "$attr_type $user_param_name = lhs[m1[$node_loc]].position[$(attr_loc-1)];"
+            if attr_loc == 1
+                # First attribute IS the spatial position, stored on the stable
+                # SpatialNode3D `.position[3]` member (there is no variant tensor).
+                # Materialize a tensor view from it so DSL FixedList reads
+                # (X[i].template item<double>()) keep working unchanged.
+                ir = "$attr_type $user_param_name = torch::tensor({lhs[m1[$node_loc]].position[0], lhs[m1[$node_loc]].position[1], lhs[m1[$node_loc]].position[2]}, torch::kFloat64);\n"
+            elseif attr_type == "torch::Tensor"
+                # Tensor attribute — read a .clone() so this read-local does not
+                # alias the node's storage. Writes in the where body target the
+                # node directly (create_cpp_var), so cloning here gives all reads
+                # a stable snapshot of the matched state (simultaneous-assignment
+                # semantics) instead of seeing values mutated by earlier writes.
+                ir = "$attr_type $user_param_name = std::get<$type_namespace::$node_type>(lhs[m1[$node_loc]].data).$attr_name.clone();\n"
             else
                 # All other scalar attributes live in .data
                 ir = "$attr_type $user_param_name = std::get<$type_namespace::$node_type>(lhs[m1[$node_loc]].data).$attr_name;\n"
@@ -2828,12 +3311,17 @@ module IRRuleGeneration
             end
 
             ir = nothing
-            if attr_type == "torch::Tensor"
-                # Tensor attribute — always read from .data
-                ir = "$attr_type $user_param_name = std::get<$type_namespace::$node_type>(rhs[m2[$node_loc]].data).$attr_name;\n"
-            elseif attr_loc <= 3 && attr_name == "Position"
-                # Only the spatial Position attribute is mirrored in .position[]
-                ir = "$attr_type $user_param_name = rhs[m2[$node_loc]].position[$(attr_loc-1)];"
+            if attr_loc == 1
+                # First attribute IS the spatial position on the stable
+                # SpatialNode3D `.position[3]` member. Materialize a tensor view.
+                ir = "$attr_type $user_param_name = torch::tensor({rhs[m2[$node_loc]].position[0], rhs[m2[$node_loc]].position[1], rhs[m2[$node_loc]].position[2]}, torch::kFloat64);\n"
+            elseif attr_type == "torch::Tensor"
+                # Tensor attribute — read a .clone() so this read-local does not
+                # alias the node's storage. Writes in the where body target the
+                # node directly (create_cpp_var), so cloning here gives all reads
+                # a stable snapshot of the matched state (simultaneous-assignment
+                # semantics) instead of seeing values mutated by earlier writes.
+                ir = "$attr_type $user_param_name = std::get<$type_namespace::$node_type>(rhs[m2[$node_loc]].data).$attr_name.clone();\n"
             else
                 # All other scalar attributes live in .data
                 ir = "$attr_type $user_param_name = std::get<$type_namespace::$node_type>(rhs[m2[$node_loc]].data).$attr_name;\n"
@@ -2967,6 +3455,12 @@ module IRRuleGeneration
         where_hdr = "[&](auto &lhs, auto &rhs, auto &m1, auto &m2) {"
         emit(ir_builder, where_hdr)
 
+        # Ensure the DSL-visible Position tensor is in sync with the authoritative
+        # .position before the rewrite reads/copies any spatial attribute. This makes
+        # subsequent `rhs.Position = lhs.Position` shallow copies and explicit
+        # `neg_pos = pos_pos` reads pick up the live position rather than a stale tensor.
+        emit_position_resync!(ir_builder, lhs_assgn_to_node, type_namespace)
+
         # ── Pre-scan: find all variables passed to grad(...) ──
         grad_vars = collect_grad_vars(where_clause)
         if !isempty(grad_vars)
@@ -3019,24 +3513,29 @@ module IRRuleGeneration
                 rhs_cpp_var = CPPVariable(attr_tuple[1], attr_tuple[2], attr_tuple[3], tensor_size)
                 rhs_rule_param = RuleParam(node_loc, node_param, node_type, rhs_cpp_var)
 
-                rhs_ir = create_cpp_var(rhs_rule_param)
-                lhs_ir = create_cpp_var(lhs_assgn_to_node[var_name], "lhs", "m1")
-
-                # setting them equal
-                ir = "$rhs_ir = $lhs_ir;\n"
-                emit(ir_builder, ir)
-
-                if rhs_rule_param.cpp_var.type == "torch::Tensor" && rhs_rule_param.cpp_var.index == 1
-                    # For Position tensor attribute, also copy spatial .position from LHS to RHS
+                if rhs_rule_param.cpp_var.index == 1
+                    # First attribute IS the spatial `.position[3]`; carry it over
+                    # from the matched LHS node directly (no variant tensor member).
                     lhs_node_idx = lhs_assgn_to_node[var_name].index
                     rhs_node_idx = rhs_rule_param.index
                     pos_ir = "std::copy(std::begin(lhs[m1[$lhs_node_idx]].position), std::end(lhs[m1[$lhs_node_idx]].position), std::begin(rhs[m2[$rhs_node_idx]].position));\n"
                     emit(ir_builder, pos_ir)
-                elseif rhs_rule_param.cpp_var.type != "torch::Tensor" && rhs_rule_param.cpp_var.index <= 3
-                    rhs_pos = create_pos_cpp_var(rhs_rule_param, "rhs", "m2")
-                    lhs_pos = create_pos_cpp_var(lhs_assgn_to_node[var_name], "lhs", "m1")
-                    pos_ir = "$rhs_pos = $lhs_pos;\n"
-                    emit(ir_builder, pos_ir)
+                else
+                    rhs_ir = create_cpp_var(rhs_rule_param)
+                    lhs_ir = create_cpp_var(lhs_assgn_to_node[var_name], "lhs", "m1")
+
+                    # setting them equal
+                    # torch::Tensor `operator=` is a SHALLOW copy (shared storage);
+                    # carrying a tensor attribute over as `rhs = lhs` would alias the
+                    # new node's tensor with the matched node's tensor, so a later
+                    # element-wise write corrupts both. Deep-copy tensor attributes so
+                    # each node owns independent storage.
+                    if rhs_rule_param.cpp_var.type == "torch::Tensor"
+                        ir = "$rhs_ir = $lhs_ir.clone();\n"
+                    else
+                        ir = "$rhs_ir = $lhs_ir;\n"
+                    end
+                    emit(ir_builder, ir)
                 end
             end
         end
@@ -3351,7 +3850,7 @@ module IRRuleGeneration
 
         # FIXME: if you assign a node to another node who is just assigned it will not work.
 
-        # ── Bare call statement (e.g. backward(loss)) ──
+        # Bare call statement (e.g. backward(loss))
         # Parsed as a CallNode with no LHS.  Emit as a side-effecting statement.
         if assign_node isa CallNode
             ir_value = IRBuilder([])
@@ -3361,7 +3860,7 @@ module IRRuleGeneration
             return
         end
 
-        # ── Local function definition (emitted as a C++ lambda) ──
+        # Local function definition (emitted as a C++ lambda)
         if assign_node isa FunctionDefinitionNode
             fn_name    = get_value(assign_node.name)
             sig        = assign_node.signature
@@ -3399,7 +3898,7 @@ module IRRuleGeneration
             type = convert_type_name(get_value(assign_node.type.name))
             value = assign_node.value
 
-            # ── Special case: autodiff(expr, var) ──────────────────────────────
+            # autodiff(expr, var)
             # autodiff(expr, W) means "differentiate expr w.r.t. W".
             # We emit an immediately-invoked lambda so that requires_grad_(true)
             # is set on W *before* expr is evaluated, ensuring W is in the graph:
@@ -3439,7 +3938,6 @@ module IRRuleGeneration
                 end
                 return
             end
-            # ── end autodiff special case ───────────────────────────────────────
 
             if !(value isa GroupNode)
                 value = GroupNode(value)
@@ -3516,21 +4014,37 @@ module IRRuleGeneration
             ir_value_str = build_sameline(ir_value)
 
             # Emit assignment. Use .index_put_ for slices or multi-index, plain [] for single scalar index.
-            cpp_var = create_cpp_var(rhs_assgn_node)
-            if has_slice(idx_node.indices)
-                ir = "$cpp_var.index_put_({$(join(idx_parts, ", "))}, $ir_value_str);"
-            elseif length(idx_parts) == 1
-                ir = "$cpp_var[$(idx_parts[1])] = $ir_value_str;"
-            else
-                ir = "$cpp_var.index_put_({$(join(idx_parts, ", "))}, $ir_value_str);"
-            end
-            emit(ir_builder, ir)
-
-            # Also sync .position for single element if it's the Position attribute (index 1)
-            if rhs_assgn_node.cpp_var.type == "torch::Tensor" && length(idx_parts) == 1 && rhs_assgn_node.cpp_var.index == 1
+            if rhs_assgn_node.cpp_var.index == 1
+                # First attribute IS the spatial `.position[3]` (no variant tensor).
+                # Assign the addressed component directly, exactly like cmaRules.
                 rhs_node_idx = rhs_assgn_node.index
-                pos_sync = "if ($(idx_parts[1]) < 3) { rhs[m2[$rhs_node_idx]].position[$(idx_parts[1])] = static_cast<double>($ir_value_str); }"
-                emit(ir_builder, pos_sync)
+                if !has_slice(idx_node.indices) && length(idx_parts) == 1
+                    ir = "rhs[m2[$rhs_node_idx]].position[$(idx_parts[1])] = static_cast<double>($ir_value_str);"
+                    emit(ir_builder, ir)
+                    refresh_position_snapshot!(ir_builder, base_name, rhs_node_idx)
+                else
+                    # slice / multi-index write into position: assign component-wise
+                    tmp = "_fflow_pos_tmp_$(rhs_node_idx)"
+                    emit(ir_builder, "{ torch::Tensor $tmp = ($ir_value_str); for (int _i = 0; _i < 3 && _i < $tmp.numel(); _i++) { rhs[m2[$rhs_node_idx]].position[_i] = $tmp[_i].template item<double>(); } }")
+                    refresh_position_snapshot!(ir_builder, base_name, rhs_node_idx)
+                end
+            else
+                cpp_var = create_cpp_var(rhs_assgn_node)
+                # This node's tensor attribute may alias another node's storage
+                # (DGGML shallow-copies node data when installing a rule's RHS into
+                # the system graph, and torch tensor copy shares storage). Detach it
+                # to private storage before writing so the element-wise write does
+                # not mutate every aliased node (which otherwise makes all tips share
+                # one Direction -> microtubules kink).
+                detach_tensor_attr!(ir_builder, cpp_var)
+                if has_slice(idx_node.indices)
+                    ir = "$cpp_var.index_put_({$(join(idx_parts, ", "))}, $ir_value_str);"
+                elseif length(idx_parts) == 1
+                    ir = "$cpp_var[$(idx_parts[1])] = $ir_value_str;"
+                else
+                    ir = "$cpp_var.index_put_({$(join(idx_parts, ", "))}, $ir_value_str);"
+                end
+                emit(ir_builder, ir)
             end
         else
 
@@ -3591,38 +4105,30 @@ module IRRuleGeneration
             emit(ir_builder, new_ir)
 
             println("rhs_assgn_node: ", rhs_assgn_node)
-            # exit(0)
-
-            # assigned_param = rhs_assgn_node[4][3]
-            # assigned_param = rhs_assgn_node.cpp_var.index
-
-            # assigned_node = rhs_assgn_node[1]
-            # assigned_node = rhs_assgn_node.index
-
-            # rhs_attr = rhs_assgn_node[4][2]
-            # rhs_attr = rhs_assgn_node.cpp_var[2]
-
-            # node_type = rhs_assgn_node[3]
-
-            # assigned_param_name = assigned_param
-            # ir = "\t\tstd::get<$type_namespace::$node_type>(rhs[m2[$assigned_node]].data).$rhs_attr = $name;"
-
-            ir = "$(create_cpp_var(rhs_assgn_node)) = $name;"
 
             assigned_param = rhs_assgn_node.cpp_var.index
 
-            if rhs_assgn_node.cpp_var.type == "torch::Tensor" && rhs_assgn_node.cpp_var.index == 1
-                # For the Position attribute (index 1), sync spatial .position from tensor value
+            if assigned_param == 1
+                # First attribute IS the spatial `.position[3]` (no variant tensor).
+                # Write the components directly from the local, exactly like cmaRules.
                 rhs_node_idx = rhs_assgn_node.index
-                pos_sync = "for (int _i = 0; _i < 3 && _i < $name.numel(); _i++) { rhs[m2[$rhs_node_idx]].position[_i] = $name[_i].template item<double>(); }"
-                emit(ir_builder, pos_sync)
-            elseif rhs_assgn_node.cpp_var.type != "torch::Tensor" && (assigned_param == 1 || assigned_param == 2 || assigned_param == 3)
-                # For scalar attributes at positions 1-3, sync to .position
-                ir_node_pos = create_pos_cpp_var(rhs_assgn_node, "rhs", "m2") * " = $name;"
-                emit(ir_builder, ir_node_pos)
+                if rhs_assgn_node.cpp_var.type == "torch::Tensor"
+                    pos_sync = "for (int _i = 0; _i < 3 && _i < $name.numel(); _i++) { rhs[m2[$rhs_node_idx]].position[_i] = $name[_i].template item<double>(); }"
+                    emit(ir_builder, pos_sync)
+                else
+                    emit(ir_builder, "rhs[m2[$rhs_node_idx]].position[0] = static_cast<double>($name);")
+                end
+            else
+                # Whole-attribute assignment into a node member. For torch::Tensor
+                # attributes, `=` shares storage; clone so the node owns its tensor
+                # and later element writes on either side don't alias.
+                if rhs_assgn_node.cpp_var.type == "torch::Tensor"
+                    ir = "$(create_cpp_var(rhs_assgn_node)) = ($name).clone();"
+                else
+                    ir = "$(create_cpp_var(rhs_assgn_node)) = $name;"
+                end
+                emit(ir_builder, ir)
             end
-
-            emit(ir_builder, ir)
         end
     end
 

@@ -1,24 +1,28 @@
-simulations Test {
+simulations Microtubule {
 
-    # Loading parameters
+    # Parameters and types are shared across both stages.
     params : SimulationParameters := load("params.fflow")
-    
-    # Load saved state
-    initialState : State := load("mt_init_state.bin")
-
-    # What rules to use.
-    simRules : SimulationRules := load("rules.fflow")
-
-    # Types
     simTypes : SimulationTypes := load("types.fflow")
 
-    # Number of iterations
-    iterations : Float := 3
+    # How long each stage runs.
+    # boundary/grid frontier advances ~1 node per ~10 steps, and the rectangle
+    # needs ~80 boundary nodes, so stage 1 needs ~800-1000 steps to close.
+    # boundaryTime / DELTA = number of steps (DELTA = 0.1 -> 1000 steps).
 
-    # TODO: Where to save results
-    # Where to save results
-    # This executes. the simulation
-    test : Simulation := RunSimulation(initialState, params,
-                simRules, simTypes, iterations)
+    boundaryTime : Float := 40
+    movementTime : Float := 10
+
+    # ---------------- STAGE 1: build the rectangular boundary + grid ----------------
+    initialState : State := load("default")
+    boundaryRules : SimulationRules := load("rules_boundary.fflow")
+    buildBoundary : Simulation := RunSimulation(initialState, params,
+                boundaryRules, simTypes, boundaryTime)
+
+    # ---------------- STAGE 2: microtubule dynamics ----------------
+    # Load the state produced by STAGE 1 (checkpoints are written under my_results/).
+    nextState : State := load("my_results/simulation_state_latest.bin")
+    movementRules : SimulationRules := load("rules_movement.fflow")
+    moveMicrotubules : Simulation := RunSimulation(nextState, params,
+                movementRules, simTypes, movementTime)
 
 }

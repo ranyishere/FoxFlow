@@ -123,10 +123,14 @@ function parse_function_type_signature!(tokens)
     popfirst!(tokens)  # Consume '->'
 
     # Should be another type here
-    if (lookahead(tokens) isa Union{IdentifierToken, FloatToken}) == false
+    if !((lookahead(tokens) isa IdentifierToken) || (lookahead(tokens) isa FloatToken) || (lookahead(tokens) isa IntegerToken))
         throw("Expected return type identifier after '->' got $(lookahead(tokens))")
     end
     ret_type = popfirst!(tokens)  # Consume return type identifier
+    # Treat keyword tokens used as type names (e.g. IntegerToken with value "Integer") as identifiers
+    if ret_type isa IntegerToken && tryparse(Int, ret_type.position.value) === nothing
+        ret_type = IdentifierToken(ret_type.position)
+    end
 
     ret_type_node = convert_token_to_node(ret_type)
 
@@ -187,11 +191,15 @@ function parse_function_body!(tokens)
         popfirst!(tokens)  # Consume ':'
 
         # Get type
-        if ((lookahead(tokens) isa IdentifierToken) || (lookahead(tokens) isa FloatToken) ) == false
+        if ((lookahead(tokens) isa IdentifierToken) || (lookahead(tokens) isa FloatToken) || (lookahead(tokens) isa IntegerToken)) == false
             throw("Expected expression type identifier after ':' in function body got : $(lookahead(tokens))")
         end
 
         expr_type = popfirst!(tokens)
+        # Treat keyword tokens used as type names (e.g. IntegerToken with value "Integer") as identifiers
+        if expr_type isa IntegerToken && tryparse(Int, expr_type.position.value) === nothing
+            expr_type = IdentifierToken(expr_type.position)
+        end
         expr_type = convert_token_to_node(expr_type)
 
         # Pop :=

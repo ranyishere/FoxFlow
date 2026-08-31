@@ -1,0 +1,276 @@
+rules Microtubule {
+
+    # 1. Stochastic Growth Rule
+    stochastic_mt_growth := 
+        (im : Intermediate) -- (pos : Positive)
+        << (im_pos : im::Position, im_dir : im::Direction),
+           (pos_pos : pos::Position, pos_dir : pos::Direction) >>
+        ->
+        (im : Intermediate) -- (new_im : Intermediate) -- (pos : Positive)
+        << (im_pos : im::Position, im_dir : im::Direction),
+           (new_pos : new_im::Position, new_dir : new_im::Direction),
+           (pos_pos : pos::Position, pos_dir : pos::Direction) >>
+        with (
+                WITH_GROWTH_RATE_FACTOR * heaviside(
+                        HELP::distance(
+                            im_pos[0], im_pos[1], pos_pos[0], pos_pos[1]
+                            ), DIV_LENGTH
+                    )
+            ) where {
+
+            new_pos[0] = pos_pos[0] - (pos_pos[0] - im_pos[0]) / 100.0
+            new_pos[1] = pos_pos[1] - (pos_pos[1] - im_pos[1]) / 100.0
+            new_pos[2] = pos_pos[2] - (pos_pos[2] - im_pos[2]) / 100.0
+
+            new_dir[0] = im_dir[0]
+            new_dir[1] = im_dir[1]
+            new_dir[2] = im_dir[2]
+
+            angle : Float := ~UniformDistribution(-WOBBLE_ANGLE * 0.0174533, WOBBLE_ANGLE * 0.0174533)
+
+            # Disable wobble for now so that we can see the effect of the CIC rule more clearly.
+            # pos_dir[0] = pos_dir[0] * cos(angle) - pos_dir[1] * sin(angle)
+            # pos_dir[1] = pos_dir[0] * sin(angle) + pos_dir[1] * cos(angle)
+
+            pos_dir[0] = pos_dir[0]
+            pos_dir[1] = pos_dir[1]
+
+        }
+
+    # 2. Continuous ODE Growth Rule
+    ode_mt_growth :=
+        (im : Intermediate) -- (pos : Positive)
+        << (im_pos : im::Position), (pos_pos : pos::Position, pos_dir : pos::Direction) >>
+        ->
+        (im : Intermediate) -- (pos : Positive)
+        << (im_pos : im::Position), (pos_pos : pos::Position, pos_dir : pos::Direction) >>
+        solving (dpos[0] := D(pos_pos[0], t), dpos[1] := D(pos_pos[1], t), dpos[2] := D(pos_pos[2], t)) {
+
+            # Grow each tip along its OWN (randomized) direction vector so the
+            # microtubule extends in a straight line at speed V_PLUS. A bare
+            # `V_PLUS` on every axis gives every tip the same velocity
+            # (V_PLUS, V_PLUS, V_PLUS) -> they all march diagonally up-right.
+            dpos[0] : ODE = V_PLUS * pos_dir[0]
+            dpos[1] : ODE = V_PLUS * pos_dir[1]
+            dpos[2] : ODE = V_PLUS * pos_dir[2]
+
+        }
+
+    # 3. Stochastic Retraction Rule
+    mt_stochastic_retraction :=
+        (neg : Negative) -- (im1 : Intermediate) -- (im2 : Intermediate)
+        << (neg_pos : neg::Position, neg_dir : neg::Direction),
+           (im1_pos : im1::Position),
+           (im2_pos : im2::Position) >>
+        ->
+        (neg : Negative) -- (im2 : Intermediate)
+        << (neg_pos : neg::Position, neg_dir : neg::Direction),
+           (im2_pos : im2::Position) >>
+        with (
+            WITH_RETRACTION_RATE_FACTOR * heaviside(
+                    DIV_LENGTH_RETRACT, HELP::distance(neg_pos[0], neg_pos[1], im1_pos[0], im1_pos[1])
+                )
+        ) where {
+            dx : Float := im2_pos[0] - neg_pos[0]
+            dy : Float := im2_pos[1] - neg_pos[0]
+            dz : Float := im2_pos[2] - neg_pos[2]
+            len : Float := sqrt(dx * dx + dy * dy + dz * dz)
+            neg_dir[0] = dx / len
+            neg_dir[1] = dy / len
+            neg_dir[2] = dz / len
+        }
+
+    # 3b. Continuous ODE Retraction Rule
+    # Shrinks a Negative tip inward along its direction at speed V_MINUS, gated by a
+    # length limiter so retraction stops once the Negative--Intermediate segment is
+    # shorter than DIV_LENGTH_RETRACT / 2. Mirrors mt_ode_retraction in cmaRules.hpp.
+    mt_ode_retraction :=
+        (neg : Negative) -- (im : Intermediate)
+        << (neg_pos : neg::Position, neg_dir : neg::Direction), (im_pos : im::Position) >>
+        ->
+        (neg : Negative) -- (im : Intermediate)
+        << (neg_pos : neg::Position, neg_dir : neg::Direction), (im_pos : im::Position) >>
+        solving (dneg[0] := D(neg_pos[0], t), dneg[1] := D(neg_pos[1], t), dneg[2] := D(neg_pos[2], t)) {
+
+            dneg[0] : ODE = V_MINUS * neg_dir[0] * heaviside(
+                    HELP::distance(neg_pos[0], neg_pos[1], im_pos[0], im_pos[1]),
+                    DIV_LENGTH_RETRACT / 2.0
+                )
+
+            dneg[1] : ODE = V_MINUS * neg_dir[1] * heaviside(
+                    HELP::distance(neg_pos[0], neg_pos[1], im_pos[0], im_pos[1]),
+                    DIV_LENGTH_RETRACT / 2.0
+                )
+
+            dneg[2] : ODE = V_MINUS * neg_dir[2] * heaviside(
+                    HELP::distance(neg_pos[0], neg_pos[1], im_pos[0], im_pos[1]),
+                    DIV_LENGTH_RETRACT / 2.0
+                )
+
+        }
+
+    # 4. Standard Boundary Catastrophe Rule
+    boundary_catastrophe1 :=
+        (im : Intermediate) -- (pos : Positive)
+        (b0 : CellBoundary) -- (b1 : CellBoundary)
+        << (im_pos : im::Position), (pos_pos : pos::Position, pos_dir : pos::Direction),
+           (b0_pos : b0::Position), (b1_pos : b1::Position) >>
+        ->
+        (im : Intermediate) -- (neg : Negative)
+        (b0 : CellBoundary) -- (b1 : CellBoundary)
+        << (im_pos : im::Position), (neg_pos : neg::Position, neg_dir : neg::Direction),
+           (b0_pos : b0::Position), (b1_pos : b1::Position) >>
+        with (
+            indicator(
+                    DGGML::distanceToLineSegment(
+                        b0_pos[0], b0_pos[1], b1_pos[0], b1_pos[1], pos_pos[0], pos_pos[1]
+                    ) <= COLLISION_DISTANCE_BOUNDARY
+                ) * STANDARD_BOUNDARY_CATASTROPHE_RATE
+            ) where {
+
+            neg_pos[0] = pos_pos[0]
+            neg_pos[1] = pos_pos[1]
+            neg_pos[2] = pos_pos[2]
+
+            neg_dir[0] = -pos_dir[0]
+            neg_dir[1] = -pos_dir[1]
+            neg_dir[2] = -pos_dir[2]
+
+        }
+
+    # 4b. Deterministic Boundary Clamp (backstop)
+    # Position-only guard: if a Positive tip creeps past the inset wall line
+    # (into the band between the wall and the reaction-grid edge) it is converted
+    # to a Negative regardless of whether a CellBoundary segment match forms.
+    # boundary_catastrophe1 needs the tip and a boundary segment to co-locate in
+    # the same reaction cell; for a handful of tips that match never forms and
+    # they grow straight through the wall. This rule depends only on (im)--(pos),
+    # which always exists for a growing tip, so it reliably catches slippers
+    # before they cross the grid edge and become unrecoverable.
+    # boundary_clamp :=
+    #     (im : Intermediate) -- (pos : Positive)
+    #     << (im_pos : im::Position), (pos_pos : pos::Position, pos_dir : pos::Direction) >>
+    #     ->
+    #     (im : Intermediate) -- (neg : Negative)
+    #     << (im_pos : im::Position), (neg_pos : neg::Position, neg_dir : neg::Direction) >>
+    #     with (
+    #         (
+    #             heaviside(pos_pos[0], DOMAIN_MAX) +
+    #             heaviside(DOMAIN_MIN, pos_pos[0]) +
+    #             heaviside(pos_pos[1], DOMAIN_MAX) +
+    #             heaviside(DOMAIN_MIN, pos_pos[1])
+    #         ) * BOUNDARY_CLAMP_RATE
+    #     ) where {
+
+    #         neg_pos[0] = pos_pos[0]
+    #         neg_pos[1] = pos_pos[1]
+    #         neg_pos[2] = pos_pos[2]
+
+    #         neg_dir[0] = pos_dir[0]
+    #         neg_dir[1] = pos_dir[1]
+    #         neg_dir[2] = pos_dir[2]
+
+
+    #     }
+
+    # 5. Intermediate Collision-Induced Catastrophe (CIC)
+    catastrophe2_case1 :=
+        (im1 : Intermediate) -- (pos : Positive)
+        (im2 : Intermediate) -- (im3 : Intermediate)
+        << (im1_pos : im1::Position), (pos_pos : pos::Position, pos_dir : pos::Direction),
+           (im2_pos : im2::Position), (im3_pos : im3::Position) >>
+        ->
+        (im1 : Intermediate) -- (neg : Negative)
+        (im2 : Intermediate) -- (im3 : Intermediate)
+        << (im1_pos : im1::Position), (neg_pos : neg::Position, neg_dir : neg::Direction),
+           (im2_pos : im2::Position), (im3_pos : im3::Position) >>
+        with (
+            indicator(
+                DGGML::distanceToLineSegment(
+                        im2_pos[0], im2_pos[1], im3_pos[0], im3_pos[1], pos_pos[0], pos_pos[1]
+                    ) <= COLLISION_DISTANCE
+                ) * INTERMEDIATE_CIC_RATE
+            ) where {
+            neg_pos[0] = pos_pos[0]
+            neg_pos[1] = pos_pos[1]
+            neg_pos[2] = pos_pos[2]
+
+            neg_dir[0] = -pos_dir[0]
+            neg_dir[1] = -pos_dir[1]
+            neg_dir[2] = -pos_dir[2]
+        }
+
+    # 6. Nucleation / Creation Rule
+    creation_case1 :=
+        (nuc : Nucleator)
+        << (nuc_pos : nuc::Position) >>
+        ->
+        (nuc : Nucleator)
+        (neg : Negative) -- (im : Intermediate) -- (pos : Positive)
+        << (nuc_pos : nuc::Position),
+           (neg_pos : neg::Position, neg_dir : neg::Direction),
+           (im_pos  : im::Position,  im_dir  : im::Direction),
+           (pos_pos : pos::Position, pos_dir : pos::Direction) >>
+        with (CREATION_FACTOR * CREATION_RATE) where {
+
+            seg_len : Float := ~UniformDistribution(MT_MIN_SEGMENT_INIT, MT_MAX_SEGMENT_INIT)
+            theta   : Float := ~UniformDistribution(0.0, 6.2831853)
+
+            # INTERMEDIATE NODE
+            im_pos[0] = nuc_pos[0]
+            im_pos[1] = nuc_pos[1]
+            im_pos[2] = 0.0
+
+            # FIXME: Something with the direction is not quite correct.
+            # Need to get this to match.
+            im_dir_vector : FixedList<<2, Float>> := HELP::calculate_unit_vector(
+                neg_pos[0], neg_pos[1], pos_pos[0], pos_pos[1]
+            )
+
+            # POSITIVE NODE
+            pos_pos[0] = nuc_pos[0] + seg_len * sin(theta)
+            pos_pos[1] = nuc_pos[1] + seg_len * cos(theta)
+            pos_pos[2] = 0.0
+
+            pos_dir_vector : FixedList<<2, Float>> := HELP::calculate_unit_vector(
+                im_pos[0], im_pos[1], pos_pos[0], pos_pos[1]
+                )
+
+            pos_dir[0] = pos_dir_vector[0]
+            pos_dir[1] = pos_dir_vector[1]
+            pos_dir[2] = 0.0
+
+            # NEGATIVE NODE
+            neg_pos[0] = nuc_pos[0] - seg_len * sin(theta)
+            neg_pos[1] = nuc_pos[1] - seg_len * cos(theta)
+            neg_pos[2] = 0.0
+
+            neg_dir_vector : FixedList<<2, Float>> := HELP::calculate_unit_vector(
+                im_pos[0], im_pos[1], neg_pos[0], neg_pos[1]
+                )
+
+            neg_dir[0] = -neg_dir_vector[0]
+            neg_dir[1] = -neg_dir_vector[1]
+            neg_dir[2] = 0.0
+
+        }
+
+    # 7. Destruction Rule (Proximity-based removal)
+    destruction_case2 :=
+        (neg : Negative) -- (im1 : Intermediate) -- (pos : Positive)
+        (im2 : Intermediate)
+        << (neg_pos : neg::Position), (im1_pos : im1::Position), (pos_pos : pos::Position),
+           (im2_pos : im2::Position) >>
+        ->
+        (im2 : Intermediate)
+        << (im2_pos : im2::Position) >>
+        with (
+            indicator(
+                    HELP::distance(
+                            im1_pos[0], im1_pos[1], im2_pos[0], im2_pos[1]
+                        ) < COLLISION_DISTANCE
+                ) * MT_DESTRUCTION_RATE
+            ) where {
+        }
+
+}

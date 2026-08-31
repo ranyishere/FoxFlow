@@ -1,26 +1,13 @@
 types Microtubule {
+    Intermediate << Position : FixedList<<3, Float>>, Direction : FixedList<<3, Float>> >> : Type
+    Positive     << Position : FixedList<<3, Float>>, Direction : FixedList<<3, Float>> >> : Type
+    Negative     << Position : FixedList<<3, Float>>, Direction : FixedList<<3, Float>> >> : Type
+    Nucleator    << Position : FixedList<<3, Float>>, Direction : FixedList<<2, Integer>> >> : Type
 
-    # 2 Position, CountX CountY
-    Nucleator <<  Position : FixedList<<3, Float>>, Direction : FixedList<<2, Integer>> >> : Type
-
-    # 3 Position, Unit vector, CountX, CountY
-    CellBoundary<< Position : FixedList<<3, Float>>, Direction : FixedList<<3, Float>>, Count : FixedList<<2, Integer>> >> : Type
-
-    # 4 Position, Unit Vector
-    Retraction << Position : FixedList<<3, Float>>, Direction : FixedList<<3, Float >>  >> : Type
-
-    # 4 Position, Unit Vector
-    Intermediate << Position : FixedList<<3, Float >>, Direction : FixedList<<3, Float>> >> : Type
-
-    # 5 Position, Unit Vector
-    Positive << Position : FixedList<<3, Float >>, Direction : FixedList<<3, Float>> >> : Type
-
-    # 6 Position, Unit Vector
-    Destroyed << Position : FixedList<<3, Float >>, Direction : FixedList<<3, Float>> >> : Type
-
-    # 7 position, unit vector
-    Junction << Position : FixedList<<3, Float >>, Direction : FixedList<<3, Float>> >> : Type
-
-    # 8 Position, Unit Vector
-    Zipper << Position : FixedList<<3, Float >>, Direction : FixedList<<3, Float>> >> : Type
+    CellBoundary << 
+        Position : FixedList<<3, Float>>, Direction : FixedList<<3, Float>>, 
+        Count : FixedList<<2, Integer>> 
+        >> : Type
+    Zipper       << Position : FixedList<<3, Float>>, Direction : FixedList<<3, Float>> >> : Type
+    Junction     << Position : FixedList<<3, Float>>, Direction : FixedList<<3, Float>> >> : Type
 }

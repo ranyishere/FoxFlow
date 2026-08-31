@@ -1,10 +1,10 @@
 rules NeuralNetwork {
 
     # Builds Neural Network
-    build_nn := (start : StartType) << (start_pos : FixedList<<3, Float>>) >> -> 
+    build_nn := (start : StartType) << (start_pos : start::start_location) >> -> 
         (input: InputLayer) << 
-            (pos : FixedList<<3, Float>>,
-            image_batch : FixedList <<(64, 1, 28, 28), Float>>, input_id : Integer)
+            (pos : input::Position,
+            image_batch : input::ImageBatch, input_id : input::InputID)
 		>> 
         with (1.0) where {
 
@@ -50,13 +50,13 @@ rules NeuralNetwork {
     }
 
 
-    add_layer := (input : InputLayer) << (input_pos : FixedList<<3, Float>>,
-                            image_batch : FixedList <<(64, 1, 28, 28), Float>> , input_id : Integer)>>
--> (input : InputLayer) -- (layer : Layer) << (input_pos : FixedList<<3, Float>>,
-                            image_batch : FixedList <<(64, 1, 28, 28), Float>>, new_input_id : Integer),
-                            (layer_pos : FixedList<<3, Float>>,
-                            weights : FixedList<<100, Float>>,
-                            layer_id : Integer)
+    add_layer := (input : InputLayer) << (input_pos : input::Position,
+                            image_batch : input::ImageBatch, input_id : input::InputID)>>
+-> (input : InputLayer) -- (layer : Layer) << (input_pos : input::Position,
+                            image_batch : input::ImageBatch, new_input_id : input::InputID),
+                            (layer_pos : layer::Position,
+                            weights : layer::Weights,
+                            layer_id : layer::LayerID)
         >> with (1.0 * indicator(input_id == 0) ) where {
 
             new_input_id = input_id + 1
@@ -70,19 +70,19 @@ rules NeuralNetwork {
 
     }
 
-    add_output_layer := (input : InputLayer) -- (layer : Layer) << (input_pos : FixedList<<3, Float>>,
-                            image_batch : FixedList <<(64, 1, 28, 28), Float>>, input_id : Integer),
-                            (layer_pos : FixedList<<3, Float>>,
-                            weights : FixedList<<100, Float>>,
-                            layer_id : Integer)
+    add_output_layer := (input : InputLayer) -- (layer : Layer) << (input_pos : input::Position,
+                            image_batch : input::ImageBatch, input_id : input::InputID),
+                            (layer_pos : layer::Position,
+                            weights : layer::Weights,
+                            layer_id : layer::LayerID)
         >> -> (input : InputLayer) -- (layer : Layer) -- (output_layer : OutputLayer) << 
-                    (input_pos : FixedList<<3, Float>>,
-                    image_batch : FixedList <<(64, 1, 28, 28), Float>>, input_id : Integer),
-                    (layer_pos : FixedList<<3, Float>>,
-                    weights : FixedList<<100, Float>>,
-                    new_layer_id : Integer),
-                    (output_pos : FixedList<<3, Float>>,
-                    digit_class : FixedList<<10, Float>>, output_id : Integer)
+                    (input_pos : input::Position,
+                    image_batch : input::ImageBatch, input_id : input::InputID),
+                    (layer_pos : layer::Position,
+                    weights : layer::Weights,
+                    new_layer_id : layer::LayerID),
+                    (output_pos : output_layer::Position,
+                    digit_class : output_layer::DigitClass, output_id : output_layer::OutputID)
         >> with (1.0 * indicator(layer_id == 0 ) ) where {
 
             new_layer_id = layer_id + 1

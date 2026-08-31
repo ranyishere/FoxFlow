@@ -13,7 +13,7 @@ include("ir_simulations_section.jl")
 
 import .IRRuleGeneration: ir_rules_section!
 import .IRBuildUtils: emit, build, IRBuilder, build_sameline
-import ..AstNodes: IntegerNode, FloatNode, IdentifierNode, BinaryOpNode, GroupNode, CallNode, IndexAccessNode, ArrayLiteralNode, NamedParameterNode
+import ..AstNodes: IntegerNode, FloatNode, IdentifierNode, BinaryOpNode, GroupNode, CallNode, IndexAccessNode, ArrayLiteralNode, NamedParameterNode, UnaryOpNode
 
 import ..Tokens: IntegerToken, FloatToken, PositionToken, LiteralToken, ErrorToken, OperatorToken
 import .IRUtils: get_value, convert_type_name, write_file
@@ -42,6 +42,10 @@ function ir_value(ast)
         return ast.token.position.value
     elseif isa(ast, IdentifierNode)
         return get_value(ast)
+    elseif isa(ast, UnaryOpNode)
+        op = ast.expression.position.value
+        operand_value = ir_value(ast.operand)
+        return "$(op)$(operand_value)"
     elseif isa(ast, BinaryOpNode)
         left_value = ir_value(ast.lhs)
         right_value = ir_value(ast.rhs)
@@ -306,6 +310,11 @@ function ir_type_instance(ast, define_type=false, symbol_tables=nothing)
         expression = ir_value(ast.value)
         ir_type = convert_type_name(type_class_name)
         begin_struct = ["\t"*ir_type*" $(type_name) "*"= $(expression);"]
+    elseif isa(ast.value, UnaryOpNode)
+        # It's a unary operation, e.g. a negative literal like -0.05
+        expression = ir_value(ast.value)
+        ir_type = convert_type_name(type_class_name)
+        begin_struct = ["\t"*ir_type*" $(type_name) "*"= $(expression);"]
 
     elseif isa(ast.value, IdentifierNode)
         ir_type = convert_type_name(type_class_name)
@@ -507,27 +516,51 @@ function ir_main(name_space, num_stages, function_table=nothing)
     check_main
 end
 
-function do_simulation()
+function section_namespace(ast)
+    # Safely extract a section's declared namespace (its header name).
+    try
+        return get_value(ast.name)
+    catch
+        return nothing
+    end
+end
+
+function assert_namespace_match(expected, ast, keyword, filename)
+    # FoxFlow does not yet support cross-namespace references, so every
+    # section must live in the same namespace as the simulation. Fail fast
+    # with an actionable message instead of emitting C++ that won't compile.
+    actual = section_namespace(ast)
+    if actual !== nothing && actual != expected
+        throw(ErrorException(
+            "Namespace mismatch in '$(filename)': the '$(keyword)' section declares " *
+            "namespace '$(actual)', but simulation.fflow declares '$(expected)'.\n" *
+            "  FoxFlow does not yet support importing across namespaces, so all " *
+            "sections must share one namespace.\n" *
+            "  Fix: change the header to '$(keyword) $(expected) {', " *
+            "or set 'simulations $(actual) {' in simulation.fflow."
+        ))
+    end
+    return actual
+end
+
+function do_simulation(input_dir::AbstractString, output_dir::AbstractString)
     """
     Do Simulation — supports multiple sequential RunSimulation stages.
+
+    input_dir  : directory containing the FoxFlow source files
+                 (simulation.fflow, functions.fflow, params/types/rules, ...).
+    output_dir : directory where the generated C++ files are written.
     """
 
     sim_table = Dict()
     symbol_tables = OrderedDict()
     function_table = OrderedDict()
 
-    # test_folder = "fracture_network"
-    # test_folder = "cell_competition"
-    # test_folder = "microtubules"
-    # test_folder = "lattice"
-    # test_folder = "dissolution"
-    test_folder = "neural_network"
-
-    test_base = "../tests/"
-    base = "../tests/generated_tests/generated_2/"
+    # Ensure the output directory exists.
+    mkpath(output_dir)
 
     # ===== Parse simulation section =====
-    tokens_sim = tokenize_file(test_base*"$test_folder/simulation.fflow")
+    tokens_sim = tokenize_file(joinpath(input_dir, "simulation.fflow"))
     ast = parse_file!(tokens_sim)
 
     # ir_simulation_section! returns the namespace name and a list of ir_run_sim dicts (one per RunSimulation call)
@@ -539,31 +572,33 @@ function do_simulation()
 
     # ===== Parse functions (shared across stages) =====
     # TODO: If functions.fflow is missing just make it empty.
-    tokens_funct = tokenize_file(test_base*"$test_folder/functions.fflow")
+    tokens_funct = tokenize_file(joinpath(input_dir, "functions.fflow"))
     funct_ast = parse_file!(tokens_funct)
     ir_functions = ir_function_section(funct_ast[1], function_table)
 
     propensity_table["function_table"] = function_table
 
-    write_file(base*"functions.h", ir_functions)
+    write_file(joinpath(output_dir, "functions.h"), ir_functions)
 
     # ===== Parse params (shared — use from first stage) =====
     params_file = all_stages[1]["parameters"]
-    tokens_params = tokenize_file(test_base*"$test_folder/$params_file")
+    tokens_params = tokenize_file(joinpath(input_dir, params_file))
     ast_params = parse_file!(tokens_params)
+    assert_namespace_match(name_space, ast_params[1], "parameters", params_file)
 
     println("Generating Params")
     generated_params = ir_parameter_section(ast_params[1], propensity_table)
-    write_file(base*"parameters.h", generated_params)
+    write_file(joinpath(output_dir, "parameters.h"), generated_params)
 
     # ===== Parse types (shared — use from first stage) =====
     types_file = all_stages[1]["types"]
-    tokens_types = tokenize_file(test_base*"$test_folder/$types_file")
+    tokens_types = tokenize_file(joinpath(input_dir, types_file))
     ast_types = parse_file!(tokens_types)
+    assert_namespace_match(name_space, ast_types[1], "types", types_file)
 
     println("Generating Types")
     generated_types = ir_types_section(ast_types[1], symbol_tables)
-    write_file(base*"types.h", generated_types)
+    write_file(joinpath(output_dir, "types.h"), generated_types)
 
     # ===== Per-stage: parse rules, generate rules_N.h, collect rules_tables =====
     # We collect the rules_table for each stage so the model generator
@@ -582,8 +617,9 @@ function do_simulation()
         rules_file = stage_info["rules"]
         println("Stage $stage_idx: Generating Rules from $rules_file")
 
-        tokens_rules = tokenize_file(test_base*"$test_folder/$rules_file")
+        tokens_rules = tokenize_file(joinpath(input_dir, rules_file))
         ast_rules = parse_file!(tokens_rules)[1]
+        assert_namespace_match(name_space, ast_rules, "rules", rules_file)
 
         ir_rules_code = ir_rules_section!(ast_rules,
                                           rules_table, symbol_tables,
@@ -592,7 +628,7 @@ function do_simulation()
                                           stage_index=stage_idx)
 
         rules_filename = "rules_$stage_idx.h"
-        write_file(base*rules_filename, ir_rules_code)
+        write_file(joinpath(output_dir, rules_filename), ir_rules_code)
 
         # Save a snapshot of this stage's rules_table
         push!(stage_rules_tables, deepcopy(rules_table))
@@ -602,8 +638,8 @@ function do_simulation()
     # ===== Parse observables (optional — per stage via RunSimulation, or auto-detected) =====
     observable_section = nothing
     obs_file_from_stage = get(all_stages[1], "observables", nothing)
-    obs_file = obs_file_from_stage !== nothing ? test_base*"$test_folder/$obs_file_from_stage" :
-                   test_base*"$test_folder/observables.fflow"
+    obs_file = obs_file_from_stage !== nothing ? joinpath(input_dir, obs_file_from_stage) :
+                   joinpath(input_dir, "observables.fflow")
     if isfile(obs_file)
         tokens_obs = tokenize_file(obs_file)
         ast_obs = parse_file!(tokens_obs)
@@ -620,14 +656,200 @@ function do_simulation()
     ir_models = ir_models_section_multistage(all_stages, name_space, symbol_tables,
                                              stage_rules_tables, all_rules_includes;
                                              observable_section=observable_section)
-    write_file(base*"model.h", ir_models)
+    write_file(joinpath(output_dir, "model.h"), ir_models)
 
     # ===== Grammar Entry Point =====
     println("Generating Main")
     main_ir = ir_main(name_space, num_stages, function_table)
-    write_file(base*"main.cpp", main_ir)
+    write_file(joinpath(output_dir, "main.cpp"), main_ir)
 
     println("Done with IR Generation")
 end
 
-do_simulation()
+function print_usage()
+    println("""
+    FoxFlow — FoxFlow-to-C++ compiler driver
+
+    Usage:
+      julia ir.jl <command> <input_dir> [output_dir] [options]
+
+    Commands:
+      gen      Generate C++ sources from FoxFlow files (no compilation).
+      build    Generate, then configure & compile with CMake.
+      run      Generate, compile, then execute the built model.
+      watch    Keep a ParaView .pvd collection in sync with a results dir.
+      help     Show this message.
+
+    (If no command is given, 'gen' is assumed for backward compatibility.)
+
+    Arguments:
+      input_dir    Directory with FoxFlow sources (simulation.fflow, ...).
+      output_dir   Where generated C++ is written (default: <input_dir>/generated).
+
+    Options (used by 'build' and 'run'):
+      --project <dir>    CMake project directory (holds the top CMakeLists.txt).
+                         Default: output_dir (a self-contained project is
+                         generated there unless --no-cmake is given).
+      --build <dir>      Out-of-source build directory (default: <project>/build).
+      --target <name>    CMake target to build/run (default: main).
+      --sundials <dir>   Path passed as -DSUNDIALS_DIR
+                         (or set the FOXFLOW_SUNDIALS_DIR env var).
+      --dggml <dir>      FoxFlowDGGML library root baked into the generated
+                         CMakeLists.txt (or set the FOXFLOW_DGGML_DIR env var).
+      --no-cmake         Do not emit a self-contained CMakeLists.txt/settings.json
+                         (use with --project to build against an existing project).
+      --watch            (run only) Launch the sim, then keep a ParaView .pvd
+                         collection in <build>/my_results/simulation.pvd in sync
+                         with the real simulation time until the run finishes.
+      --                 Everything after is forwarded to the executable (run).
+
+    Examples:
+      julia ir.jl gen   ../tests/microtubules
+      julia ir.jl build ../tests/microtubules out --sundials /opt/sundials
+      julia ir.jl run   ../tests/microtubules out
+    """)
+end
+
+function main(args)
+    if isempty(args) || args[1] in ("help", "-h", "--help")
+        print_usage()
+        return 0
+    end
+
+    # `watch` has its own (results-dir based) argument shape; delegate directly.
+    if args[1] == "watch"
+        return PvdWatcher.run_cli(collect(args[2:end]))
+    end
+
+    commands = ("gen", "build", "run")
+    if args[1] in commands
+        cmd = args[1]
+        rest = collect(args[2:end])
+    else
+        # Backward compatible: no subcommand ⇒ generate only.
+        cmd = "gen"
+        rest = collect(args)
+    end
+
+    # Split off executable args after a lone "--".
+    exec_args = String[]
+    sep = findfirst(==("--"), rest)
+    if sep !== nothing
+        exec_args = collect(rest[sep+1:end])
+        rest = rest[1:sep-1]
+    end
+
+    # Parse options and positional arguments.
+    project_dir = nothing
+    build_dir = nothing
+    target = "main"
+    sundials_dir = get(ENV, "FOXFLOW_SUNDIALS_DIR", "")
+    dggml_dir = get(ENV, "FOXFLOW_DGGML_DIR", "")
+    emit_cmake = true
+    do_watch = false
+    positionals = String[]
+    i = 1
+    while i <= length(rest)
+        a = rest[i]
+        if a == "--project"
+            project_dir = rest[i+1]; i += 2
+        elseif a == "--build"
+            build_dir = rest[i+1]; i += 2
+        elseif a == "--target"
+            target = rest[i+1]; i += 2
+        elseif a == "--sundials"
+            sundials_dir = rest[i+1]; i += 2
+        elseif a == "--dggml"
+            dggml_dir = rest[i+1]; i += 2
+        elseif a == "--no-cmake"
+            emit_cmake = false; i += 1
+        elseif a == "--watch"
+            do_watch = true; i += 1
+        elseif startswith(a, "--")
+            println("Unknown option: $a")
+            print_usage()
+            return 1
+        else
+            push!(positionals, a); i += 1
+        end
+    end
+
+    if isempty(positionals)
+        println("Error: missing <input_dir>.")
+        print_usage()
+        return 1
+    end
+    input_dir = positionals[1]
+    output_dir = length(positionals) >= 2 ? positionals[2] : joinpath(input_dir, "generated")
+
+    if !isdir(input_dir)
+        println("Error: input directory does not exist: $input_dir")
+        return 1
+    end
+
+    println("Command:    $cmd")
+    println("Input dir:  $input_dir")
+    println("Output dir: $output_dir")
+
+    # ---- 1. Code generation (all commands) ----
+    do_simulation(input_dir, output_dir)
+
+    # ---- 1b. Emit a self-contained CMake project into the output dir ----
+    if emit_cmake
+        dggml = isempty(dggml_dir) ? Backend.default_dggml_dir() : dggml_dir
+        Backend.write_project_files(output_dir; dggml_dir=dggml, target=target)
+    end
+
+    cmd == "gen" && return 0
+
+    # ---- 2. Locate the CMake project ----
+    if project_dir === nothing
+        parent = dirname(abspath(output_dir))
+        if isfile(joinpath(output_dir, "CMakeLists.txt"))
+            project_dir = output_dir
+        elseif isfile(joinpath(parent, "CMakeLists.txt"))
+            project_dir = parent
+        else
+            println("Error: could not locate a CMakeLists.txt for the build.")
+            println("  Looked in: $output_dir and $parent")
+            println("  Pass --project <dir> to point at the CMake project root.")
+            return 1
+        end
+    end
+    build_dir === nothing && (build_dir = joinpath(project_dir, "build"))
+
+    # ---- 3. Build ----
+    Backend.build_project(project_dir; build_dir=build_dir, target=target,
+                          sundials_dir=sundials_dir)
+    cmd == "build" && return 0
+
+    # ---- 4. Run ----
+    exe = Backend.find_executable(build_dir, target)
+    if exe === nothing
+        println("Error: could not find built executable '$target' under $build_dir")
+        return 1
+    end
+    # The generated model requires a JSON settings file as argv[1].
+    isempty(exec_args) && (exec_args = ["settings.json"])
+
+    if !do_watch
+        Backend.run_executable(exe; args=exec_args)
+        return 0
+    end
+
+    # ---- 4b. Run + live .pvd watcher ----
+    # The model writes VTK frames into <exe dir>/my_results (wiped at step 0).
+    run_dir = dirname(exe)
+    results_dir = joinpath(run_dir, "my_results")
+    pvd_path = joinpath(results_dir, "simulation.pvd")
+    println("[watch] Results dir: $results_dir")
+    println("[watch] Open in ParaView: $pvd_path")
+
+    proc = Backend.run_executable(exe; args=exec_args, wait=false)
+    # Watch until the simulation process exits, then flush a final .pvd.
+    PvdWatcher.watch_pvd(results_dir; stop = () -> !process_running(proc))
+    wait(proc)
+    return 0
+end
+
+main(ARGS)

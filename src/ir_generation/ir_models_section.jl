@@ -624,6 +624,8 @@ function ir_models_section_multistage(all_stages, type_namespace, symbol_tables,
 
                         vtk_writer.save(system_graph, title+std::to_string(step));
                         collect(step);
+                        { std::ofstream ts(results_dir_name+\"/timesteps.csv\", std::ios::trunc);
+                          ts << \"step,time\\n\" << step << \",\" << (static_cast<double>(step) * settings.DELTA) << \"\\n\"; }
                     }
                     if( step != 0 & step % 1 == 0)
                     {
@@ -634,7 +636,9 @@ function ir_models_section_multistage(all_stages, type_namespace, symbol_tables,
                         vtk_writer.set_extra_point_data(attr);
 
                         vtk_writer.save(system_graph, title+std::to_string(step));
-                        collect(step);"*"}\n "*"if (save_system_graph) {save_graph(gamma, this->system_graph, settings, results_dir_name+\"/simulation_state_\"+std::to_string(step)+\".bin\");"*
+                        collect(step);
+                        { std::ofstream ts(results_dir_name+\"/timesteps.csv\", std::ios::app);
+                          ts << step << \",\" << (static_cast<double>(step) * settings.DELTA) << \"\\n\"; }"*"}\n "*"if (save_system_graph) {save_graph(gamma, this->system_graph, settings, results_dir_name+\"/simulation_state_\"+std::to_string(step)+\".bin\");"*
                         "\nsave_graph(gamma, this->system_graph, settings, results_dir_name+\"/simulation_state_latest.bin\");}\n }\n"
 
         # Per-stage simulation time override

@@ -41,12 +41,13 @@ function _ir_array_literal_inner(node)
     elseif node isa IdentifierNode
         return get_value(node)
     elseif node isa BinaryOpNode
-        lhs = _ir_array_literal_inner(GroupNode(node))
-        return lhs
+        op = node.expression.position.value
+        lhs = _ir_array_literal_inner(node.lhs)
+        rhs = _ir_array_literal_inner(node.rhs)
+        return "$lhs $op $rhs"
     elseif node isa GroupNode
         inner_expr = node.expression
-        lhs = _ir_array_literal_inner(inner_expr)
-        return lhs
+        return "(" * _ir_array_literal_inner(inner_expr) * ")"
     else
         return string(get_value(node))
     end

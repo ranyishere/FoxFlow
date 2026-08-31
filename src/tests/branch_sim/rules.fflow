@@ -1,24 +1,22 @@
 
 rules particle_rules {
 
-start_to_node := (start : StartType) << start_x, start_y >> 
-        -> (p2 : ParticleNodeCreator) << x, y, counter >> with (heaviside(10, 1)) where {
-            counter : Integer = 9
-            x : Float = start_x + 1
-            y : Float = start_y + 1
+start_to_node := (start : StartType) << spos : start::start_location >> 
+        -> (p2 : ParticleNodeCreator) << pos : p2::Position, counter : p2::Counter >> with (heaviside(10, 1)) where {
+            counter = 9
+            pos = [spos[0] + 1, spos[1] + 1]
     }
 
-create_particle := (p1 : ParticleNodeCreator) << x, y, counter >> 
-        -> (p1 : ParticleNodeCreator) (p3 : ParticleNode) << x, y, new_counter, << p_x, p_y >> >> with (heaviside(counter, 1)) where {
-            new_counter : Integer = counter - 1
+create_particle := (p1 : ParticleNodeCreator) << pos : p1::Position, counter : p1::Counter >> 
+        -> (p1 : ParticleNodeCreator) (p3 : ParticleNode) << (pos : p1::Position, new_counter : p1::Counter), (p3pos : p3::Position) >> with (heaviside(counter, 1)) where {
+            new_counter = counter - 1
 
-            p_x : Float = x + 0.1
-            p_y : Float = y + 0.1
+            p3pos = [pos[0] + 0.1, pos[1] + 0.1]
 
     }
 
-create_branch := (p1 : ParticleNode) << x_1, y_1 >>
-	-> (p1: ParticleNodeLink) -- (p2: ParticleNodeLink) << x_1, y_1, <<x_2, x_2>> >>
+create_branch := (p1 : ParticleNode) << pos1 : p1::Position >>
+	-> (p1: ParticleNodeLink) -- (p2: ParticleNodeLink) << (pos1 : p1::Position), (pos2 : p2::Position) >>
 	with (k_extend) where {
 		k_extend : Float := 1.30
 	}
