@@ -70,13 +70,19 @@ function ir_run_simulation_node!(ast, sim_table)
         observables_value = sim_table[str_obs_val]
     end
 
+    save_name_value = nothing
+    if run_sim_node.saveName !== nothing
+        save_name_value = get_value(run_sim_node.saveName)
+    end
+
     ir_run_sim = Dict(
         "initial_state" => is_value,
         "parameters" => params_value,
         "rules" => rules_value,
         "types" => types_value,
         "steps" => steps_value,
-        "observables" => observables_value
+        "observables" => observables_value,
+        "save_name" => save_name_value
     )
 
 end
