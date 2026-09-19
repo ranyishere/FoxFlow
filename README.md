@@ -1,20 +1,7 @@
 
 # FoxFlow
 --------
-A statically typed language with a focus on understanding,
-and verifying simulations with program semantics as stochastic processes.
 
-DGG is inheritently Turing Complete if we allow infinite Fockspace. This is bad if we care about analysis and static guarantees.
+ Scientific modeling requires expert domain knowledge, understanding code, and combining multiple disparate libraries. These scientific domains can contain dynamics that are discrete, continuous, stochastic or a combination of those properties. Moreover, these dynamics can work on structural objects like graphs that have parameters vertex and edges that vary.
 
-
-If we allow a finite Fockspace by truncating the number of particles we then get something that we can analyze better.
-
-FoxFlow is a non-turing complete implementation of DGG.
-
-
-## Analysis
--------
-- Density matrix renormalization group.
-- Supersymmetric theory of stochastic differential equations.
-- Reachability analysis
-- Emergent Phenomena analysis
+FoxFlow puts dynamic structurally changing graph based scientific modeling first. FoxFlow follows a semantic domain powered by creation/annihilation operators borrowed from physics while utilizing the master's equation and the time ordered product expansion to generate simulation algorithms. By using rule based declarative modeling, allows users who are domain experts to abstract away implementation details and focus on understanding their domain.
