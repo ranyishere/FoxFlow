@@ -188,6 +188,8 @@ Configure and compile a CMake project.
 - `sundials_dir`: passed as `-DSUNDIALS_DIR` when non-empty
                   (default: `ENV["FOXFLOW_SUNDIALS_DIR"]` if set).
 - `cmake`:        cmake executable (default: `ENV["FOXFLOW_CMAKE"]` or `"cmake"`).
+- `build_type`:   passed as `-DCMAKE_BUILD_TYPE` when non-empty (e.g. `"Debug"`
+                  so gdb has usable symbols).
 - `jobs`:         parallel build jobs (default: number of CPU threads).
 
 Returns the build directory.
@@ -197,6 +199,7 @@ function build_project(project_dir::AbstractString;
                        target::Union{Nothing,AbstractString}=nothing,
                        sundials_dir::AbstractString=get(ENV, "FOXFLOW_SUNDIALS_DIR", ""),
                        cmake::AbstractString=get(ENV, "FOXFLOW_CMAKE", "cmake"),
+                       build_type::AbstractString="",
                        jobs::Integer=Sys.CPU_THREADS)
 
     isdir(project_dir) || error("CMake project directory not found: $project_dir")
@@ -209,6 +212,10 @@ function build_project(project_dir::AbstractString;
     configure = `$cmake -S $project_dir -B $build_dir`
     if !isempty(sundials_dir)
         configure = `$configure -DSUNDIALS_DIR=$sundials_dir`
+    end
+    if !isempty(build_type)
+        # e.g. "Debug" / "RelWithDebInfo" so gdb has usable symbols.
+        configure = `$configure -DCMAKE_BUILD_TYPE=$build_type`
     end
     println("[backend] Configuring: ", configure)
     run(configure)
@@ -246,7 +253,7 @@ function find_executable(build_dir::AbstractString, name::AbstractString)
 end
 
 """
-    run_executable(exe; args=String[], dir=dirname(exe), wait=true)
+    run_executable(exe; args=String[], dir=dirname(exe), wait=true, debugger="")
 
 Run a built executable from working directory `dir` (defaults to the
 executable's directory, where CMake copies `settings.json`).
@@ -254,15 +261,36 @@ executable's directory, where CMake copies `settings.json`).
 When `wait=true` (default) this blocks until the process exits. When
 `wait=false` it returns the running `Process` immediately so the caller can do
 other work (e.g. drive a file watcher) while the simulation runs.
+
+When `debugger` is non-empty the executable is launched under it (e.g.
+`debugger="gdb"` runs `gdb --args <exe> <args>`, dropping into an interactive
+gdb session; `lldb` is also supported). A debugger session is always run with
+`wait=true` so it can use the terminal for interactive I/O.
 """
 function run_executable(exe::AbstractString; args::AbstractVector=String[],
-                        dir::AbstractString=dirname(exe), wait::Bool=true)
+                        dir::AbstractString=dirname(exe), wait::Bool=true,
+                        debugger::AbstractString="")
     isfile(exe) || error("Executable not found: $exe (did the build succeed?)")
     # Resolve to absolute paths: `dir` becomes the child's cwd, so a relative
     # `exe` (e.g. from a relative output_dir) would otherwise be resolved
     # against `dir` and fail to spawn (ENOENT).
     exe = abspath(exe)
     dir = abspath(dir)
+
+    if !isempty(debugger)
+        # `gdb --args exe args...` and `lldb -- exe args...` both start an
+        # interactive session; type `run` at the prompt to start the program.
+        cmd = if occursin("lldb", debugger)
+            `$debugger -- $exe $args`
+        else
+            `$debugger --args $exe $args`
+        end
+        println("[backend] Debugging: ", cmd, "  (cwd: ", dir, ")")
+        # Interactive debuggers need to own the terminal, so always wait.
+        run(Cmd(cmd, dir=dir); wait=true)
+        return nothing
+    end
+
     println("[backend] Running: ", exe, "  (cwd: ", dir, ")")
     proc = run(Cmd(`$exe $args`, dir=dir); wait=wait)
     return wait ? nothing : proc
