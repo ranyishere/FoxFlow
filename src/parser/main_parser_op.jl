@@ -7,6 +7,7 @@ import ..Tokens:
     EqualToken, CommaToken, EdgeToken, ODEToken, SampleToken, BackslashToken,
     LtToken, GtToken, LtEqToken, GtEqToken, EqEqToken, NotEqToken,
     NotToken, AndAndToken, OrOrToken, TypeToken, FunctionSectionToken, FunctionToken, CaretToken, ReturnToken,
+    OperatorToken,
     StateToken, SimulationTypesToken, RulesToken, DotToken, ParameterToken, SimulationToken, RunSimulationToken, QuoteToken, SimulationSectionToken, LoadFileToken, StringToken, SimulationParametersToken, DoubleColonToken,
     LeftSquareBracketToken, RightSquareBracketToken, ObservableSectionToken, ObservableToken, SimulationObservablesToken
 import ..AstNodes:
@@ -114,29 +115,28 @@ function parse_symbol_parameters!(tokens)
                 popfirst!(tokens)
 
             elseif isa(lookahead(tokens), IdentifierToken) && length(tokens) > 1 && isa(tokens[2], SingleColonToken)
-                # Handle cases like `param: Type`
+                # Handle cases like `param: Type` or `alias: symbol::attribute`
                 param_name = parse_symbol_name!(tokens)
                 popfirst!(tokens) # Consume `:`
 
-                # Vertex attribute access: `param : node::attribute`. The value
-                # after `:` is a namespaced identifier referencing a graph node
-                # attribute rather than a type signature.
                 if isa(lookahead(tokens), IdentifierToken) && length(tokens) > 1 && isa(tokens[2], DoubleColonToken)
-                    node_token = popfirst!(tokens)     # node name (namespace)
-                    popfirst!(tokens)                  # consume `::`
+                    # Vertex attribute binding: `alias : symbol::attribute`
+                    namespace_token = popfirst!(tokens) # symbol
+                    popfirst!(tokens)                   # Consume `::`
                     if !isa(lookahead(tokens), IdentifierToken)
-                        throw("Expected attribute name after `::` in vertex attribute access, got $(lookahead(tokens))")
+                        throw("Expected an identifier after `::` in attribute binding")
                     end
-                    attr_token = popfirst!(tokens)     # attribute name
-                    param_type = IdentifierNode(attr_token, node_token)
+                    attr_token = popfirst!(tokens)      # attribute
+                    param_value = IdentifierNode(attr_token, namespace_token)
+                    push!(params, NamedParameterNode(param_name, param_value))
                 else
                     param_type = parse_type_signature_list!(tokens)
+
+                    # println("param_name: $param_name, param_type: $param_type")
+
+                    push!(params, NamedParameterNode(param_name, param_type))
+                    # push!(params, (param_name, param_type))  # Add parameter name and type as a tuple to params array
                 end
-
-                # println("param_name: $param_name, param_type: $param_type")
-
-                push!(params, NamedParameterNode(param_name, param_type))
-                # push!(params, (param_name, param_type))  # Add parameter name and type as a tuple to params array
 
             else
 
@@ -377,6 +377,63 @@ function parse_index_element!(tokens)
     return expr
 end
 
+function collect_statement_tokens!(tokens)
+    # Collect the tokens that make up a single statement's right-hand-side
+    # expression.  A statement normally ends at a newline, but an expression
+    # may span several physical lines when it is wrapped in unbalanced
+    # parentheses or square brackets (e.g. a multi-line function call).  We
+    # therefore only treat a newline (or a `}` closing the where body) as the
+    # end of the statement when we are at bracket depth 0.  Interior newlines
+    # that appear inside brackets are dropped so the expression parser sees a
+    # clean token stream.
+    #
+    # In addition, a depth-0 newline does NOT end the statement when the
+    # expression is syntactically incomplete across the line break, i.e. either
+    # the last collected token is a binary operator (trailing-operator
+    # continuation, `... a +` ⏎ `b ...`) or the next non-newline token is a
+    # binary operator (leading-operator continuation, `... a` ⏎ `+ b ...`).
+    # A new where-body statement always begins with an identifier, never with
+    # an operator, so this is unambiguous.
+    expression = Any[]
+    depth = 0
+    while !isempty(tokens)
+        tok = lookahead(tokens)
+        if depth == 0 && isa(tok, EndLineToken)
+            # Trailing-operator continuation: expression is unfinished.
+            if !isempty(expression) && isa(expression[end], OperatorToken)
+                popfirst!(tokens)  # consume newline, keep collecting
+                continue
+            end
+            # Leading-operator continuation: look past blank lines for the next
+            # meaningful token; if it is a binary operator, keep collecting.
+            j = 1
+            while j <= length(tokens) && isa(tokens[j], EndLineToken)
+                j += 1
+            end
+            if j <= length(tokens) && isa(tokens[j], OperatorToken)
+                popfirst!(tokens)  # consume this newline, keep collecting
+                continue
+            end
+            break
+        end
+        if depth == 0 && isa(tok, RightBracketToken)
+            break
+        end
+        tok = popfirst!(tokens)
+        if isa(tok, LeftParenthesisToken) || isa(tok, LeftSquareBracketToken)
+            depth += 1
+        elseif isa(tok, RightParenthesisToken) || isa(tok, RightSquareBracketToken)
+            depth -= 1
+        end
+        if isa(tok, EndLineToken)
+            # Interior newline inside brackets — skip it.
+            continue
+        end
+        push!(expression, tok)
+    end
+    return expression
+end
+
 function parse_type_update!(tokens)
     # Updates to existing types done by a rule or sees a definition of a tmp variable
 
@@ -437,17 +494,7 @@ function parse_type_update!(tokens)
         # This is an intermediate value and not a type update
         if isa(lookahead(tokens), DefineToken)
             popfirst!(tokens)  # Consume `:=`
-            expression = []
-            depth = 0  # track paren/bracket nesting so multi-line RHS isn't truncated
-            while !isempty(tokens) && !(depth == 0 && isa(lookahead(tokens), EndLineToken))
-                literal = popfirst!(tokens)  # Assume it's a literal/expression
-                if isa(literal, LeftParenthesisToken) || isa(literal, LeftSquareBracketToken)
-                    depth += 1
-                elseif isa(literal, RightParenthesisToken) || isa(literal, RightSquareBracketToken)
-                    depth -= 1
-                end
-                push!(expression, literal)
-            end
+            expression = collect_statement_tokens!(tokens)
 
             expression_nodes = parse_expression!(expression)
             return DefinitionNode(symbol_name, type_signature_list, expression_nodes)
@@ -474,11 +521,7 @@ function parse_type_update!(tokens)
             return TypeInstanceUpdateNode(lhs_node, type_declarations)
         else
 
-            expression = []
-            while !isa(lookahead(tokens), EndLineToken) && !isa(lookahead(tokens), RightBracketToken)
-                literal = popfirst!(tokens)  # Assume it's a literal/expression
-                push!(expression,literal)
-            end
+            expression = collect_statement_tokens!(tokens)
 
             expression_nodes = parse_expression!(expression)
             # return TypeInstanceNode(symbol_name, symbol_parameters, type_signature_list, expression_nodes)
@@ -567,11 +610,6 @@ function parse_factor!(tokens)
         popfirst!(tokens)
         expr = parse_expression!(tokens)
 
-        # Skip newlines that may appear before the closing ')' in multi-line groups
-        while !isempty(tokens) && lookahead(tokens) isa EndLineToken
-            popfirst!(tokens)
-        end
-
         lookahead_token = lookahead(tokens)
         if lookahead_token isa RightParenthesisToken
             popfirst!(tokens)
@@ -605,23 +643,26 @@ function parse_factor!(tokens)
             popfirst!(tokens)  # consume '('
             args = Node[]
 
-            # Skip newlines that may appear right after '(' in multi-line calls
+            # Tolerate newlines after '(' in multi-line calls
             while !isempty(tokens) && lookahead(tokens) isa EndLineToken
                 popfirst!(tokens)
             end
 
             while !(lookahead(tokens) isa RightParenthesisToken)
                 push!(args, parse_expression!(tokens))
-                # Skip newlines between an argument and the next separator or ')'
+
+                # Skip newlines before a separator or the closing ')'
                 while !isempty(tokens) && lookahead(tokens) isa EndLineToken
                     popfirst!(tokens)
                 end
+
                 if lookahead(tokens) isa PunctuationToken
                     popfirst!(tokens)
-                end
-                # Skip newlines following a ',' separator
-                while !isempty(tokens) && lookahead(tokens) isa EndLineToken
-                    popfirst!(tokens)
+
+                    # Skip newlines after a separator
+                    while !isempty(tokens) && lookahead(tokens) isa EndLineToken
+                        popfirst!(tokens)
+                    end
                 end
 
             end
