@@ -173,6 +173,20 @@ function parse_run_simulation!(tokens)
         popfirst!(tokens)  # pop EndlineToken
     end
 
+    # Optional first argument: save name for the last save-state bin file.
+    # Provided as a string literal, e.g. RunSimulation("my_state.bin", ...).
+    save_name = nothing
+    if lookahead(tokens) isa StringToken
+        save_name = StringNode(popfirst!(tokens))  # pop StringToken
+
+        if lookahead(tokens) isa PunctuationToken
+            popfirst!(tokens)  # pop CommaToken
+        else
+            throw(ErrorException("Expected CommaToken after save name got $(lookahead(tokens))"))
+        end
+        remove_endlines_func_args!(tokens)
+    end
+
     # Grab initial state
     initial_state = nothing
     if lookahead(tokens) isa IdentifierToken
@@ -263,7 +277,7 @@ function parse_run_simulation!(tokens)
     end
     popfirst!(tokens)  # pop RightParenthesisToken
 
-    return RunSimulationNode(initial_state, sim_paramters, sim_rules, sim_types, sim_iterations, sim_observables)
+    return RunSimulationNode(save_name, initial_state, sim_paramters, sim_rules, sim_types, sim_iterations, sim_observables)
 end
 
 function parse_sim_observables!(tokens)
