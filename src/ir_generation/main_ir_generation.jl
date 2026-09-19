@@ -696,6 +696,11 @@ function print_usage()
                          (or set the FOXFLOW_SUNDIALS_DIR env var).
       --dggml <dir>      FoxFlowDGGML library root baked into the generated
                          CMakeLists.txt (or set the FOXFLOW_DGGML_DIR env var).
+      --build-type <t>   CMake build type (Debug, Release, RelWithDebInfo, ...).
+                         Defaults to Debug when --gdb/--lldb is used.
+      --gdb              (run only) Launch the built model under gdb (implies a
+                         Debug build). Type `run` at the gdb prompt to start.
+      --lldb             (run only) Same as --gdb but using lldb.
       --no-cmake         Do not emit a self-contained CMakeLists.txt/settings.json
                          (use with --project to build against an existing project).
       --watch            (run only) Launch the sim, then keep a ParaView .pvd
@@ -707,6 +712,7 @@ function print_usage()
       julia ir.jl gen   ../tests/microtubules
       julia ir.jl build ../tests/microtubules out --sundials /opt/sundials
       julia ir.jl run   ../tests/microtubules out
+      julia ir.jl run   ../tests/microtubules out --gdb
     """)
 end
 
@@ -747,6 +753,8 @@ function main(args)
     dggml_dir = get(ENV, "FOXFLOW_DGGML_DIR", "")
     emit_cmake = true
     do_watch = false
+    debugger = ""
+    build_type = ""
     positionals = String[]
     i = 1
     while i <= length(rest)
@@ -761,6 +769,12 @@ function main(args)
             sundials_dir = rest[i+1]; i += 2
         elseif a == "--dggml"
             dggml_dir = rest[i+1]; i += 2
+        elseif a == "--build-type"
+            build_type = rest[i+1]; i += 2
+        elseif a == "--gdb"
+            debugger = "gdb"; i += 1
+        elseif a == "--lldb"
+            debugger = "lldb"; i += 1
         elseif a == "--no-cmake"
             emit_cmake = false; i += 1
         elseif a == "--watch"
@@ -772,6 +786,14 @@ function main(args)
         else
             push!(positionals, a); i += 1
         end
+    end
+
+    # Debugging implies a build with symbols, and can't run under a live
+    # .pvd watcher (gdb owns the terminal). Default to a Debug build so gdb
+    # has full symbol info unless the user picked an explicit build type.
+    if !isempty(debugger)
+        do_watch = false
+        isempty(build_type) && (build_type = "Debug")
     end
 
     if isempty(positionals)
@@ -820,7 +842,8 @@ function main(args)
 
     # ---- 3. Build ----
     Backend.build_project(project_dir; build_dir=build_dir, target=target,
-                          sundials_dir=sundials_dir)
+                          sundials_dir=sundials_dir, build_type=build_type)
+
     cmd == "build" && return 0
 
     # ---- 4. Run ----
@@ -831,6 +854,11 @@ function main(args)
     end
     # The generated model requires a JSON settings file as argv[1].
     isempty(exec_args) && (exec_args = ["settings.json"])
+
+    if !isempty(debugger)
+        Backend.run_executable(exe; args=exec_args, debugger=debugger)
+        return 0
+    end
 
     if !do_watch
         Backend.run_executable(exe; args=exec_args)
