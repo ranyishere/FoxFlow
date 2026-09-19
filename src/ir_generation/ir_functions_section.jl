@@ -41,13 +41,11 @@ function _ir_array_literal_inner(node)
     elseif node isa IdentifierNode
         return get_value(node)
     elseif node isa BinaryOpNode
-        op = node.expression.position.value
-        lhs = _ir_array_literal_inner(node.lhs)
-        rhs = _ir_array_literal_inner(node.rhs)
-        return "$lhs $op $rhs"
+        return traverse_group_node_expr(GroupNode(node))
     elseif node isa GroupNode
-        inner_expr = node.expression
-        return "(" * _ir_array_literal_inner(inner_expr) * ")"
+        return traverse_group_node_expr(node)
+    elseif node isa CallNode || node isa IndexAccessNode
+        return traverse_group_node_expr(GroupNode(node))
     else
         return string(get_value(node))
     end
@@ -70,8 +68,11 @@ function builtin_to_cpp(func_name, arg_str)
     elseif func_name == "uniform_distr"
         return "DGGML::uniform_distr()"
     elseif func_name == "indicator"
-        parts = split(arg_str, ", ", limit=2)
-        return length(parts) == 2 ? "(($(parts[1])) > 0 ? ($(parts[2])) : 0.0)" : "($arg_str)"
+        return "(($arg_str) ? 1.0 : 0.0)"
+    elseif func_name == "min"
+        return "std::min($arg_str)"
+    elseif func_name == "max"
+        return "std::max($arg_str)"
     elseif func_name == "zeros_matrix"
         return "torch::zeros({$arg_str}, torch::kFloat64)"
     elseif func_name == "ones_matrix"
@@ -602,7 +603,7 @@ function ir_func_sec_hdr!(ir_builder, section_name)
     Adds ir function section header information
     """
 
-    hdr = "#ifndef DGGML_FUNCTIONS_$(section_name)_HPP\n#define DGGML_FUNCTIONS_$(section_name)_HPP\n#include<cmath>\n#include <torch/script.h>\n namespace $section_name {\n"
+    hdr = "#ifndef DGGML_FUNCTIONS_$(section_name)_HPP\n#define DGGML_FUNCTIONS_$(section_name)_HPP\n#include<cmath>\n#include <algorithm>\n#include <torch/script.h>\n namespace $section_name {\n"
     emit(ir_builder, hdr)
     return ir_builder
 end
