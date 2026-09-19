@@ -604,14 +604,41 @@ function ir_models_section_multistage(all_stages, type_namespace, symbol_tables,
         save_graph_ir = ir_save_graph(type_namespace)
 
         # Checkpoint function
+
+        # Name of the "latest" save-state bin file. Provided as the first
+        # argument to RunSimulation, e.g. RunSimulation("my_state.bin", ...).
+        # Falls back to the default when not specified.
+        stage_save_name = get(stage_info, "save_name", nothing)
+        if stage_save_name === nothing || stage_save_name == ""
+            stage_save_name = "simulation_state_latest.bin"
+        end
+
+        # Clear stale transient output (VTK/CSV) from previous runs at step 0,
+        # but preserve saved-state (.bin) files. A blanket remove_all would
+        # delete the state file that a later stage — or a standalone rerun of a
+        # later stage — needs to load (e.g. "my_results/boundary_latest.bin"),
+        # which is what caused an empty simulation when running a stage on its
+        # own. Selective cleanup keeps output tidy while protecting state.
+        dir_setup_ir =
+            "// Make sure the results directory exists.
+                        if (!std::filesystem::exists(results_dir_name))
+                            std::filesystem::create_directory(results_dir_name);
+                        // Clear stale transient output (VTK/CSV) from a previous
+                        // run, but keep saved-state (.bin) files so earlier
+                        // stages' checkpoints remain loadable.
+                        for (const auto& entry : std::filesystem::directory_iterator(results_dir_name))
+                        {
+                            if (entry.is_regular_file() && entry.path().extension() != \".bin\")
+                                std::filesystem::remove(entry.path());
+                        }"
+
         check_point = 
         "void checkpoint(std::size_t step) override {"*
                     "std::string results_dir_name = \"my_results\";"*
                     "if(step == 0)
                     {
                         // Create the local save directory
-                        std::filesystem::remove_all(results_dir_name);
-                        std::filesystem::create_directory(results_dir_name);
+                        $dir_setup_ir
 
                         DGGML::GridFileWriter3D grid_writer;
                         grid_writer.save({geoplex2D.reaction_grid,geoplex2D.dim_label},
@@ -639,7 +666,7 @@ function ir_models_section_multistage(all_stages, type_namespace, symbol_tables,
                         collect(step);
                         { std::ofstream ts(results_dir_name+\"/timesteps.csv\", std::ios::app);
                           ts << step << \",\" << (static_cast<double>(step) * settings.DELTA) << \"\\n\"; }"*"}\n "*"if (save_system_graph) {save_graph(gamma, this->system_graph, settings, results_dir_name+\"/simulation_state_\"+std::to_string(step)+\".bin\");"*
-                        "\nsave_graph(gamma, this->system_graph, settings, results_dir_name+\"/simulation_state_latest.bin\");}\n }\n"
+                        "\nsave_graph(gamma, this->system_graph, settings, results_dir_name+\"/$stage_save_name\");}\n }\n"
 
         # Per-stage simulation time override
         stage_steps = stage_info["steps"]
