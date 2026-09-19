@@ -425,6 +425,7 @@ module AstNodes
     end
 
     struct RunSimulationNode <: Node
+        saveName :: Union{StringNode, Nothing}
         initialState :: IdentifierNode
         parameters :: IdentifierNode
         rules :: IdentifierNode
