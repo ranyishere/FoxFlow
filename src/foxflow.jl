@@ -5,8 +5,9 @@ function compile_foxflow(file_name::String)
 
     # Step 1: Lexical Analysis
     tokens = tokenize_file(file_name)
-    println("Tokens:", tokens)
-    exit(0)
+
+    # println("Tokens:", tokens)
+    # exit(0)
 
     # Step 2: Parsing
     ast = parse(tokens)
