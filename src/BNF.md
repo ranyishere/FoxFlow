@@ -533,6 +533,7 @@ functions Microtubule {
 <string-or-identifier> ::= <string-literal> | <symbol-name>
 
 <run-simulation> ::= "RunSimulation" "("
+                     [ <string-literal> "," ]
                      <symbol-name> ","
                      <symbol-name> ","
                      <symbol-name> ","
@@ -543,6 +544,10 @@ functions Microtubule {
 
 <symbol-or-number> ::= <symbol-name> | <number>
 ```
+
+The optional leading `<string-literal>` sets the file name used for the
+"latest" save-state bin file written by the checkpoint (defaults to
+`simulation_state_latest.bin`).
 
 ### Examples
 
@@ -562,6 +567,11 @@ simulations NeuralNetwork {
     obs    : SimulationObservables := load("observables.fflow")
     time   : Float                 := 100.0
     sim    : Simulation            := RunSimulation(types, params, rules, funcs, time, obs)
+}
+
+simulations Microtubule {
+    # Optional first argument: name of the latest save-state bin file.
+    sim : Simulation := RunSimulation("my_state_latest.bin", state, params, rules, types, time)
 }
 ```
 
