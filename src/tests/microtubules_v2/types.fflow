@@ -1,0 +1,13 @@
+types Microtubule {
+    Intermediate << Position : FixedList<<3, Float>>, Direction : FixedList<<3, Float>> >> : Type
+    Positive     << Position : FixedList<<3, Float>>, Direction : FixedList<<3, Float>> >> : Type
+    Negative     << Position : FixedList<<3, Float>>, Direction : FixedList<<3, Float>> >> : Type
+    Nucleator    << Position : FixedList<<3, Float>>, Direction : FixedList<<2, Integer>> >> : Type
+
+    CellBoundary << 
+        Position : FixedList<<3, Float>>, Direction : FixedList<<3, Float>>, 
+        Count : FixedList<<2, Integer>> 
+        >> : Type
+    Zipper       << Position : FixedList<<3, Float>>, Direction : FixedList<<3, Float>> >> : Type
+    Junction     << Position : FixedList<<3, Float>>, Direction : FixedList<<3, Float>> >> : Type
+}

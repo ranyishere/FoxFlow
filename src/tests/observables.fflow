@@ -1,0 +1,13 @@
+observables Dissolution {
+    # Observable for tracking the number of fluid particles in the system
+    FluidParticleCount : Integer := 0
+ 
+    # Observable for tracking the total amount of rock dissolved (cumulative density loss)
+    TotalDissolved : Float := 0.0
+ 
+    # Observable for tracking the average pressure in the fluid particles
+    AveragePressure : Float := 0.0
+ 
+    # Observable for tracking the average concentration in the fluid particles
+    AverageConcentration : Float := 0.0
+}

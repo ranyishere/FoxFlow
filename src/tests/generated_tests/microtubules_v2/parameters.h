@@ -1,0 +1,78 @@
+#ifndef DGGML_PARAMETERS_HPP
+#define DGGML_PARAMETERS_HPP
+#include <string>
+#include "simdjson.h"
+struct Parameters {
+	double TOTAL_TIME = 400;
+	double DELTA = 0.1;
+	double MAXIMAL_REACTION_RADIUS = 0.15;
+	double varepsilon = MAXIMAL_REACTION_RADIUS;
+	int NUM_STEPS = TOTAL_TIME / DELTA;
+	int MIN_DELTA_STEPS = 5;
+	double DELTA_DELTA_T = DELTA / MIN_DELTA_STEPS;
+	double DELTA_T_MIN = DELTA_DELTA_T;
+	double CELL_NX = 3;
+	double CELL_NY = 3;
+	double CELL_NZ = 3;
+	double CELL_DX = 1;
+	double CELL_DY = 1;
+	double CELL_DZ = 1;
+	double rho_create = 0.026;
+	double rho_grow = 100.0;
+	double rho_retract = 10.0;
+	double L_DIV = 0.075;
+	double L_min = 0.025;
+	int boundary_pts = 300;
+	double boundary_margin = 0.2;
+	double boundary_offset = (CELL_NX - 2.0 * boundary_margin) / boundary_pts;
+	double BOUNDARY_BUILD_SPEED = 100.0;
+	double s_min = 0.005;
+	double s_max = 0.01;
+	double buffer = CELL_NX / 10.0;
+	int nuc_count_n = 10;
+	double offset = (CELL_NX - buffer * 2) / nuc_count_n;
+	double creation_factor = 1.0;
+	double creation_rate = 0.0026;
+	double mt_min_segment_init = 0.005;
+	double mt_max_segment_init = 0.01;
+	double v_plus = 0.0615;
+	double collision_distance = 10.0;
+	double boundary_cic = 4000000;
+	double destruction_factor = 0.0026;
+	double gr_to_ret = 0.016;
+	double ret_to_gr = 0.016;
+	double s_col = 0.025;
+	double rho_int_cic = 12000;
+	double rho_grow_cic = 12000;
+	double rho_retract_cic = 12000;
+	double theta_cic = 40.0;
+	double theta_cross = 40.0;
+	double rho_cross = 200.0 * 100.0;
+	double rho_zip_hit = 4000.0;
+	double rho_zip_guard = 12000.0;
+	double WITH_GROWTH_RATE_FACTOR = 100.0;
+	double DIV_LENGTH = 0.075;
+	double WOBBLE_ANGLE = 5.0;
+	int ENABLE_WOBBLE = 1;
+	double V_PLUS = 0.0615;
+	double WITH_RETRACTION_RATE_FACTOR = 10.0;
+	double DIV_LENGTH_RETRACT = 0.0025;
+	double V_MINUS = 0.05;
+	double COLLISION_DISTANCE = 0.025;
+	double COLLISION_DISTANCE_BOUNDARY = 0.02;
+	double STANDARD_BOUNDARY_CATASTROPHE_RATE = 100.0;
+	double BOUNDARY_CLAMP_MARGIN = boundary_margin / 2.0;
+	double DOMAIN_MIN = BOUNDARY_CLAMP_MARGIN;
+	double DOMAIN_MAX = CELL_NX - BOUNDARY_CLAMP_MARGIN;
+	double BOUNDARY_CLAMP_RATE = STANDARD_BOUNDARY_CATASTROPHE_RATE;
+	double INTERMEDIATE_CIC_RATE = 5.0;
+	double POSITIVE_CIC_RATE = 5.0;
+	double NEGATIVE_CIC_RATE = 5.0;
+	double CATASTROPHE_ANGLE = 40.0;
+	double CREATION_RATE = 0.5;
+	double CREATION_FACTOR = 1.0;
+	double MT_MIN_SEGMENT_INIT = 0.005;
+	double MT_MAX_SEGMENT_INIT = 0.01;
+	double MT_DESTRUCTION_RATE = 100.0;
+};
+#endif

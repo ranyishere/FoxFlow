@@ -1,0 +1,12 @@
+functions HELP {
+
+    # This is how you load a PyTorch model and use it in FoxFlow.
+    # The model should be defined in a separate file (e.g. policy_net.pt) and should be compatible with the input
+    # and output types defined in the NeuralNetwork types.
+    # nn_policy : Function <<(input : FixedList<<3, Float>>)>> -> FixedList<<3, Float>> := load("policy_net.pt")
+
+    activation : Function <<(M : Integer, x : FixedList <<M, Float>>, w : FixedList <<M, Float>>)>> -> Tensor := {
+        return einsum("i->", mat_mul(x,w))
+    }
+
+}

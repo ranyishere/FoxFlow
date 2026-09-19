@@ -1,0 +1,173 @@
+# Stage 1: Lattice and fluid line construction
+# All stochastic propagation rules that build the graph structure
+rules Dissolution {
+
+    # 1. Start the rock grid generation + seed FluidSource
+    start_rock_prop := (start : StartType) << (start_pos : FixedList<<3, Float>>) >> -> 
+        (start_fluid : FluidSource) (rock : RockStart) << 
+            (fpos : FixedList<<3, Float>>, funit : FixedList<<3, Float>>, fc : FixedList<<1, Integer>>, fP : Float, fC : Float),
+            (pos : FixedList<<3, Float>>, c_count : FixedList<<3, Integer>>, dir : FixedList<<3, Integer>>, rho : Float)
+        >> 
+        with (10000.0) where {
+
+            fpos = [1.35, 1.35, 0.0]
+            funit = [0.0, 0.0, 1.0]
+            fc = [10]
+            fP = 1.0
+            fC = 0.0
+
+            pos = [0.0, 0.0, 0.0]
+            c_count = [10, 10, 10]
+            dir = [0, 0, 0]
+            rho = 1.0
+    }
+
+    # 2. Grow the X-axis lines
+    propagate_rock_x := (rock0 : RockStart) << (pos0 : FixedList<<3, Float>>, c_count0 : FixedList<<3, Integer>>, dir0 : FixedList<<3, Integer>>, rho0 : Float) >> -> 
+        (rock0 : RockStart) (Rock1 : RockStart)
+        << (pos0n : FixedList<<3, Float>>, c_count0n : FixedList<<3, Integer>>, dir0n : FixedList<<3, Integer>>, rho0n : Float), 
+           (pos1n : FixedList<<3, Float>>, c_count1n : FixedList<<3, Integer>>, dir1n : FixedList<<3, Integer>>, rho1n : Float) >> 
+        with ( 10000.0 * indicator( c_count0[0] > 0 ) ) where {
+
+        offset_distance : Float := 0.3
+
+        pos0n = pos0
+        c_count0n = [0, c_count0[1], c_count0[2]]
+        dir0n = [1, 0, 0]
+        rho0n = rho0
+
+        pos1n = [pos0[0] + offset_distance, pos0[1], pos0[2]]
+        c_count1n = [c_count0[0] - 1, c_count0[1], c_count0[2]]
+        dir1n = [1, 0, 0]
+        rho1n = 1.0
+    }
+
+    # 3. Grow Y-axis lines
+    propagate_rock_y := (rock0 : RockStart) << (pos0 : FixedList<<3, Float>>, c_count0 : FixedList<<3, Integer>>, dir0 : FixedList<<3, Integer>>, rho0 : Float) >> -> 
+        (rock0 : RockStart) (Rock1 : RockStart)
+        << (pos0n : FixedList<<3, Float>>, c_count0n : FixedList<<3, Integer>>, dir0n : FixedList<<3, Integer>>, rho0n : Float), 
+           (pos1n : FixedList<<3, Float>>, c_count1n : FixedList<<3, Integer>>, dir1n : FixedList<<3, Integer>>, rho1n : Float) >> 
+        with ( 10000.0 * indicator( c_count0[0] == 0) * indicator(c_count0[1] > 0 ) ) where {
+
+        offset_distance : Float := 0.3
+
+        pos0n = pos0
+        c_count0n = [c_count0[0], 0, c_count0[2]]
+        dir0n = [0, 1, 0]
+        rho0n = rho0
+
+        pos1n = [pos0[0], pos0[1] + offset_distance, pos0[2]]
+        c_count1n = [c_count0[0], c_count0[1] - 1, c_count0[2]]
+        dir1n = [0, 1, 0]
+        rho1n = 1.0
+    }
+
+    # 4. Grow Z-axis lines
+    propagate_rock_z := (rock0 : RockStart) << (pos0 : FixedList<<3, Float>>, c_count0 : FixedList<<3, Integer>>, dir0 : FixedList<<3, Integer>>, rho0 : Float) >> -> 
+        (rock0 : RockStart) (Rock1 : RockStart)
+        << (pos0n : FixedList<<3, Float>>, c_count0n : FixedList<<3, Integer>>, dir0n : FixedList<<3, Integer>>, rho0n : Float), 
+           (pos1n : FixedList<<3, Float>>, c_count1n : FixedList<<3, Integer>>, dir1n : FixedList<<3, Integer>>, rho1n : Float) >> 
+        with ( 10000.0 * indicator( c_count0[0] == 0) * indicator(c_count0[1] == 0) * indicator(c_count0[2] > 0 ) ) where {
+
+        offset_distance : Float := 0.3
+
+        pos0n = pos0
+        c_count0n = [c_count0[0], c_count0[1], 0]
+        dir0n = [0, 0, 1]
+        rho0n = rho0
+
+        pos1n = [pos0[0], pos0[1], pos0[2] + offset_distance]
+        c_count1n = [c_count0[0], c_count0[1], c_count0[2] - 1]
+        dir1n = [0, 0, 1]
+        rho1n = 1.0
+    }
+
+    # 5. Source propagates first child (count > 1)
+    propagate_from_source := (f0 : FluidSource) << (fp0 : FixedList<<3, Float>>, fu0 : FixedList<<3, Float>>, fc0 : FixedList<<1, Integer>>, fP0 : Float, fC0 : Float) >> ->
+        (f0 : FluidSource) -- (f1 : Fluid)
+        << (fp0n : FixedList<<3, Float>>, fu0n : FixedList<<3, Float>>, fc0n : FixedList<<1, Integer>>, fP0n : Float, fC0n : Float),
+           (fp1n : FixedList<<3, Float>>, fu1n : FixedList<<3, Float>>, fc1n : FixedList<<1, Integer>>, fP1n : Float, fC1n : Float) >>
+        with ( 10000.0 * indicator(fc0[0] > 1) ) where {
+
+        fluid_spacing : Float := 0.3
+
+        fp0n = fp0
+        fu0n = fu0
+        fc0n = [0]
+        fP0n = fP0
+        fC0n = fC0
+
+        fp1n = [fp0[0] + fu0[0] * fluid_spacing, fp0[1] + fu0[1] * fluid_spacing, fp0[2] + fu0[2] * fluid_spacing]
+        fu1n = fu0
+        fc1n = [fc0[0] - 1]
+        fP1n = 0.0
+        fC1n = 0.0
+    }
+
+    # 6. Source propagates only child to sink (count == 1)
+    propagate_source_to_sink := (f0 : FluidSource) << (fp0 : FixedList<<3, Float>>, fu0 : FixedList<<3, Float>>, fc0 : FixedList<<1, Integer>>, fP0 : Float, fC0 : Float) >> ->
+        (f0 : FluidSource) -- (f1 : FluidSink)
+        << (fp0n : FixedList<<3, Float>>, fu0n : FixedList<<3, Float>>, fc0n : FixedList<<1, Integer>>, fP0n : Float, fC0n : Float),
+           (fp1n : FixedList<<3, Float>>, fu1n : FixedList<<3, Float>>, fc1n : FixedList<<1, Integer>>, fP1n : Float, fC1n : Float) >>
+        with ( 10000.0 * indicator(fc0[0] == 1) ) where {
+
+        fluid_spacing : Float := 0.3
+
+        fp0n = fp0
+        fu0n = fu0
+        fc0n = [0]
+        fP0n = fP0
+        fC0n = fC0
+
+        fp1n = [fp0[0] + fu0[0] * fluid_spacing, fp0[1] + fu0[1] * fluid_spacing, fp0[2] + fu0[2] * fluid_spacing]
+        fu1n = fu0
+        fc1n = [0]
+        fP1n = 0.0
+        fC1n = 0.0
+    }
+
+    # 7. Fluid propagates along the line (count > 1)
+    propagate_initial_fluid := (f0 : Fluid) << (fp0 : FixedList<<3, Float>>, fu0 : FixedList<<3, Float>>, fc0 : FixedList<<1, Integer>>, fP0 : Float, fC0 : Float) >> ->
+        (f0 : Fluid)--(f1 : Fluid)
+        << (fp0n : FixedList<<3, Float>>, fu0n : FixedList<<3, Float>>, fc0n : FixedList<<1, Integer>>, fP0n : Float, fC0n : Float),
+           (fp1n : FixedList<<3, Float>>, fu1n : FixedList<<3, Float>>, fc1n : FixedList<<1, Integer>>, fP1n : Float, fC1n : Float) >>
+        with ( 10000.0 * indicator(fc0[0] > 1) ) where {
+
+        fluid_spacing : Float := 0.3
+
+        fp0n = fp0
+        fu0n = fu0
+        fc0n = [0]
+        fP0n = fP0
+        fC0n = fC0
+
+        fp1n = [fp0[0] + fu0[0] * fluid_spacing, fp0[1] + fu0[1] * fluid_spacing, fp0[2] + fu0[2] * fluid_spacing]
+        fu1n = fu0
+        fc1n = [fc0[0] - 1]
+        fP1n = 0.0
+        fC1n = 0.0
+    }
+
+    # 8. Last fluid node becomes FluidSink (count == 1)
+    propagate_final_fluid := (f0 : Fluid) << (fp0 : FixedList<<3, Float>>, fu0 : FixedList<<3, Float>>, fc0 : FixedList<<1, Integer>>, fP0 : Float, fC0 : Float) >> ->
+        (f0 : Fluid)--(f1 : FluidSink)
+        << (fp0n : FixedList<<3, Float>>, fu0n : FixedList<<3, Float>>, fc0n : FixedList<<1, Integer>>, fP0n : Float, fC0n : Float),
+           (fp1n : FixedList<<3, Float>>, fu1n : FixedList<<3, Float>>, fc1n : FixedList<<1, Integer>>, fP1n : Float, fC1n : Float) >>
+        with ( 10000.0 * indicator(fc0[0] == 1) ) where {
+
+        fluid_spacing : Float := 0.3
+
+        fp0n = fp0
+        fu0n = fu0
+        fc0n = [0]
+        fP0n = fP0
+        fC0n = fC0
+
+        fp1n = [fp0[0] + fu0[0] * fluid_spacing, fp0[1] + fu0[1] * fluid_spacing, fp0[2] + fu0[2] * fluid_spacing]
+        fu1n = fu0
+        fc1n = [0]
+        fP1n = 0.0
+        fC1n = 0.0
+    }
+
+}

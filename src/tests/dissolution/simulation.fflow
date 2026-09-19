@@ -1,0 +1,31 @@
+simulations Test {
+
+    # Loading parameters
+    params : SimulationParameters := load("params.fflow")
+    
+    # Types (shared across all stages)
+    simTypes : SimulationTypes := load("types.fflow")
+
+    # Per-stage simulation time (TOTAL_TIME override)
+    latticeTime : Float := 3
+    flowTime : Float := 10
+
+    # =========================================
+    # Stage 1: Build lattice (stochastic rules)
+    # =========================================
+    latticeRules : SimulationRules := load("rules_lattice.fflow")
+    initialState : State := load("default")
+
+    buildLattice : Simulation := RunSimulation(initialState, params,
+                latticeRules, simTypes, latticeTime)
+
+    # =========================================
+    # Stage 2: Pressure flow (ODE solve rules)
+    # =========================================
+    flowRules : SimulationRules := load("rules_flow.fflow")
+    latticeState : State := load("my_results/simulation_state_latest.bin")
+
+    runFlow : Simulation := RunSimulation(latticeState, params,
+                flowRules, simTypes, flowTime)
+
+}

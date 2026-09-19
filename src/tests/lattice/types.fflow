@@ -1,0 +1,10 @@
+types Dissolution {
+
+    # Fluid particle: Position, Unit direction, Count (for propagation)
+    Fluid <<  Position : FixedList<<3, Float>>,
+              Unit : FixedList<<3, Integer>>,
+              LatticeVelocity : Float,
+              CountID : FixedList<<3, Integer >>
+            >> : Type
+
+}

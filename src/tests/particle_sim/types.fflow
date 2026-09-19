@@ -1,6 +1,5 @@
 types Particles {
 
-    ParticleNodeCreator << FixedList<<2, Float>>, Integer >> : Type
-    ParticleNode << FixedList<<2, Float>> >> : Type
+    ParabolaParticle << Position : FixedList<<2, Float>>, Velocity : FixedList<<2, Float>> >> : Type
 
 }

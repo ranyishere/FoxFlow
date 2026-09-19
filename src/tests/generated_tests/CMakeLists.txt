@@ -6,6 +6,8 @@ project(DGGML VERSION 1.0 LANGUAGES CXX)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
+add_definitions(-DCATCH_CONFIG_NO_POSIX_SIGNALS)
+
 #set the C++ standard
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_STANDARD 17) 
@@ -53,21 +55,92 @@ if(NOT SUNDIALS_FOUND)
 	FetchContent_MakeAvailable(sundials)
 endif()
 
+# Getting Cereal if it does not exist
+find_package(Cereal QUIET)
+if(NOT CEREAL_FOUND)
+
+    message(STATUS "Cereal not found, fetching with FetchContent...")
+    set(FETCHCONTENT_QUIET FALSE)
+    # Include FetchContent if not already included
+    include(FetchContent)
+
+    message("Downloading Cereal, this may take a few minutes...")
+
+    set(JUST_INSTALL_CEREAL ON CACHE BOOL "" FORCE)
+    set(SKIP_PORTABILITY_TEST ON CACHE BOOL "" FORCE)
+    set(SKIP_PERFORMANCE_COMPARISON ON CACHE BOOL "" FORCE)
+    set(SKIP_PORTABILITY_TEST ON CACHE BOOL "" FORCE)
+    set(WITH_WERROR OFF CACHE BOOL "" FORCE)
+
+    # Declare the cereal repository
+    FetchContent_Declare(
+        cereal
+        GIT_REPOSITORY https://github.com/USCiLab/cereal.git
+        GIT_TAG        v1.3.2  # Or the latest stable version
+    )
+
+
+    # Make cereal available
+    FetchContent_MakeAvailable(cereal)
+endif()
+
+# Try to find LibTorch first
+find_package(Torch QUIET)
+if(NOT Torch_FOUND)
+
+    message(STATUS "LibTorch not found, fetching with FetchContent...")
+    set(FETCHCONTENT_QUIET FALSE)
+    include(FetchContent)
+
+    message(STATUS "Downloading LibTorch (this may take several minutes)...")
+
+    # ---- Choose ONE LibTorch variant ----
+    # CPU-only (recommended unless you need CUDA)
+    set(LIBTORCH_URL
+    https://download.pytorch.org/libtorch/cpu/libtorch-cxx11-abi-shared-with-deps-2.2.0%2Bcpu.zip
+    )
+
+    # CUDA example (comment CPU and uncomment this if needed)
+    # set(LIBTORCH_URL
+    # https://download.pytorch.org/libtorch/cu121/libtorch-cxx11-abi-shared-with-deps-2.2.0%2Bcu121.zip
+    # )
+
+    FetchContent_Declare(
+        libtorch
+        URL ${LIBTORCH_URL}
+    )
+
+    FetchContent_MakeAvailable(libtorch)
+
+    # Tell CMake where TorchConfig.cmake lives
+    set(Torch_DIR
+        ${libtorch_SOURCE_DIR}/share/cmake/Torch
+        CACHE PATH "Torch CMake config directory" FORCE
+    )
+
+    find_package(Torch REQUIRED)
+
+endif()
+
+
+
 # TODO: see if there is a better way than include_directories command
-include_directories(include/DGGML/dependencies/YAGL/include)
-include_directories(include/DGGML/thirdparty/simdjson)
-include_directories(include/DGGML/src)
-include_directories(include/DGGML/src/Grids)
-include_directories(include/DGGML/src/Utlities)
-include_directories(include/DGGML/src/Grammar)
-include_directories(include/DGGML/src/CellComplexes)
-include_directories(include/DGGML/src/CellComplexes/Utils)
-include_directories(include/DGGML/src/Solvers)
-add_subdirectory(include/DGGML/dependencies/YAGL)
-add_subdirectory(include/DGGML/thirdparty/vtu11)
-add_subdirectory(include/DGGML/src)
+include_directories(include/FoxFlowDGGML3D/FoxFlowDGGML/dependencies/YAGL/include)
+include_directories(include/FoxFlowDGGML3D/FoxFlowDGGML/thirdparty/simdjson)
+include_directories(include/FoxFlowDGGML3D/FoxFlowDGGML/src)
+include_directories(include/FoxFlowDGGML3D/FoxFlowDGGML/src/Listeners)
+include_directories(include/FoxFlowDGGML3D/FoxFlowDGGML/src/Grids)
+include_directories(include/FoxFlowDGGML3D/FoxFlowDGGML/src/Utlities)
+include_directories(include/FoxFlowDGGML3D/FoxFlowDGGML/src/Grammar)
+include_directories(include/FoxFlowDGGML3D/FoxFlowDGGML/src/CellComplexes)
+include_directories(include/FoxFlowDGGML3D/FoxFlowDGGML/src/CellComplexes/Utils)
+include_directories(include/FoxFlowDGGML3D/FoxFlowDGGML/src/Solvers)
+add_subdirectory(include/FoxFlowDGGML3D/FoxFlowDGGML/dependencies/YAGL)
+add_subdirectory(include/FoxFlowDGGML3D/FoxFlowDGGML/thirdparty/vtu11)
+add_subdirectory(include/FoxFlowDGGML3D/FoxFlowDGGML/src)
+
 # add_subdirectory(tests)
-add_subdirectory(include/DGGML/tools)
+add_subdirectory(include/FoxFlowDGGML3D/FoxFlowDGGML/tools)
 # add_subdirectory(examples)
 # add_subdirectory(generated/)
 add_subdirectory(generated_2/)

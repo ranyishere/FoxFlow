@@ -1,0 +1,16 @@
+types Dissolution {
+
+
+    # Fluid particle: Position, Unit direction, Count (for propagation), Pressure, Concentration
+    Fluid <<  Position : FixedList<<3, Float>>, Unit : FixedList<<3, Float>>, FCount : FixedList<<1, Integer>>, Pressure : Float, Concentration : Float >> : Type
+
+    # Fluid source (first node in the fluid line)
+    FluidSource <<  Position : FixedList<<3, Float>>, Unit : FixedList<<3, Float>>, FCount : FixedList<<1, Integer>>, Pressure : Float, Concentration : Float >> : Type
+
+    # Fluid sink (last node in the fluid line)
+    FluidSink <<  Position : FixedList<<3, Float>>, Unit : FixedList<<3, Float>>, FCount : FixedList<<1, Integer>>, Pressure : Float, Concentration : Float >> : Type
+
+    # Rock with density (erodes under fluid pressure)
+    RockStart << Position : FixedList<<3, Float>>, Count : FixedList<<3, Integer>>, Dir : FixedList<<3, Integer>>, Density : Float >>  : Type
+
+}

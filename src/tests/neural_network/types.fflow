@@ -1,0 +1,14 @@
+types NeuralNetwork {
+
+
+    InputLayer << Position : FixedList<<3, Float>>,
+                ImageBatch : FixedList <<(64, 1, 28, 28), Float>>, InputID : Integer >> : Type
+
+    Layer << Position : FixedList <<3, Float>>,
+             Weights : FixedList<<100, Float>>, LayerID : Integer >> : Type
+
+    OutputLayer << Position : FixedList<<3, Float>>,
+                DigitClass : FixedList<<10, Float>>, OutputID : Integer >> : Type
+
+
+}

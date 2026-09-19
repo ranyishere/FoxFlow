@@ -1,0 +1,78 @@
+functions HELP {
+
+
+	distance : Function << (x0 : Float, y0 : Float, z0 : Float), (x1 : Float, y1 : Float, z1: Float)>> -> Float := {
+		res : Float := sqrt( (x1 - x0)^2 + (y1 - y0)^2 + (z1 - z0)^2 )
+		return res
+	}
+
+
+	line_intersection_x : Function <<(x1 : Float, y1 : Float), (ux1 : Float, uy1 : Float),
+        (x2 : Float, y2 : Float), (x3 : Float, y3 : Float) >> -> Float := {
+
+		varepsilon : Float := 0.001
+
+        dx : Float := x3 - x2
+        dy : Float := y3 - y2
+        D : Float := dx * uy1 - dy * ux1
+
+        res : Float := ((x2 - x1) * (-dy) - (-dx)*(y2 - y1)) / D
+
+        return res
+	}
+
+    line_intersection_y : Function <<(x1 : Float, y1 : Float), (ux1 : Float, uy1 : Float),
+        (x2 : Float, y2 : Float), (x3 : Float, y3 : Float) >> -> Float := {
+
+		varepsilon : Float := 0.001
+
+        dx : Float := x3 - x2
+        dy : Float := y3 - y2
+        D : Float := dx * uy1 - dy * ux1
+
+        res : Float := (ux1 * (y2 - y1) - uy1 * (x2 - x1)) / D
+
+        return res
+	}
+
+
+
+    # TODO: Allow array assignments
+    rotate_x : Function <<(theta : Float), (x : Float) >> -> Float := {
+        return x*cos(theta) + x*sin(theta)
+    }
+
+    rotate_y : Function <<(theta : Float), (x : Float) >> -> Float := {
+        return -x*sin(theta) + x*cos(theta)
+    }
+
+    # Gets the minimum distance from a point to the intersection of
+    # the line that goes through x2 and x3
+    minimum_distance_2d : Function << (x1 : Float, y1 : Float), (x2 : Float, y2 : Float), (x3 : Float, y3 : Float) >> -> Float := {
+
+        num : Float := abs((x3 - x2) * (y1 - y2) - (y3 - y2) * (x1 - x2))
+        denom : Float := sqrt((x3 - x2)^2 + (y3 - y2)^2)
+
+        return (num)/(denom+0.0000001)
+    }
+
+
+    calculate_angle : Function << (ux_1 : Float, uy_1 : Float), (x_1 : Float, y_1 : Float), (ux_2 : Float, uy_2 : Float) >> -> Float := {
+
+        num : Float := (ux_1 * ux_2) + (uy_1 * uy_2)
+        denom : Float := sqrt(ux_1^2 + uy_1^2) * sqrt(ux_2^2 + uy_2^2)
+
+        deg_conversion : Float := (180.0) / (3.1415926535)
+
+        return arccos(num/denom) * deg_conversion
+    }
+
+    # Darcy velocity between two pressure nodes
+    # v = -(k/mu) * (P1 - P0) / dx
+    # With k/mu = 1.0, dx = 0.3 => coefficient = 3.33
+    darcy_velocity : Function << (P0 : Float, P1 : Float) >> -> Float := {
+        res : Float := 3.33 * (P0 - P1)
+        return res
+    }
+
+}

@@ -1,0 +1,86 @@
+
+# DFNWork styled data
+# GEOS
+rules FractureNetwork {
+
+  start_node_up := (start : StartType) << (spos : start::start_location) >> -> 
+    (s : PressureSource) -- (p2 : PressureSource)
+    << (ps_pos : s::Position), (pressure : s::Pressure), (u : s::Unit),
+  (ps2_pos : p2::Position), (pressure2 : p2::Pressure), (u2 : p2::Unit) >> with (10 * s_min) where {
+
+      ps_pos = [1.5, 1.5, 3.0]
+
+      u = [1.0, 1.0, -1.0]
+
+      ps2_pos = [1.5, 1.5, 2.9]
+ 
+      u2 = [1.0, 1.0, -1.0]
+
+    }
+
+    start_rock_prop := (start : StartType) << (spos : start::start_location) >> -> (rock : RockStart) << (rpos : rock::Position), (rcount : rock::Count) >> with (10000) where {
+
+        offset_distance : Float := 0.3
+
+        rpos = [0, 0, 0]
+
+        rcount = [10, 10, 10]
+
+    }
+
+    propagate_rock_x := (rock0 : RockStart) << (pos0 : rock0::Position), (count0 : rock0::Count) >> -> (rock0 : RockStart) (Rock1 : RockStart)
+        << (pos0n : rock0::Position), (count0n : rock0::Count), (pos1n : Rock1::Position), (count1n : Rock1::Count) >> with ( 1*indicator( count0[0] > 0 ) ) where {
+
+        offset_distance : Float := 0.3
+
+        pos0n = pos0
+
+        count0n = [0, count0[1], count0[2]]
+
+        pos1n = [pos0[0] + offset_distance, pos0[1], pos0[2]]
+
+        count1n = [count0[0] - 1, count0[1], count0[2]]
+
+    }
+
+    propagate_rock_y := (rock0 : RockStart) << (pos0 : rock0::Position), (count0 : rock0::Count) >> -> (rock0 : RockStart) (Rock1 : RockStart)
+        << (pos0n : rock0::Position), (count0n : rock0::Count), (pos1n : Rock1::Position), (count1n : Rock1::Count) >> with ( 1*indicator( count0[1] > 0 ) ) where {
+
+        offset_distance : Float := 0.3
+
+        pos0n = pos0
+
+        count0n = [count0[0], 0, count0[2]]
+
+        pos1n = [pos0[0], pos0[1] + offset_distance, pos0[2]]
+
+        count1n = [count0[0], count0[1] - 1, count0[2]]
+
+    }
+
+    propagate_rock_z := (rock0 : RockStart) << (pos0 : rock0::Position), (count0 : rock0::Count) >> -> (rock0 : RockStart) (Rock1 : RockStart)
+        << (pos0n : rock0::Position), (count0n : rock0::Count), (pos1n : Rock1::Position), (count1n : Rock1::Count) >> with ( 1*indicator( count0[2] > 0 ) ) where {
+
+        offset_distance : Float := 0.6
+
+        pos0n = pos0
+
+        count0n = [count0[0], count0[1], 0]
+
+        pos1n = [pos0[0], pos0[1], pos0[2] + offset_distance]
+
+        count1n = [count0[0], count0[1], count0[2] - 1]
+
+    }
+
+    # Small pressure flux
+    # single_segment_pressure_flux := (p0 : FractureSegment)  << (x0, y0, p0, ux0, uy0) >> 
+        # ->  (p0 : FractureSegment) << (x0n, y0n, dp0, ux0n, uy0n) >> solving ( dp0 := D(p0, t)) {
+            # dp0 : ODE = 0.01 * p0
+    # }
+
+    # Fracture Growth
+
+    # Fracture Junction
+
+}

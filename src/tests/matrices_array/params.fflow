@@ -1,0 +1,88 @@
+parameters Microtubule {
+
+    # Simulate time in seconds
+    TOTAL_TIME : Float := 400
+
+    # How often the simulation is updated
+    DELTA : Float := 0.1
+
+    # 1 -> is 1 micrometer (um)
+    MAXIMAL_REACTION_RADIUS : Float := 0.1
+    # varepsilon : Float := MAXIMAL_REACTION_RADIUS * 0.01
+    varepsilon : Float := MAXIMAL_REACTION_RADIUS
+
+    # Number of steps in the simulation
+    NUM_STEPS : Integer := TOTAL_TIME / DELTA
+
+    MIN_DELTA_STEPS : Integer := 5
+    DELTA_DELTA_T : Float := DELTA / MIN_DELTA_STEPS
+
+    # Prevents solver from shrinking too much.
+    # The minimum allowable integration step.
+    DELTA_T_MIN : Float := DELTA_DELTA_T
+
+    CELL_NX : Float := 3
+    CELL_NY : Float := 3
+    CELL_NZ : Float := 3
+
+    CELL_DX : Float := 1
+    CELL_DY : Float := 1
+    CELL_DZ : Float := 1
+
+    # Creation Propensity Rate
+    rho_create : Float := 0.026
+    rho_grow : Float := 100.0
+
+    rho_retract : Float := 10.0
+
+    L_DIV : Float := 0.075
+    # L_DIV : Float := 0.003
+
+    L_min : Float := 0.025
+
+
+    # Minimum Segment Length
+    s_min : Float := 0.005
+
+    # Maximum Segment Length
+    s_max : Float := 0.01
+
+    buffer : Float := CELL_NX / 10.0
+    offset : Float := (3.0-buffer*2)/10.0
+
+    boundary_pts : Integer := 21
+    boundary_offset : Float := 3.0/20.0
+
+    creation_factor : Float := 1.0
+    creation_rate : Float := 0.0026
+
+    mt_min_segment_init : Float := 0.005
+    mt_max_segment_init : Float := 0.01
+
+    v_plus : Float := 0.0615
+
+    # collision_distance : Float := 0.025
+    collision_distance : Float := 5.0
+
+    # Collision induced catastrophe (CIC)
+    boundary_cic : Float := 4000000
+
+    destruction_factor : Float := 0.0026
+
+    gr_to_ret : Float := 0.016
+    ret_to_gr : Float := 0.016
+
+    s_col : Float := 0.025
+
+    rho_int_cic : Float := 12000
+    rho_grow_cic : Float := 12000
+    rho_retract_cic : Float := 12000
+
+    theta_cic : Float := 40.0
+    theta_cross : Float := 40.0
+
+    rho_cross : Float := 200.0 * 100.0
+    rho_zip_hit : Float := 4000.0
+    rho_zip_guard : Float := 12000.0
+
+}

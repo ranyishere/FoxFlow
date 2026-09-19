@@ -1,0 +1,105 @@
+# Stage 1: Lattice and fluid line construction
+# All stochastic propagation rules that build the graph structure
+rules Dissolution {
+
+    # 1. Start the rock grid generation + seed FluidSource
+    start_rock_prop := (start : StartType) << (start_pos : FixedList<<3, Float>>) >> -> 
+        (init_fluid : Fluid) << 
+            pos : FixedList<<3, Float>>,
+            dir : FixedList<<3, Float>>,
+            f : Float, count_id : FixedList<<3, Float>> 
+        >> 
+        with (10000.0) where {
+
+            pos = [0.0, 0.0, 0.0]
+            dir = [0, 0, 0]
+            f = 1.0
+            count_id = [10, 10, 10]
+    }
+
+    # 2. Grow the X-axis lines
+    propagate_rock_x := (rock0 : Fluid) << (pos0 : FixedList<<3, Float>>,
+            dir0 : FixedList<<3, Integer>>,
+            f0_old : Float,
+            c_count0 : FixedList<<3, Integer>>
+        ) >> -> 
+        (rock0 : Fluid) (rock1 : Fluid)
+        << (pos0n : FixedList<<3, Float>>, dir0n : FixedList<<3, Integer>>, f0 : Float, c_count0n : FixedList<<3, Integer>>), 
+           (pos1n : FixedList<<3, Float>>, dir1n : FixedList<<3, Integer>>, f1: Float, c_count1n : FixedList<<3, Integer>>) >> 
+        with ( 10000.0 * indicator( c_count0[0] > 0 ) ) where {
+
+        offset_distance : Float := 0.3
+
+        pos0n = pos0
+        c_count0n = [0, c_count0[1], c_count0[2]]
+        dir0n = [1, 0, 0]
+
+        # Should be f_eq here
+        f0 : Float = 1.0
+
+        # Should be f_eq here
+        pos1n = [pos0[0] + offset_distance, pos0[1], pos0[2]]
+        c_count1n = [c_count0[0] - 1, c_count0[1], c_count0[2]]
+        dir1n = [1, 0, 0]
+        f1 : Float = 1.0
+
+    }
+
+    # 3. Grow Y-axis lines
+    propagate_rock_y := (rock0 : Fluid) <<
+            (pos0 : FixedList<<3, Float>>,
+            c_count0 : FixedList<<3, Integer>>, f0_old : Float
+            dir0 : FixedList<<3, Integer>>) 
+        >> -> 
+        (rock0 : Fluid) (Rock1 : Fluid)
+        <<
+           (pos0n : FixedList<<3, Float>>, c_count0n : FixedList<<3, Integer>>,f0 : Float, dir0n : FixedList<<3, Integer>>), 
+           (pos1n : FixedList<<3, Float>>, c_count1n : FixedList<<3, Integer>>, f1 : Float, dir1n : FixedList<<3, Integer>>)
+        >> 
+        with ( 10000.0 * indicator( c_count0[0] == 0) * indicator(c_count0[1] > 0 ) ) where {
+
+        offset_distance : Float := 0.3
+
+        pos0n = pos0
+        c_count0n = [c_count0[0], 0, c_count0[2]]
+        f0 = f0_old
+        dir0n = [0, 1, 0]
+
+        pos1n = [pos0[0], pos0[1] + offset_distance, pos0[2]]
+        c_count1n = [c_count0[0], c_count0[1] - 1, c_count0[2]]
+        f1 = 1.0
+        dir1n = [0, 1, 0]
+    }
+
+    # 4. Grow Z-axis lines
+    propagate_rock_z := (rock0 : Fluid) <<
+            (pos0 : FixedList<<3, Float>>,
+            c_count0 : FixedList<<3, Integer>>,
+            f0_old : Float,
+            dir0 : FixedList<<3, Integer>>
+            )
+        >> -> 
+        (rock0 : Fluid) (Rock1 : Fluid)
+        << (pos0n : FixedList<<3, Float>>, c_count0n : FixedList<<3, Integer>>, f0 : Float, dir0n : FixedList<<3, Integer>>), 
+           (pos1n : FixedList<<3, Float>>, c_count1n : FixedList<<3, Integer>>, f1 : Float, dir1n : FixedList<<3, Integer>>) >> 
+        with (
+            10000.0 * indicator( c_count0[0] == 0)
+            * indicator(c_count0[1] == 0)
+            * indicator(c_count0[2] > 0 ) 
+        ) where {
+
+        offset_distance : Float := 0.3
+
+        pos0n = pos0
+        c_count0n = [c_count0[0], c_count0[1], 0]
+        dir0n = [0, 0, 1]
+        f0 = f0_old
+
+        pos1n = [pos0[0], pos0[1], pos0[2] + offset_distance]
+        c_count1n = [c_count0[0], c_count0[1], c_count0[2] - 1]
+        dir1n = [0, 0, 1]
+        f1 = 1.0
+
+    }
+
+}

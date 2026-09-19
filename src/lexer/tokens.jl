@@ -5,6 +5,7 @@ Defines Tokens
 module Tokens
 
     abstract type Token end
+    abstract type OperatorToken <: Token end
 
     struct PositionToken <: Token
         value::String
@@ -18,6 +19,10 @@ module Tokens
 
     struct GrammarToken <: Token
         position::PositionToken
+    end
+
+    struct SimulationToken <: Token
+	position::PositionToken
     end
 
     struct GrammarTimeToken <: Token
@@ -43,23 +48,31 @@ module Tokens
         position::PositionToken
     end
 
-    struct OperatorToken <: Token
+    struct ReturnToken <: Token
         position::PositionToken
     end
 
-    struct PlusToken <: Token
+    struct PlusToken <: OperatorToken
         position::PositionToken
     end
 
-    struct MinusToken <: Token
+    struct MinusToken <: OperatorToken
         position::PositionToken
     end
 
-    struct AsteriskToken <: Token
+    struct AsteriskToken <: OperatorToken
         position::PositionToken
     end
 
-    struct SlashToken <: Token
+    struct CaretToken <: OperatorToken
+	position::PositionToken
+    end
+
+    struct SlashToken <: OperatorToken
+        position::PositionToken
+    end
+
+    struct BackslashToken <: OperatorToken
         position::PositionToken
     end
 
@@ -72,6 +85,14 @@ module Tokens
     end
 
     struct PunctuationToken <: Token
+        position::PositionToken
+    end
+
+    struct LeftSquareBracketToken <: Token
+        position::PositionToken
+    end
+
+    struct RightSquareBracketToken <: Token
         position::PositionToken
     end
 
@@ -123,6 +144,14 @@ module Tokens
         position::PositionToken
     end
 
+    struct SimulationTypesToken <: Token
+        position::PositionToken
+    end
+
+    struct SimulationObservablesToken <: Token
+        position::PositionToken
+    end
+
     struct DoubleColonToken <: Token
         position::PositionToken
     end
@@ -147,6 +176,10 @@ module Tokens
         position::PositionToken
     end
 
+    struct SimulationParametersToken <: Token
+        position::PositionToken
+    end
+
     struct FunctionSectionToken <: Token
         position::PositionToken
     end
@@ -160,6 +193,10 @@ module Tokens
     end
 
     struct RuleToken <: Token
+        position::PositionToken
+    end
+
+    struct RulesToken <: Token
         position::PositionToken
     end
 
@@ -180,6 +217,10 @@ module Tokens
     end
 
     struct SimulationSectionToken <: Token
+        position::PositionToken
+    end
+
+    struct RunSimulationToken <: Token
         position::PositionToken
     end
 
@@ -211,6 +252,63 @@ module Tokens
         position::PositionToken
     end
 
+    struct SampleToken <: OperatorToken
+        position::PositionToken
+    end
+
+    struct EqEqToken <: OperatorToken
+        position::PositionToken
+    end
+
+    struct LtToken <: OperatorToken
+        position::PositionToken
+    end
+
+    struct GtToken <: OperatorToken
+        position::PositionToken
+    end
+
+    struct LtEqToken <: OperatorToken
+        position::PositionToken
+    end
+
+    struct GtEqToken <: OperatorToken
+        position::PositionToken
+    end
+
+    struct NotEqToken <: OperatorToken
+        position::PositionToken
+    end
+
+    struct NotToken <: OperatorToken
+        position::PositionToken
+    end
+
+    struct AndAndToken <: OperatorToken
+        position::PositionToken
+    end
+
+    struct OrOrToken <: OperatorToken
+        position::PositionToken
+    end
+
+    struct DotToken <: Token
+        position::PositionToken
+    end
+
+    struct QuoteToken <: Token
+        position::PositionToken
+    end
+
+    struct StringToken <: Token
+        position::PositionToken
+    end
+
+    struct LoadFileToken <: Token
+        position::PositionToken
+    end
+
     struct EndLineToken <: Token
     end
+
 end

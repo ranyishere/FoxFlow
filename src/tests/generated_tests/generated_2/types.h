@@ -1,31 +1,65 @@
-#ifndef DGGML_Particles_TYPES_HPP
-#define DGGML_Particles_TYPES_HPP
+#ifndef DGGML_NeuralNetwork_TYPES_HPP
+#define DGGML_NeuralNetwork_TYPES_HPP
 #include "YAGL_Graph.hpp" 
 #include "YAGL_Node.hpp" 
 #include "SpatialData3D.hpp" 
-namespace Particles {
-	struct Type {};
-	struct Boundary {};
-	struct StartType {
-            float start_location[2];
+#include "torch/torch.h"
+namespace NeuralNetwork {
+struct Type {
+	template <class Archive>
+	void serialize(Archive& archive) {
+	}
+};
+struct StartType {
+	torch::Tensor start_location = torch::zeros(3, torch::kFloat64);
+	template <class Archive>
+	void serialize(Archive& archive) {
+		archive(start_location);
+	}
+};
+struct Boundary {
+	torch::Tensor boundary_location = torch::zeros(3, torch::kFloat64);
+	template <class Archive>
+	void serialize(Archive& archive) {
+		archive(boundary_location);
+	}
+};
+	struct InputLayer : Type {
+		torch::Tensor Position = torch::zeros({3}, torch::kFloat64);
+		torch::Tensor ImageBatch = torch::zeros({64, 1, 28, 28}, torch::kFloat64);
+		int InputID;
 
-       };
-	struct ParticleNodeCreator : Type {
-		float fflow_a55d52[2];
-		int fflow_658e14;
-		void* operator[](std::size_t index) const {
-			if (index == 0) return (void*)&fflow_a55d52;
-			if (index == 1) return (void*)&fflow_658e14;
-			throw std::out_of_range("Index out of bounds");
-		};
+	template <class Archive>
+	void serialize(Archive& archive) {
+		archive(Position);
+		archive(ImageBatch);
+		archive(InputID);
+	}
 
-};	struct ParticleNode : Type {
-		float fflow_bc174a[2];
-		void* operator[](std::size_t index) const {
-			if (index == 0) return (void*)&fflow_bc174a;
-			throw std::out_of_range("Index out of bounds");
-		};
+};	struct Layer : Type {
+		torch::Tensor Position = torch::zeros({3}, torch::kFloat64);
+		torch::Tensor Weights = torch::zeros({100}, torch::kFloat64);
+		int LayerID;
 
-};	using graph_type = YAGL::Graph<std::size_t,	SpatialNode3D<StartType,Boundary,ParticleNodeCreator,ParticleNode>>;
+	template <class Archive>
+	void serialize(Archive& archive) {
+		archive(Position);
+		archive(Weights);
+		archive(LayerID);
+	}
+
+};	struct OutputLayer : Type {
+		torch::Tensor Position = torch::zeros({3}, torch::kFloat64);
+		torch::Tensor DigitClass = torch::zeros({10}, torch::kFloat64);
+		int OutputID;
+
+	template <class Archive>
+	void serialize(Archive& archive) {
+		archive(Position);
+		archive(DigitClass);
+		archive(OutputID);
+	}
+
+};	using graph_type = YAGL::Graph<std::size_t,	SpatialNode3D<StartType,Boundary,InputLayer,Layer,OutputLayer>>;
 };
 #endif

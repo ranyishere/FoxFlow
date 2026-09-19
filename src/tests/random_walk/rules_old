@@ -1,0 +1,72 @@
+
+rules Microtubule {
+
+    # [
+    #    ( n0 : Neuron) << x, y, w, b >> -- ( n1_{i} : Neuron) << x'_{i}, y'_{i}, w'_{i}, b'_{i} >> 
+    #        | (0 <= i <= 10)
+    # ]
+
+    # neuron_to_neuron << x,y, a, b >> := 
+
+    # This is traditionally deterministic
+    # Instantiating neural network
+    #  x_to_l0 := (n0 : Neuron) << x, y, w, b, val, fire, layer >> 
+        # --> (l0 : Layer) << w', b', val', fire', layer' >> with (1*Heaviside(fire, 1)) where {
+        #  ident : Matrix := [1]
+        #  val' : Float = ReLU(sum(w * (x+I) + b'))
+        #  w' : FixedList<< Float >> = [w_{i} ~UniformDistribution(0, 1) | 0 <= i < 10]
+        #  b' : FixedList<< Float >> = [b_{i} ~UniformDistribution(0, 1) | 0 <= i < 10]
+        # fire : Integer = 0
+        # fire' : Integer = 1
+        # layer' : Integer = layer + 1
+    # }
+
+    # What if I want to repeat this rule like 100 times to make a deep network? This becomes a matrix then right?
+    #  l0_to_l1 << l0, l1 >> := (l0 : Layer) << x, y, w, b, val, fire, layer >> 
+        #  --> (l1 : Layer) << w', b', val', fire', layer' >> with (1*Heavside(fire, 1)) where {
+        #  ident : FixedList << Float >> := [x_{i} := 1 | 0 <= i < 10 ]
+        #  val' : Float = ReLU(sum(w * (x+I) + b'))
+        #  w' : FixedList << Float >> = [w_{i} ~UniformDistribution(0, 1) | 0 <= i < 10]
+        #  b' : FixedList << Float >> = [b_{i} ~UniformDistribution(0, 1) | 0 <= i < 10]
+        # fire : Integer = 0
+        # fire' : Integer = 0
+        # layer' : Integer = layer + 1
+    # }
+
+
+    # Rule generator
+    # fire_rules := a --> b via l0_to_l1
+    # Via calls another grammar to get something back.
+    # fire_rules := [l_{i}_to_l{i+1} := l0_to_l1(l_{i}, l_{j}) | 0 <= i < 10]
+    # So you want something like l0 fires to layer 2
+    # so if we think of being relative here, layer 1 turnsi nto layer 2 via
+    # l1 -> l2 via l0_to_l1
+    # start -> end
+    # [1
+
+    # l0_to_l1 := (l0 : Layer) <<w, b >> --> with (1) where {
+    # }
+    start_to_node := (start : StartType) << (start_x, start_y) >> 
+        -> (x1 : Neuron) -- (n00 : Neuron) (x1 : Neuron) -- (n01 : Neuron)
+        (x1 : Neuron) -- (n02 : Neuron) (n00 : Neuron) -- (n10 : Neuron)
+    << 
+        (x00, y00, w00, b00), (nx00, ny00, nw00, b00),
+        (x00, y00, w00, b00), (nx01, ny01, nw01, b01),
+        (x00, y00, w00, b00), (nx02, ny02, nw02, b02),
+        (nx00, ny00, nw00, b00), (nx10, ny10, nw10, b10)
+    >> 
+    with (heaviside(10,1)) where {
+
+        x00 : Float = 0.3
+        y00 : Float = 0.3
+        w00 : Float = 0.7
+        b00 : Float = 0
+
+        nx00 : Float = 0.5
+        ny00 : Float = 0.6
+        nw00 : Float = w00*x00 + b00
+        nb00 : Float = 0
+
+    }
+
+}

@@ -15,5 +15,8 @@ module IRBuildUtils
         return join(ir_builder.instructions, "\n")
     end
 
+    function build_sameline(ir_builder::IRBuilder)
+        return join(ir_builder.instructions, "")
+    end
 
 end

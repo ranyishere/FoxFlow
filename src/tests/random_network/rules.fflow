@@ -1,0 +1,51 @@
+
+rules Microtubule {
+
+    start_to_node := (start : StartType) << (start_x, start_y) >> 
+        -> (x1 : Neuron) 
+    << (x00, y00, w00, b00, v00) >> 
+    with (heaviside(10,1)) where {
+
+        x00 : Float = start_x
+        y00 : Float = start_y
+        w00 : Float = ~UniformDistribution(0,1)
+        b00 : Float = 0
+        v00 : Float = 0.3
+    }
+
+    branch_neuron := (n0 : Neuron) << (x00, y00, w00, b00, v00) >> 
+        -> (n0 : Neuron) -- (n1 : Neuron) -- (n2 : Neuron) (n1 : Neuron) -- (n3 : Neuron )
+    << (xn00, yn00, wn00, bn00, vn00),
+        (x01, yn01, wn01, bn01, vn01),
+        (x02, y02, w02, b02, v02), 
+        (x01, y01, w01, b01, v01),
+        (x03, y03, w03, b03, v03) >> with (w00) where {
+
+        xn00 : Float = x00
+        yn00 : Float = y00
+        wn00 : Float = 0
+        bn00 : Float = 0
+        vn00 : Float = 0
+
+        x01 : Float = x00 + ~UniformDistribution(-1, 1)
+        y01 : Float = y00 + ~UniformDistribution(-1, 1)
+        w01 : Float = ~UniformDistribution(0,1)
+        b01 : Float = 0
+        v01 : Float = 0
+
+
+        x02 : Float = x00  + ~UniformDistribution(-1, 1)
+        y02 : Float = y00  + ~UniformDistribution(-1, 1)
+        w02 : Float = ~UniformDistribution(0,1)
+        b02 : Float = 0
+        v02 : Float = 0
+
+        x03 : Float = x00 + ~UniformDistribution(-1, 1)
+        y03 : Float = y00 + ~UniformDistribution(-1, 1)
+        w03 : Float = ~UniformDistribution(0,1)
+        b03 : Float = 0
+        v03 : Float = 0
+
+    }
+
+}
