@@ -61,14 +61,13 @@ function ir_type_declaration(ast, define_type=false, symbol_tables=nothing)
     type_class_name = ir_type_class(ast.type)
     begin_struct = []
 
-    # The first attribute of every type IS the spatial position, realized by the
-    # stable `SpatialNode3D.position[3]` node member (a plain double[3]). It is
-    # therefore NOT emitted as a variant tensor member and is excluded from the
-    # cereal serialize list; only attributes 2..N live inside the variant `.data`.
-    struct_members = (type_parameters !== nothing && length(type_parameters) >= 1) ?
-                     type_parameters[2:end] : type_parameters
-    serialize_names = (param_names !== nothing && length(param_names) >= 1) ?
-                      param_names[2:end] : param_names
+    # Every attribute (including the first, which is the spatial Position) is
+    # emitted as a struct member. The first attribute is ALSO mirrored into the
+    # stable `SpatialData3D.position[3]` node member for DGGML geometry, and the
+    # rule codegen keeps the two in sync on every write. Reads of tensor Position
+    # come from the struct member, so it must be present here and serialized.
+    struct_members = type_parameters
+    serialize_names = param_names
 
     # TODO: Handle identifier names
     if ast.value == nothing
