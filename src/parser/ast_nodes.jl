@@ -174,6 +174,16 @@ module AstNodes
         where_clause::WhereClauseNode
     end
 
+    # Clocked rule: `every (n_r, p_r, T_clock) [additive] where { ... }`.
+    # Any of the three schedule expressions may be omitted (`nothing`).
+    struct EveryClauseNode <: ModifyClauseNode
+        n_r     :: Union{Node, Nothing}
+        p_r     :: Union{Node, Nothing}
+        t_clock :: Union{Node, Nothing}
+        additive :: Bool
+        where_clause::WhereClauseNode
+    end
+
     struct TypeInstanceNode <: Node
         name  :: IdentifierNode
         parameter :: ParameterNode
