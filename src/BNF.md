@@ -74,8 +74,24 @@ where the referenced node has been introduced in the rule graph pattern
 
 <type-name> ::= <symbol-name> | <built-in-type>
 
-<built-in-type> ::= "Float" | "Integer" | "FixedList" | "ODE" | "Type"
+<built-in-type> ::= "Float" | "Integer" | "FixedList" | "TFTensor" | "ODE" | "Type"
 ```
+
+Two list-like types exist:
+
+- `FixedList<<N, Float>>` is a fixed-size, stack-allocated 1-D array of `N`
+  doubles (`TFArray<N>`, defined in the generated `tf_array.h`). It supports
+  element-wise arithmetic with scalars and arrays, `exp/log/sqrt/abs/sin/cos/tanh`,
+  `dot`, `sum/mean/norm/min/max`, `ones_matrix(N)` / `zeros_matrix(N)` with a
+  literal `N`, and array literals. It is much cheaper than a tensor for small
+  vectors. It must be 1-D and `Float`; ODE solving, `einsum`, `mat_inv`, nested
+  literals and dynamic shapes are not available.
+- `TFTensor<<d1, ..., Float|Integer>>` is a `torch::Tensor` with the full set of
+  tensor operations. Conversion between the two is explicit only:
+  `to_tensor(array)` and `to_array(tensor, N)`.
+
+A local declared as `x : FixedList := ...` (no size) takes the type of its
+value; dimension-less `FixedList` is not allowed in function signatures.
 
 ---
 
@@ -101,7 +117,7 @@ types Microtubule {
     Positive     << Position : FixedList<<3, Float>>,
                     Direction : FixedList<<3, Float>> >> : Type
     Nucleator    << Position : FixedList<<3, Float>>,
-                    Count : FixedList<<2, Integer>> >> : Type
+                    Count : TFTensor<<2, Integer>> >> : Type
 }
 ```
 
@@ -125,15 +141,15 @@ Declares simulation parameters as typed, named values.
 <from-file> ::= "from_file" "(" <string-literal> ")"
 ```
 
-A `FixedList` parameter with `from_file` loads a raw binary file (saved via
+A `TFTensor` parameter with `from_file` loads a raw binary file (saved via
 `numpy().tofile()`) into a `torch::Tensor` at startup using memory-mapping:
 
 ```
-images : FixedList<<60000, 1, 28, 28, Float>>   := from_file("mnist_images.bin")
-labels : FixedList<<60000, Integer>>             := from_file("mnist_labels.bin")
+images : TFTensor<<60000, 1, 28, 28, Float>>   := from_file("mnist_images.bin")
+labels : TFTensor<<60000, Integer>>             := from_file("mnist_labels.bin")
 ```
 
-The last type parameter of the `FixedList` (`Float` or `Integer`) determines
+The last type parameter of the `TFTensor` (`Float` or `Integer`) determines
 the element dtype (`torch::kFloat64` / `torch::kInt64`). All preceding
 integer parameters are the tensor dimensions.
 
@@ -147,8 +163,8 @@ parameters Microtubule {
 }
 
 parameters NeuralNetwork {
-    images : FixedList<<60000, 1, 28, 28, Float>> := from_file("mnist_images.bin")
-    labels : FixedList<<60000, Integer>>           := from_file("mnist_labels.bin")
+    images : TFTensor<<60000, 1, 28, 28, Float>> := from_file("mnist_images.bin")
+    labels : TFTensor<<60000, Integer>>           := from_file("mnist_labels.bin")
 }
 ```
 
@@ -333,13 +349,42 @@ boundary_catastrophe := (im0 : Intermediate) -- (pos : Positive)
 
 ## Modify Clauses
 
-Every rule has exactly one modify clause, either a `with` clause (for
-stochastic / propensity-driven rules) or a `solving` clause (for ODE-based
-rules).
+Every rule has exactly one modify clause: a `with` clause (stochastic /
+propensity-driven rules), a `solving` clause (ODE-based rules) or an `every`
+clause (clocked rules).
 
 ```
 <modify-clause> ::= <with-clause>
                   | <solve-clause>
+                  | <every-clause>
+```
+
+### Every Clause (clocked rules)
+
+A clocked rule is a deterministic, data-only rewrite that fires on a fixed
+clock instead of with a propensity. It maps to `DGGML::EveryRule`.
+
+```
+<every-clause> ::= "every" "(" <expr> [ "," <expr> [ "," <expr> ] ] ")"
+                   [ "additive" ] "where" "{" <where-body> "}"
+```
+
+The three arguments are `n_r` (fire every n_r-th tick, default 1), `p_r`
+(phase, default 0) and `T_clock` (clock period; default 0, meaning the
+simulation `DELTA`). They may only use numbers and parameters. `every` is a
+contextual keyword, recognised only directly after a rule's RHS parameters.
+
+The LHS and RHS must contain the same nodes (same alias and type, same order)
+and the same edges. The first node is the principal node; only it is
+committed. With `additive`, the engine adds `after - before` to the live
+value of each bound attribute instead of overwriting it.
+
+```
+friction_relax := (w : Wall) << (fr : w::Friction) >> ->
+    (w : Wall) << (frn : w::Friction) >>
+    every (1, 0, 0.5) additive where {
+        frn = fr * 0.9
+    }
 ```
 
 ### With Clause
@@ -470,10 +515,10 @@ solving (dpos[0] := D(im_pos[0], t), dpos[1] := D(im_pos[1], t)) {
 <function-arg> ::= <symbol-name> ":" <arg-type>
 
 <arg-type> ::= <type-name>
-             | "FixedList" "<<" <integer> "," <type-name> ">>"
+             | ("FixedList" | "TFTensor") "<<" <integer> "," <type-name> ">>"
 
 <return-type> ::= <type-name>
-                | "FixedList" "<<" <integer> "," <type-name> ">>"
+                | ("FixedList" | "TFTensor") "<<" <integer> "," <type-name> ">>"
 ```
 
 ### Function Body
@@ -653,7 +698,7 @@ generator:
 
 ### Tensor Operations
 
-These built-ins operate on `FixedList` / `torch::Tensor` values and are
+These built-ins operate on `TFTensor` values (`FixedList` supports the subset listed above) and are
 available in expressions, rule bodies, and observable bodies:
 
 | Function | Description |
@@ -668,6 +713,21 @@ available in expressions, rule bodies, and observable bodies:
 | `permute(A, d0, d1, ...)` | Permute tensor dimensions |
 | `autodiff(loss, param)` | Compute gradient of `loss` w.r.t. `param` |
 | `from_file(path)` | Load raw binary file into tensor (params only — see Parameters Section) |
+
+Additional built-ins available in `functions` sections:
+
+| Function | Description |
+|----------|-------------|
+| `exp(x)` | Element-wise exponential |
+| `dot(a, b)` | Inner product of two 1-D tensors (returns a scalar) |
+| `mat_inv(A)` | Matrix inverse |
+| `einsum(spec, A, B, ...)` | Emitted as `torch::einsum(spec, {A, B, ...})` |
+
+Any other function name inside a `functions` body is emitted as a raw call,
+so functions of the same section (and earlier sections) can call each other,
+provided they are defined first. Rules call them as `NAME::fn(args)`.
+
+An empty subtype is allowed in a `types` section: `Fluid << >> : Site`.
 
 ---
 
