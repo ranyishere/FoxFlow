@@ -19,12 +19,25 @@ NEW_LINE = "\n"
 # Registry of model-loaded functions: (name, filepath) pairs
 MODEL_REGISTRY = []
 
+# True while emitting an expression whose value is a FixedList (TFArray<N>);
+# switches array literals and ones_matrix/zeros_matrix to stack arrays.
+const ARRAY_CTX = Ref(false)
+
 """
     ir_array_literal(node::ArrayLiteralNode) -> String
 
-Recursively converts an ArrayLiteralNode into a C++ torch::tensor literal.
+Recursively converts an ArrayLiteralNode into a C++ torch::tensor literal, or
+(in array context) into a TFArray<N> initializer.
 """
 function ir_array_literal(node)
+    if ARRAY_CTX[]
+        if any(el -> el isa ArrayLiteralNode, node.elements)
+            throw("Nested array literals are not supported for FixedList; " *
+                  "use TFTensor for multi-dimensional data.")
+        end
+        parts = ["static_cast<double>($(_ir_array_literal_inner(el)))" for el in node.elements]
+        return "TFArray<$(length(parts))>{{" * join(parts, ", ") * "}}"
+    end
     inner = _ir_array_literal_inner(node)
     return "torch::tensor($inner, torch::kFloat64)"
 end
@@ -52,6 +65,21 @@ function _ir_array_literal_inner(node)
 end
 
 """
+    _array_ctx_fill(kind, arg_str) -> Union{String, Nothing}
+
+In array context, `zeros_matrix(N)` / `ones_matrix(N)` with a literal integer N
+become `tf::zeros<N>()` / `tf::ones<N>()`. Returns `nothing` outside array context.
+"""
+function _array_ctx_fill(kind, arg_str)
+    ARRAY_CTX[] || return nothing
+    if occursin(r"^\s*\d+\s*$", arg_str)
+        return "tf::$(kind)<$(strip(arg_str))>()"
+    end
+    throw("$(kind)_matrix in a FixedList context needs a literal integer size, got '$(arg_str)'. " *
+          "Use TFTensor for tensors with computed shapes.")
+end
+
+"""
     builtin_to_cpp(func_name, arg_str) -> String
 
 Maps a FoxFlow built-in function name and its already-rendered C++ argument
@@ -74,9 +102,9 @@ function builtin_to_cpp(func_name, arg_str)
     elseif func_name == "max"
         return "std::max($arg_str)"
     elseif func_name == "zeros_matrix"
-        return "torch::zeros({$arg_str}, torch::kFloat64)"
+        return something(_array_ctx_fill("zeros", arg_str), "torch::zeros({$arg_str}, torch::kFloat64)")
     elseif func_name == "ones_matrix"
-        return "torch::ones({$arg_str}, torch::kFloat64)"
+        return something(_array_ctx_fill("ones", arg_str), "torch::ones({$arg_str}, torch::kFloat64)")
     elseif func_name == "rand_matrix"
         return "torch::rand({$arg_str}, torch::kFloat64)"
     elseif func_name == "eye_matrix"
@@ -92,7 +120,23 @@ function builtin_to_cpp(func_name, arg_str)
     elseif func_name == "transpose"
         return "$arg_str.t()"
     elseif func_name == "einsum"
-        return "torch::einsum($arg_str)"
+        # einsum("spec", T1, T2, ...) -> torch::einsum("spec", {T1, T2, ...})
+        parts = split(arg_str, ", ", limit=2)
+        return length(parts) == 2 ? "torch::einsum($(parts[1]), {$(parts[2])})" : "torch::einsum($arg_str)"
+    elseif func_name == "exp"
+        return "exp($arg_str)"
+    elseif func_name == "dot"
+        # Inner product of two 1-D tensors/arrays, returned as a double.
+        # Unqualified so argument-dependent lookup picks at::dot or tf::dot.
+        return "dot($arg_str).template item<double>()"
+    elseif func_name == "to_tensor"
+        return "tf::to_tensor($arg_str)"
+    elseif func_name == "to_array"
+        parts = split(arg_str, ", ", limit=2)
+        length(parts) == 2 || throw("to_array(tensor, N) expects two arguments.")
+        return "tf::to_array<$(parts[2])>($(parts[1]))"
+    elseif func_name == "mat_inv"
+        return "torch::inverse($arg_str)"
     elseif func_name == "permute"
         parts = split(arg_str, ", ", limit=2)
         return length(parts) == 2 ? "$(parts[1]).permute({$(parts[2])})" : "($arg_str)"
@@ -270,7 +314,8 @@ function ir_expr_builtin_func!(func_name, args, ir_builder, scope)
         if cpp !== nothing
             ir = cpp
         else
-            throw("Unknown built-in function: $func_name")
+            # Not a built-in: treat as a call to another function in this section
+            ir = "$func_name($arg_str)"
         end
     end
 
@@ -397,6 +442,21 @@ function ir_func_expr!(expr_value, scope, ir_builder)
 end
 
 
+"""
+    _function_type(type_node, what) -> String
+
+C++ type of a function argument / return type node. FixedList<<N, Float>> is a
+TFArray<N>; a FixedList without dimensions is not allowed here.
+"""
+function _function_type(type_node, what)
+    t = convert_type_node(type_node; dimless="auto")
+    if t == "auto"
+        throw("FixedList needs a size in the $(what), e.g. FixedList<<3, Float>>; " *
+              "use TFTensor for tensors of any shape.")
+    end
+    return t
+end
+
 function ir_function!(ast, functions_table, ir_builder_func)
     """
     Handles Single Function Definition
@@ -501,7 +561,11 @@ function ir_function!(ast, functions_table, ir_builder_func)
             expr = popfirst!(ast.expressions)
 
             expr_name = get_value(expr.name)
-            expr_type = convert_type_name(get_value(expr.type))
+            local_tname = get_value(expr.type)
+            # A dimensionless FixedList local is a stack array whose size is
+            # deduced from its value; TFTensor is a torch::Tensor.
+            is_array_local = local_tname == "FixedList"
+            expr_type = is_array_local ? "auto" : convert_type_name(local_tname)
 
             emit(ir_expr_build, expr_type)
             emit(ir_expr_build, WHITE_SPACE)
@@ -517,7 +581,12 @@ function ir_function!(ast, functions_table, ir_builder_func)
             emit(ir_expr_build, WHITE_SPACE)
 
             # Add function expression to scope
-            ir_func_expr!(expr_value, func_scope, ir_expr_build)
+            ARRAY_CTX[] = is_array_local
+            try
+                ir_func_expr!(expr_value, func_scope, ir_expr_build)
+            finally
+                ARRAY_CTX[] = false
+            end
 
             emit(ir_expr_build, SEMI_COLON)
             final_expr = build_sameline(ir_expr_build)
@@ -528,7 +597,7 @@ function ir_function!(ast, functions_table, ir_builder_func)
 
     end
 
-    output_type_reg = convert_type_name(get_value(ast.signature.output.name))
+    output_type_reg = _function_type(ast.signature.output, "return type of '$(name)'")
 
     # Output Type
     emit(ir_builder_func, output_type_reg)
@@ -542,11 +611,12 @@ function ir_function!(ast, functions_table, ir_builder_func)
     while length(signature.args) > 0
         current_arg = popfirst!(signature.args)
         arg_name = get_value(current_arg.name)
-        arg_type = convert_type_name(get_value(current_arg.type.name))
+        arg_type = _function_type(current_arg.type, "argument '$(arg_name)' of '$(name)'")
 
         functions_table[name][arg_name] = arg_type
 
-        emit(ir_builder_func, arg_type)
+        # Arrays are passed by const reference (stack data, no copy needed)
+        emit(ir_builder_func, is_tf_array_type(arg_type) ? "const $(arg_type)&" : arg_type)
         emit(ir_builder_func, WHITE_SPACE)
         emit(ir_builder_func, arg_name)
 
@@ -570,7 +640,12 @@ function ir_function!(ast, functions_table, ir_builder_func)
     emit(ret_ir_builder, RETURN)
     emit(ret_ir_builder, WHITE_SPACE)
     ret_value = ret.value
-    ir_func_expr!(ret_value, func_scope, ret_ir_builder)
+    ARRAY_CTX[] = is_tf_array_type(output_type_reg)
+    try
+        ir_func_expr!(ret_value, func_scope, ret_ir_builder)
+    finally
+        ARRAY_CTX[] = false
+    end
     emit(ir_builder_func, build_sameline(ret_ir_builder))
     emit(ir_builder_func, SEMI_COLON)
 

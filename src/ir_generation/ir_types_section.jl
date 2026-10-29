@@ -9,17 +9,48 @@ function ir_type_declaration(ast, define_type=false, symbol_tables=nothing)
 
     type_parameters = []
 
+    # Type inheritance: `Child << own attrs >> : Parent` where Parent is a
+    # previously declared vertex type. The child keeps all of the parent's
+    # attributes (same indices) and appends its own.
+    parent_name = ir_type_class(ast.type)
+    is_subtype = ast.value === nothing && parent_name != "Type"
+    inherited_names = String[]
+    if is_subtype && define_type == true
+        if !haskey(symbol_tables, parent_name)
+            throw("Type $type_name extends unknown type $parent_name. " *
+                  "Base types must be declared before their subtypes.")
+        end
+    end
+
     # Track for each type, what parameters does it belong to?
     if define_type == true
         symbol_tables[type_name] = Dict()
+        register_type!(type_name, is_subtype ? parent_name : nothing)
     end
 
     # Associate each parameter with the type and parameter position.
     type_parameters, param_names, param_types, is_list = ir_parameter(ast.parameter)
+    if type_parameters === nothing
+        # Empty attribute list (e.g. `Fluid << >> : Site`): only inherited attributes
+        type_parameters, param_names, param_types, is_list = [], [], [], []
+    end
 
     println("type_name: ", type_name)
     if define_type == true
         param_count = 1
+        if is_subtype
+            for idx in sort(collect(keys(symbol_tables[parent_name])))
+                entry = symbol_tables[parent_name][idx]
+                symbol_tables[type_name][idx] = entry
+                push!(inherited_names, entry[2])
+                param_count = idx + 1
+            end
+            for name in param_names
+                if name in inherited_names
+                    throw("Type $type_name redeclares attribute $name inherited from $parent_name.")
+                end
+            end
+        end
         println("param_names: ", param_names)
         for (ix, name) in enumerate(param_names)
 
@@ -34,7 +65,7 @@ function ir_type_declaration(ast, define_type=false, symbol_tables=nothing)
                 # list_size = tensor_size
 
                 # list_type = is_list[ix][3].token.position.value
-                list_type = "torch::Tensor"
+                list_type = is_list[ix][4]
                 # println("list_type: ", list_type)
                 # println("is_list[ix]: ", is_list[ix])
                 # exit(0)
@@ -67,7 +98,8 @@ function ir_type_declaration(ast, define_type=false, symbol_tables=nothing)
     # rule codegen keeps the two in sync on every write. Reads of tensor Position
     # come from the struct member, so it must be present here and serialized.
     struct_members = type_parameters
-    serialize_names = param_names
+    # Subtypes serialize the inherited attributes first, then their own.
+    serialize_names = vcat(inherited_names, param_names)
 
     # TODO: Handle identifier names
     if ast.value == nothing
@@ -164,6 +196,7 @@ function ir_types_section(ast, symbol_tables)
     section_name = get_value(ast.name)
 
     global type_namespace = section_name
+    reset_type_hierarchy!()
 
     section_data = [
         "#ifndef DGGML_$(section_name)_TYPES_HPP\n",

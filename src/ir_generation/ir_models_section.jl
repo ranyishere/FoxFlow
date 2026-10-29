@@ -317,7 +317,7 @@ function ir_get_type_attr(ast, type_namespace, symbol_tables, observable_section
         attrs = Tuple{String, Bool}[]
         for (_, attr) in value
             attr_type = attr[1]
-            is_tensor = (attr_type == "torch::Tensor" && attr[3][1] == true)
+            is_tensor = (is_list_type_tensor(attr_type) && attr[3][1] == true)
             push!(attrs, (attr[2], is_tensor))
         end
         type_to_attrs[String(key)] = attrs

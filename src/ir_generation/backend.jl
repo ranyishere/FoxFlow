@@ -123,6 +123,10 @@ target_link_libraries(@TARGET@ PRIVATE vtu11::vtu11)
 target_link_libraries(@TARGET@ PUBLIC SUNDIALS::arkode SUNDIALS::nvecserial)
 target_link_libraries(@TARGET@ PRIVATE cereal::cereal)
 target_link_libraries(@TARGET@ PRIVATE torch)
+find_package(OpenMP QUIET)
+if(OpenMP_CXX_FOUND)
+    target_link_libraries(@TARGET@ PRIVATE OpenMP::OpenMP_CXX)
+endif()
 target_compile_features(@TARGET@ PRIVATE cxx_std_17)
 """
 

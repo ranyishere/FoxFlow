@@ -4,6 +4,7 @@
 # include("ir.jl")
 # include("utils.jl")
 
+include("ir_type_inheritance.jl")
 include("ir_rule_generation.jl")
 include("ir_parameter_section.jl")
 include("ir_types_section.jl")
@@ -12,11 +13,13 @@ include("ir_functions_section.jl")
 include("ir_simulations_section.jl")
 
 import .IRRuleGeneration: ir_rules_section!
+import .IRTypeInheritance: reset_type_hierarchy!, register_type!
 import .IRBuildUtils: emit, build, IRBuilder, build_sameline
 import ..AstNodes: IntegerNode, FloatNode, IdentifierNode, BinaryOpNode, GroupNode, CallNode, IndexAccessNode, ArrayLiteralNode, NamedParameterNode, UnaryOpNode
 
 import ..Tokens: IntegerToken, FloatToken, PositionToken, LiteralToken, ErrorToken, OperatorToken
-import .IRUtils: get_value, convert_type_name, write_file
+import .IRUtils: get_value, convert_type_name, convert_type_node, write_file, TF_RUNTIME_HEADER,
+        is_list_type_tensor, is_tf_array_type, is_torch_tensor_type, tf_array_size, fixed_list_dims
 using OrderedCollections
 
 # include("ir_types_section.jl")
@@ -138,15 +141,12 @@ function ir_parameter(ast)
 
                 push!(is_list_params, (false, nothing, nothing))
 
-            elseif type_name ==  "FixedList"
+            elseif type_name in ("FixedList", "TFTensor")
 
-                # TODO: Must have a parameter node afterwards and parse it
-                # Assuming the that Fixed list is of type double
+                # FixedList<<N, Float>> is a stack array (TFArray<N>);
+                # TFTensor<<dims..., Type>> is a torch::Tensor.
 
-                # name = get_value(each_token.name)
-                # type_name = get_value(each_token.parameter.name)
-
-                if type_name == "FixedList"
+                if type_name in ("FixedList", "TFTensor")
                     # A fixed list has two parameters
                     # the first one is the size
                     # the second one is the type
@@ -180,8 +180,19 @@ function ir_parameter(ast)
                     # loop until you hit the list type
                     # list_type = list_params.token[2]
 
-                    # (Is a list, size of list, list_type)
-                    push!(is_list_params, (true, list_size, list_type))
+                    # FixedList -> stack array, TFTensor -> torch tensor
+                    use_array = type_name == "FixedList"
+                    list_type_val = list_type === nothing ? "Float" : list_type.token.position.value
+                    if use_array && (length(list_size) != 1 || list_type_val != "Float")
+                        throw(ErrorException(
+                            "Attribute '$(name)': FixedList supports only one-dimensional Float arrays " *
+                            "(got <<$(join(list_size, ", ")), $(list_type_val)>>). " *
+                            "Use TFTensor for multi-dimensional or Integer data."))
+                    end
+                    cpp_list_type = use_array ? "TFArray<$(list_size[1])>" : "torch::Tensor"
+
+                    # (Is a list, size of list, list_type, C++ type)
+                    push!(is_list_params, (true, list_size, list_type, cpp_list_type))
 
                     # list_name ="fflow_"* string(UUIDs.uuid4())[1:6]
                     list_name = name
@@ -194,11 +205,11 @@ function ir_parameter(ast)
 
                     convert_type = convert_type_name(list_type_str, true)
 
-                    # println("convert_type: ", convert_type)
-                    # exit(0)
-
-                    # push!(params, "\t\tdouble $(list_name)[$(dim)];\n")
-                    ir = "\t\ttorch::Tensor $(list_name) = torch::zeros({$(dim)}, $convert_type);\n"
+                    if use_array
+                        ir = "\t\tTFArray<$(list_size[1])> $(list_name);\n"
+                    else
+                        ir = "\t\ttorch::Tensor $(list_name) = torch::zeros({$(dim)}, $convert_type);\n"
+                    end
 
                     # println("ir: ", ir)
                     # exit(0)
@@ -272,9 +283,9 @@ function ir_type_instance(ast, define_type=false, symbol_tables=nothing)
 
             if is_list[ix][1] == true
 
-                # Store tensor as a single entry with type "torch::Tensor"
+                # Store the list as a single entry (tensor or array type)
                 # instead of unrolling into individual elements.
-                symbol_tables[type_name][param_count] = ("torch::Tensor", name, is_list[ix])
+                symbol_tables[type_name][param_count] = (is_list[ix][4], name, is_list[ix])
                 param_count += 1
 
             else
@@ -543,6 +554,21 @@ function assert_namespace_match(expected, ast, keyword, filename)
     return actual
 end
 
+# Path of the TFArray runtime header shipped with the generator.
+const TF_RUNTIME_SRC = joinpath(@__DIR__, "runtime", TF_RUNTIME_HEADER)
+
+"""
+Write a generated C++ file. If it references TFArray<N>, include the runtime
+header and copy it into the output directory next to the generated sources.
+"""
+function write_generated(output_dir, file_name, text)
+    if occursin("TFArray<", text) || occursin("tf::", text)
+        text = "#include \"$(TF_RUNTIME_HEADER)\"\n" * text
+        cp(TF_RUNTIME_SRC, joinpath(output_dir, TF_RUNTIME_HEADER); force=true)
+    end
+    write_file(joinpath(output_dir, file_name), text)
+end
+
 function do_simulation(input_dir::AbstractString, output_dir::AbstractString)
     """
     Do Simulation — supports multiple sequential RunSimulation stages.
@@ -578,7 +604,7 @@ function do_simulation(input_dir::AbstractString, output_dir::AbstractString)
 
     propensity_table["function_table"] = function_table
 
-    write_file(joinpath(output_dir, "functions.h"), ir_functions)
+    write_generated(output_dir, "functions.h", ir_functions)
 
     # ===== Parse params (shared — use from first stage) =====
     params_file = all_stages[1]["parameters"]
@@ -598,7 +624,7 @@ function do_simulation(input_dir::AbstractString, output_dir::AbstractString)
 
     println("Generating Types")
     generated_types = ir_types_section(ast_types[1], symbol_tables)
-    write_file(joinpath(output_dir, "types.h"), generated_types)
+    write_generated(output_dir, "types.h", generated_types)
 
     # ===== Per-stage: parse rules, generate rules_N.h, collect rules_tables =====
     # We collect the rules_table for each stage so the model generator
@@ -628,7 +654,7 @@ function do_simulation(input_dir::AbstractString, output_dir::AbstractString)
                                           stage_index=stage_idx)
 
         rules_filename = "rules_$stage_idx.h"
-        write_file(joinpath(output_dir, rules_filename), ir_rules_code)
+        write_generated(output_dir, rules_filename, ir_rules_code)
 
         # Save a snapshot of this stage's rules_table
         push!(stage_rules_tables, deepcopy(rules_table))
@@ -656,7 +682,7 @@ function do_simulation(input_dir::AbstractString, output_dir::AbstractString)
     ir_models = ir_models_section_multistage(all_stages, name_space, symbol_tables,
                                              stage_rules_tables, all_rules_includes;
                                              observable_section=observable_section)
-    write_file(joinpath(output_dir, "model.h"), ir_models)
+    write_generated(output_dir, "model.h", ir_models)
 
     # ===== Grammar Entry Point =====
     println("Generating Main")
