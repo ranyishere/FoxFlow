@@ -52,7 +52,7 @@ function process_arg_token(arg_token)
 
     # Check if this is a FixedList<<...>> type
     param_nodes = ParameterNode(nothing)
-    if get_value_safe(arg_node) == "FixedList" && !isempty(arg_token) && (lookahead(arg_token) isa LeftAngleBracketToken)
+    if get_value_safe(arg_node) in ("FixedList", "TFTensor") && !isempty(arg_token) && (lookahead(arg_token) isa LeftAngleBracketToken)
         popfirst!(arg_token)  # Consume '<<'
         # Collect the inner parameters until we hit '>>'
         inner_params = []
@@ -136,7 +136,7 @@ function parse_function_type_signature!(tokens)
 
     # Check if return type is FixedList<<...>>
     ret_param_nodes = ParameterNode(nothing)
-    if get_value_safe(ret_type_node) == "FixedList" && !isempty(tokens) && (lookahead(tokens) isa LeftAngleBracketToken)
+    if get_value_safe(ret_type_node) in ("FixedList", "TFTensor") && !isempty(tokens) && (lookahead(tokens) isa LeftAngleBracketToken)
         popfirst!(tokens)  # Consume '<<'
         inner_params = []
         while !isempty(tokens) && !(lookahead(tokens) isa RightAngleBracketToken)
