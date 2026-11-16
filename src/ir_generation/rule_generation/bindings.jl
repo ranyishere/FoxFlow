@@ -455,7 +455,7 @@
 
     end
 
-    function link_param_to_nodes(param, node_types, symbol_tables, node_names)
+    function link_param_to_nodes(param, node_types, symbol_tables, node_names; ordinals=nothing)
         """
         NAME-BASED binding.
 
@@ -487,7 +487,7 @@
         for (ix, node_name) in enumerate(node_names)
             if !haskey(node_loc_of, node_name)
                 unique_count += 1
-                node_loc_of[node_name] = unique_count
+                node_loc_of[node_name] = ordinals === nothing ? unique_count : ordinals[node_name]
                 type_of_node[node_name] = node_types[ix]
             end
         end

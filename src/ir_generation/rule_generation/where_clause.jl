@@ -31,7 +31,15 @@
                 # node use its current integrated position instead of the frozen
                 # birth/seed value. Fixes boundary-catastrophe teleport-to-seed
                 # without breaking creation's direction vectors.
-                ir = "$attr_type $user_param_name = std::get<$type_namespace::$node_type>(lhs[m1[$node_loc]].data).$attr_name;\n" *
+                #
+                # LHS snapshots are DEEP copies (.clone()): the node's Position
+                # tensor handle is shallow and can be shared by several nodes
+                # (nodes born from the same RHS template, carry-copies). A shallow
+                # alias then made e.g. im3_pos / im4_pos / pos_pos the SAME storage,
+                # so loading one overwrote the others (crossover junction landed
+                # on the tip instead of on the struck segment). LHS locals are
+                # read-only; writes go straight to rhs data, so no aliasing is needed.
+                ir = "$attr_type $user_param_name = std::get<$type_namespace::$node_type>(lhs[m1[$node_loc]].data).$attr_name.clone();\n" *
                      "for (int _i = 0; _i < 3 && _i < $user_param_name.numel(); _i++) { $user_param_name[_i] = lhs[m1[$node_loc]].position[_i]; }\n"
             elseif is_list_type_tensor(attr_type)
                 # Non-Position tensor attribute (e.g. Direction) — read from .data
@@ -159,6 +167,36 @@
         # Leaf nodes (IdentifierNode, LiteralNode, etc.) — nothing to do
     end
 
+    """
+        check_duplicate_where_definitions(where_clause)
+
+    Throw if the same local variable is defined (`name : Type := ...`) more than
+    once in a single where block. Every definition is emitted as a C++ local
+    declaration in the same lambda scope, so a repeat would otherwise only surface
+    as a C++ "redeclaration" error in the generated code. Catching it here points
+    at the FoxFlow source instead.
+    """
+    function check_duplicate_where_definitions(where_clause)
+        seen = Dict{String,Any}()
+        for node in where_clause
+            node isa DefinitionNode || continue
+            name = get_value(node.name)
+            line = try
+                node.name.token.position.line_no
+            catch
+                nothing
+            end
+            if haskey(seen, name)
+                first_line = seen[name]
+                where_msg = line === nothing ? "" : " (line $line)"
+                first_msg = first_line === nothing ? "" : ", first defined at line $first_line"
+                throw("Error: variable '$name' is defined more than once in the same where block$where_msg$first_msg. " *
+                      "Remove the duplicate definition.")
+            end
+            seen[name] = line
+        end
+    end
+
     function ir_where_clause!(where_clause, ir_builder,
             lhs_param_to_node, lhs_assgn_to_node, rhs_param_to_node,
             rhs_assgn_to_node, symbol_tables, type_namespace, propensity_table,
@@ -167,6 +205,8 @@
         """
         Handles where clause
         """
+
+        check_duplicate_where_definitions(where_clause)
 
         where_hdr = "[&](auto &lhs, auto &rhs, auto &m1, auto &m2) {"
         emit(ir_builder, where_hdr)

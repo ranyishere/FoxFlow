@@ -12,10 +12,10 @@ include("ir_models_section.jl")
 include("ir_functions_section.jl")
 include("ir_simulations_section.jl")
 
-import .IRRuleGeneration: ir_rules_section!
+import .IRRuleGeneration: ir_rules_section!, is_pde_clause, ir_mesh_generator
 import .IRTypeInheritance: reset_type_hierarchy!, register_type!
 import .IRBuildUtils: emit, build, IRBuilder, build_sameline
-import ..AstNodes: IntegerNode, FloatNode, IdentifierNode, BinaryOpNode, GroupNode, CallNode, IndexAccessNode, ArrayLiteralNode, NamedParameterNode, UnaryOpNode
+import ..AstNodes: IntegerNode, FloatNode, IdentifierNode, BinaryOpNode, GroupNode, CallNode, IndexAccessNode, ArrayLiteralNode, NamedParameterNode, UnaryOpNode, RuleSectionNode
 
 import ..Tokens: IntegerToken, FloatToken, PositionToken, LiteralToken, ErrorToken, OperatorToken
 import .IRUtils: get_value, convert_type_name, convert_type_node, write_file, TF_RUNTIME_HEADER,
@@ -466,7 +466,205 @@ void add_boundary(
     return model_boundary
 end
 
-function ir_main(name_space, num_stages, function_table=nothing)
+# C++ support code emitted into main.cpp: running one simulation, and running N independent
+# replicates of it as child processes (`run(sim, N, ...)`).
+#
+# Every replicate is a fresh process of this same executable started as
+#   main <settings> --replicate <sim> <index> <seed> <domain_parallel 0|1>
+# inside runs/<sim>/run_<index>/ (so its my_results/, trace and listener files cannot collide
+# with another replicate's) with FOXFLOW_BASE_DIR set to the directory the program was started
+# from, which is where relative inputs (initial states, TorchScript models) are looked up.
+const FFLOW_MAIN_RUNTIME = raw"""
+#include <cerrno>
+#include <cstring>
+#include <cstdint>
+#include <cstdlib>
+#include <filesystem>
+#include <map>
+#include <string>
+#include <thread>
+#include <vector>
+#include <fcntl.h>
+#include <spawn.h>
+#include <sys/wait.h>
+#include <unistd.h>
+#ifdef _OPENMP
+#include <omp.h>
+#endif
+extern char **environ;
+
+namespace fflow_run {
+
+struct ChildArgs {
+    bool child = false;
+    std::string sim;
+    int index = 0;
+    std::uint32_t seed = 0;
+    bool domain_parallel = true;
+};
+
+inline ChildArgs parse_args(int argc, char **argv) {
+    ChildArgs a;
+    for (int i = 2; i + 4 < argc; ++i) {
+        if (std::string(argv[i]) == "--replicate") {
+            a.child = true;
+            a.sim = argv[i + 1];
+            a.index = std::atoi(argv[i + 2]);
+            a.seed = static_cast<std::uint32_t>(std::strtoul(argv[i + 3], nullptr, 10));
+            a.domain_parallel = std::string(argv[i + 4]) != "0";
+            break;
+        }
+    }
+    return a;
+}
+
+inline std::string self_path(const char *argv0) {
+    std::error_code ec;
+    auto p = std::filesystem::read_symlink("/proc/self/exe", ec);
+    if (!ec) return p.string();
+    return std::filesystem::absolute(argv0).string();
+}
+
+// Switch the OpenMP geocell decomposition of a run off (one thread) or leave it at the default.
+// The previous thread count is restored when the scope ends.
+struct DomainScope {
+    int saved = 0;
+    bool active = false;
+    explicit DomainScope(bool domain_parallel) {
+#ifdef _OPENMP
+        if (!domain_parallel) {
+            saved = omp_get_max_threads();
+            omp_set_num_threads(1);
+            active = true;
+        }
+#else
+        (void)domain_parallel;
+#endif
+    }
+    ~DomainScope() {
+#ifdef _OPENMP
+        if (active) omp_set_num_threads(saved);
+#endif
+    }
+};
+
+// DomainParallel picks the runner at compile time (see SimulatorInterface): true -> the OpenMP
+// geocell domain decomposition, false -> the serial runner.
+template <class ModelT, bool DomainParallel = false>
+void run_stage() {
+    DGGML::SimulatorInterface<ModelT, 3, DomainParallel> simulator;
+    ModelT model;
+    simulator.setModel(model);
+    simulator.simulate();
+}
+
+// Number of replicates of `sim` that failed (non-zero exit or could not start).
+inline int run_replicates(const std::string &self, const std::string &settings,
+                          const std::string &sim, int n, int jobs, bool domain_parallel,
+                          std::uint32_t base_seed) {
+    namespace fs = std::filesystem;
+    const fs::path base = fs::current_path();
+    const std::string settings_abs = fs::absolute(settings).string();
+    if (jobs < 1) {
+        const int hw = static_cast<int>(std::thread::hardware_concurrency());
+        jobs = domain_parallel ? 1 : (hw > 0 ? hw : 1);
+    }
+    if (jobs > n) jobs = n;
+
+    std::cout << "[" << sim << "] " << n << " runs, " << jobs << " at a time, domain parallelism "
+              << (domain_parallel ? "on" : "off") << ", seeds " << base_seed << ".."
+              << (base_seed + static_cast<std::uint32_t>(n) - 1) << std::endl;
+
+    std::vector<std::string> env_strs;
+    for (char **e = environ; *e; ++e) {
+        const std::string s(*e);
+        if (s.rfind("FOXFLOW_BASE_DIR=", 0) == 0) continue;
+        if (!domain_parallel && (s.rfind("OMP_NUM_THREADS=", 0) == 0 ||
+                                 s.rfind("OPENBLAS_NUM_THREADS=", 0) == 0 ||
+                                 s.rfind("MKL_NUM_THREADS=", 0) == 0)) continue;
+        env_strs.push_back(s);
+    }
+    env_strs.push_back("FOXFLOW_BASE_DIR=" + base.string());
+    if (!domain_parallel) {
+        env_strs.push_back("OMP_NUM_THREADS=1");
+        env_strs.push_back("OPENBLAS_NUM_THREADS=1");
+        env_strs.push_back("MKL_NUM_THREADS=1");
+    }
+    std::vector<char *> envp;
+    for (auto &s : env_strs) envp.push_back(s.data());
+    envp.push_back(nullptr);
+
+    auto launch = [&](int idx, pid_t &pid) -> bool {
+        const fs::path dir = base / "runs" / sim / ("run_" + std::to_string(idx));
+        std::error_code ec;
+        fs::remove_all(dir, ec);
+        fs::create_directories(dir, ec);
+        if (ec) {
+            std::cerr << "[" << sim << "] run " << idx << ": cannot create " << dir << ": " << ec.message() << std::endl;
+            return false;
+        }
+        const std::string log = (dir / "run.log").string();
+        const std::string dir_s = dir.string();
+        const std::string idx_s = std::to_string(idx);
+        const std::string seed_s = std::to_string(base_seed + static_cast<std::uint32_t>(idx));
+        std::vector<std::string> args = {self, settings_abs, "--replicate", sim, idx_s, seed_s,
+                                         domain_parallel ? "1" : "0"};
+        std::vector<char *> argv;
+        for (auto &s : args) argv.push_back(s.data());
+        argv.push_back(nullptr);
+
+        posix_spawn_file_actions_t fa;
+        posix_spawn_file_actions_init(&fa);
+        posix_spawn_file_actions_addchdir_np(&fa, dir_s.c_str());
+        posix_spawn_file_actions_addopen(&fa, 1, log.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
+        posix_spawn_file_actions_adddup2(&fa, 1, 2);
+        const int rc = posix_spawn(&pid, self.c_str(), &fa, nullptr, argv.data(), envp.data());
+        posix_spawn_file_actions_destroy(&fa);
+        if (rc != 0) {
+            std::cerr << "[" << sim << "] run " << idx << ": cannot start " << self << ": "
+                      << std::strerror(rc) << std::endl;
+            return false;
+        }
+        std::cout << "[" << sim << "] run " << idx << " started (seed " << seed_s << ") -> runs/"
+                  << sim << "/run_" << idx << "/" << std::endl;
+        return true;
+    };
+
+    std::map<pid_t, int> running;
+    int next = 0, failed = 0;
+    while (next < n || !running.empty()) {
+        while (next < n && static_cast<int>(running.size()) < jobs) {
+            const int idx = next++;
+            pid_t pid = 0;
+            if (launch(idx, pid)) running[pid] = idx; else ++failed;
+        }
+        if (running.empty()) continue;
+        int status = 0;
+        const pid_t pid = waitpid(-1, &status, 0);
+        if (pid < 0) {
+            if (errno == EINTR) continue;
+            break;
+        }
+        auto it = running.find(pid);
+        if (it == running.end()) continue;
+        const int idx = it->second;
+        running.erase(it);
+        const int code = WIFEXITED(status) ? WEXITSTATUS(status) : 128 + WTERMSIG(status);
+        if (code == 0) {
+            std::cout << "[" << sim << "] run " << idx << " finished" << std::endl;
+        } else {
+            ++failed;
+            std::cerr << "[" << sim << "] run " << idx << " FAILED (exit " << code
+                      << "); see runs/" << sim << "/run_" << idx << "/run.log" << std::endl;
+        }
+    }
+    return failed;
+}
+
+} // namespace fflow_run
+"""
+
+function ir_main(name_space, num_stages, function_table=nothing, all_stages=[], measure_specs=[])
 
     # Check if any model-loaded functions exist in the function_table
     has_models = false
@@ -483,6 +681,7 @@ function ir_main(name_space, num_stages, function_table=nothing)
                 "#include \"model.h\"\n",
                 "#include \"functions.h\"\n",
                 "#include \"simdjson.h\"\n",
+                FFLOW_MAIN_RUNTIME,
 
                 "int main(int argc, char **argv) {\n"
                 ]
@@ -493,21 +692,78 @@ function ir_main(name_space, num_stages, function_table=nothing)
     end
 
     ir_body = [
-               "\t if (argc != 2) {\n",
+               "\t if (argc < 2) {\n",
                "\t\t std::cerr << \"Usage: \" << argv[0] << \" <json_file>\" << std::endl;\n",
                "\t\t return 1;\n\t\t}\n",
                "\t std::string filename = argv[1];\n",
+               "\t const fflow_run::ChildArgs replicate = fflow_run::parse_args(argc, argv);\n",
+               "\t const std::string self_exe = fflow_run::self_path(argv[0]);\n",
+               "\t (void)self_exe;\n",
             ]
+
+    stage_name(ix) = string(all_stages[ix]["name"])
+    stage_parallel(stage) = get(stage, "domain_parallel", nothing) === true ? "true" : "false"
+
+    # A replicate child (started by `run(sim, N)`) runs exactly its own simulation, seeded, and exits.
+    push!(ir_body, "\n\t // ===== Replicate child: run one simulation and exit =====\n")
+    push!(ir_body, "\t if (replicate.child) {\n")
+    for stage_ix in 1:num_stages
+        get(all_stages[stage_ix], "active", true) || continue
+        push!(ir_body, "\t\t if (replicate.sim == \"$(stage_name(stage_ix))\") {\n")
+        push!(ir_body, "\t\t\t fflow_run::DomainScope domain_scope(replicate.domain_parallel);\n")
+        push!(ir_body, "\t\t\t DGGML::seed_omp_threads(replicate.seed);\n")
+        push!(ir_body, "\t\t\t std::cout << \"[$(stage_name(stage_ix))] replicate \" << replicate.index << \", seed \" << replicate.seed" *
+                       " << \", domain parallelism \" << (replicate.domain_parallel ? \"on\" : \"off\") << std::endl;\n")
+        push!(ir_body, "\t\t\t fflow_run::run_stage<$name_space::Model_$(stage_ix - 1), $(stage_parallel(all_stages[stage_ix]))>();\n")
+        push!(ir_body, "\t\t\t return 0;\n\t\t }\n")
+    end
+    push!(ir_body, "\t\t std::cerr << \"unknown simulation '\" << replicate.sim << \"'\" << std::endl;\n")
+    push!(ir_body, "\t\t return 2;\n\t }\n")
 
     # Generate sequential stage execution
     for stage_ix in 0:(num_stages-1)
+        stage = all_stages[stage_ix + 1]
+        # A Simulation(...) that no run(...) statement names is not executed (it can still be measured).
+        get(stage, "active", true) || continue
         model_class = "Model_$stage_ix"
-        push!(ir_body, "\n\t // ===== Stage $stage_ix =====\n")
+        replicates = get(stage, "replicates", 1)
+        domain_parallel = get(stage, "domain_parallel", nothing)
+        seed = get(stage, "seed", nothing)
+        jobs = get(stage, "jobs", nothing)
+        push!(ir_body, "\n\t // ===== Stage $stage_ix: $(stage["name"]) =====\n")
         push!(ir_body, "\t {\n")
-        push!(ir_body, "\t\t DGGML::SimulatorInterface<$name_space::$model_class> simulator_$stage_ix;\n")
-        push!(ir_body, "\t\t $name_space::$model_class model_$stage_ix;\n")
-        push!(ir_body, "\t\t simulator_$stage_ix.setModel(model_$stage_ix);\n")
-        push!(ir_body, "\t\t simulator_$stage_ix.simulate();\n")
+        if replicates > 1
+            # N independent runs, each in its own process and directory (runs/<sim>/run_<i>/).
+            push!(ir_body, "\t\t if (fflow_run::run_replicates(self_exe, filename, \"$(stage["name"])\", $replicates, " *
+                           "$(jobs === nothing ? 0 : jobs), $(stage_parallel(stage)), " *
+                           "$(seed === nothing ? 0 : seed)u) != 0) {\n")
+            push!(ir_body, "\t\t\t std::cerr << \"simulation '$(stage["name"])': some runs failed\" << std::endl;\n")
+            push!(ir_body, "\t\t\t return 1;\n\t\t }\n")
+        else
+            domain_parallel === false &&
+                push!(ir_body, "\t\t fflow_run::DomainScope domain_scope(false);\n")
+            seed === nothing || push!(ir_body, "\t\t DGGML::seed_omp_threads($(seed)u);\n")
+            push!(ir_body, "\t\t fflow_run::run_stage<$name_space::$model_class, $(stage_parallel(stage))>();\n")
+        end
+        push!(ir_body, "\t }\n")
+    end
+
+    # `measure(sim, ..., "obs", ...)`: after every stage has run, evaluate the observables on the
+    # saved snapshots of each named simulation; one CSV per measure statement.
+    for (k, spec) in enumerate(measure_specs)
+        wanted = join(["\"$o\"" for o in spec["observables"]], ", ")
+        push!(ir_body, "\n\t // ===== measure #$k =====\n")
+        push!(ir_body, "\t {\n")
+        push!(ir_body, "\t\t std::filesystem::create_directories(\"my_results\");\n")
+        push!(ir_body, "\t\t std::ofstream measure_out(\"my_results/measure_$k.csv\", std::ios::trunc);\n")
+        push!(ir_body, "\t\t bool measure_header = false;\n")
+        for sim in spec["simulations"]
+            stage_ix = findfirst(s -> s["name"] == sim, all_stages)
+            push!(ir_body, "\t\t $name_space::measure_simulation<$name_space::Model_$(stage_ix - 1)>(" *
+                           "\"$sim\", std::vector<std::string>{$wanted}, measure_out, measure_header, " *
+                           "$(get(all_stages[stage_ix], "replicates", 1)));\n")
+        end
+        push!(ir_body, "\t\t std::cout << \"measure #$k written to my_results/measure_$k.csv\" << std::endl;\n")
         push!(ir_body, "\t }\n")
     end
 
@@ -590,15 +846,28 @@ function do_simulation(input_dir::AbstractString, output_dir::AbstractString)
     ast = parse_file!(tokens_sim)
 
     # ir_simulation_section! returns the namespace name and a list of ir_run_sim dicts (one per RunSimulation call)
-    name_space, all_stages = ir_simulation_section!(ast[1], sim_table)
+    name_space, all_stages, measure_specs = ir_simulation_section!(ast[1], sim_table)
     global type_namespace = name_space
     num_stages = length(all_stages)
     println("Simulation namespace: ", name_space)
     println("Found $num_stages simulation stage(s)")
 
     # ===== Parse functions (shared across stages) =====
+    # `SimulationFunctions := load("...")` in a Grammar selects the file; default functions.fflow.
+    # The generated functions.h is shared by every stage, so all grammars must agree on it.
+    function_files = unique([s["functions"] for s in all_stages if s["functions"] !== nothing])
+    length(function_files) > 1 &&
+        error("Grammars use different function files ($(join(function_files, ", "))); all simulations of one " *
+              "program share a single functions file")
+    functions_file = isempty(function_files) ? "functions.fflow" : function_files[1]
+    for key in ("types", "parameters")
+        files = unique([s[key] for s in all_stages])
+        length(files) > 1 &&
+            println("Warning: simulations use different $key files ($(join(files, ", "))); only " *
+                    "'$(files[1])' (the first simulation's) is used")
+    end
     # TODO: If functions.fflow is missing just make it empty.
-    tokens_funct = tokenize_file(joinpath(input_dir, "functions.fflow"))
+    tokens_funct = tokenize_file(joinpath(input_dir, functions_file))
     funct_ast = parse_file!(tokens_funct)
     ir_functions = ir_function_section(funct_ast[1], function_table)
 
@@ -631,6 +900,19 @@ function do_simulation(input_dir::AbstractString, output_dir::AbstractString)
     # can register only that stage's rules in its Model_N class.
     stage_rules_tables = []
     all_rules_includes = []
+    rules_file_first_stage = Dict{String, Int}()  # rules file => first stage that generated it
+    rules_file_rule_names = Dict{String, Vector{String}}()
+
+    # `trace(sim, "rule", ...)` must name rules that exist in the simulation's rules file.
+    function check_trace_rules(stage_info, rules_file, defined_rules)
+        for traced in get(stage_info, "trace_rules", String[])
+            traced == "*" && continue
+            if !(traced in defined_rules)
+                error("trace($(stage_info["name"]), \"$traced\"): no rule named '$traced' in $rules_file " *
+                      "(rules: $(join(defined_rules, ", ")))")
+            end
+        end
+    end
 
     for (stage_ix, stage_info) in enumerate(all_stages)
         stage_idx = stage_ix - 1  # 0-based for file naming
@@ -641,11 +923,29 @@ function do_simulation(input_dir::AbstractString, output_dir::AbstractString)
         # (propensity_table retains function_table from above)
 
         rules_file = stage_info["rules"]
+
+        # Several simulations may share one rules file (e.g. the same Grammar run twice with
+        # different parameters): generate it once and let them share the rules header, so the
+        # same rule functions are not defined twice.
+        if haskey(rules_file_first_stage, rules_file)
+            first_ix = rules_file_first_stage[rules_file]
+            println("Stage $stage_idx: reusing rules from stage $(first_ix - 1) ($rules_file)")
+            push!(stage_rules_tables, stage_rules_tables[first_ix])
+            push!(all_rules_includes, all_rules_includes[first_ix])
+            check_trace_rules(stage_info, rules_file, rules_file_rule_names[rules_file])
+            continue
+        end
+        rules_file_first_stage[rules_file] = stage_ix
         println("Stage $stage_idx: Generating Rules from $rules_file")
 
         tokens_rules = tokenize_file(joinpath(input_dir, rules_file))
         ast_rules = parse_file!(tokens_rules)[1]
         assert_namespace_match(name_space, ast_rules, "rules", rules_file)
+
+        # `trace(sim, "rule", ...)` must name rules that exist in this stage's rules file.
+        defined_rules = [get_value(r.name) for r in ast_rules.rules_list]
+        rules_file_rule_names[rules_file] = defined_rules
+        check_trace_rules(stage_info, rules_file, defined_rules)
 
         ir_rules_code = ir_rules_section!(ast_rules,
                                           rules_table, symbol_tables,
@@ -663,7 +963,11 @@ function do_simulation(input_dir::AbstractString, output_dir::AbstractString)
 
     # ===== Parse observables (optional — per stage via RunSimulation, or auto-detected) =====
     observable_section = nothing
-    obs_file_from_stage = get(all_stages[1], "observables", nothing)
+    obs_files = unique([s["observables"] for s in all_stages if s["observables"] !== nothing])
+    length(obs_files) > 1 &&
+        println("Warning: simulations use different observables files ($(join(obs_files, ", "))); only " *
+                "'$(obs_files[1])' is used")
+    obs_file_from_stage = isempty(obs_files) ? nothing : obs_files[1]
     obs_file = obs_file_from_stage !== nothing ? joinpath(input_dir, obs_file_from_stage) :
                    joinpath(input_dir, "observables.fflow")
     if isfile(obs_file)
@@ -677,17 +981,65 @@ function do_simulation(input_dir::AbstractString, output_dir::AbstractString)
         println("No observables file found — tensor attributes will be skipped in VTK output")
     end
 
+    # ===== Global observables: each is a hidden rule `obs_<name>` whose propensity is the =====
+    # per-match value; measure(...) reduces it over all matches of each checkpointed state.
+    model_includes = unique(all_rules_includes)
+    # They are only generated when a measure(...) statement uses them.
+    if !isempty(measure_specs) && observable_section !== nothing &&
+       !isempty(observable_section.global_observables)
+        assert_namespace_match(name_space, observable_section, "observables", "observables.fflow")
+        global rules_table = Dict()
+        obs_rules_ast = RuleSectionNode(observable_section.name,
+                                        [o.rule for o in observable_section.global_observables])
+        obs_code = ir_rules_section!(obs_rules_ast, rules_table, symbol_tables,
+                                     propensity_table, type_namespace;
+                                     stage_index=900)
+        write_generated(output_dir, "observable_rules.h", obs_code)
+        push!(model_includes, "observable_rules.h")
+        println("Generated $(length(observable_section.global_observables)) global observable(s): " *
+                join([get_value(o.name) for o in observable_section.global_observables], ", "))
+    end
+
+    # ===== measure(...) statements need global observables, and must name existing ones =====
+    if !isempty(measure_specs)
+        known_obs = observable_section === nothing ? String[] :
+                    String[get_value(o.name) for o in observable_section.global_observables]
+        isempty(known_obs) &&
+            error("measure(...) needs global observables, but no `name : Observable := ...` is defined in the observables file")
+        for spec in measure_specs, o in spec["observables"]
+            o in known_obs || error("measure(...): no observable named '$o' (observables: $(join(known_obs, ", ")))")
+        end
+    end
+
     # ===== Generate Model (one Model_N class per stage) =====
     println("Generating Model")
     ir_models = ir_models_section_multistage(all_stages, name_space, symbol_tables,
-                                             stage_rules_tables, all_rules_includes;
-                                             observable_section=observable_section)
+                                             stage_rules_tables, model_includes;
+                                             observable_section=observable_section,
+                                             with_global_observables=!isempty(measure_specs))
     write_generated(output_dir, "model.h", ir_models)
 
     # ===== Grammar Entry Point =====
     println("Generating Main")
-    main_ir = ir_main(name_space, num_stages, function_table)
+    main_ir = ir_main(name_space, num_stages, function_table, all_stages, measure_specs)
     write_file(joinpath(output_dir, "main.cpp"), main_ir)
+
+    # ===== Rule-fire tracing: record the trace(...) statements for `run`/`trace` =====
+    trace_entries = []
+    for (stage_ix, stage_info) in enumerate(all_stages)
+        traced_rules = get(stage_info, "trace_rules", String[])
+        isempty(traced_rules) && continue
+        sim_name = stage_info["name"]
+        push!(trace_entries, OrderedDict(
+            "simulation" => sim_name,
+            "stage" => stage_ix - 1,
+            "rules" => traced_rules,
+            "rules_file" => abspath(joinpath(input_dir, stage_info["rules"])),
+            "trace_file" => "trace_$(sim_name).jsonl",
+        ))
+    end
+    TraceViewer.write_manifest(output_dir; input_dir=input_dir,
+                               types_header=joinpath(output_dir, "types.h"), traces=trace_entries)
 
     println("Done with IR Generation")
 end
@@ -704,6 +1056,7 @@ function print_usage()
       build    Generate, then configure & compile with CMake.
       run      Generate, compile, then execute the built model.
       watch    Keep a ParaView .pvd collection in sync with a results dir.
+      trace    Render the rule-fire traces of a finished run (see trace(...) below).
       help     Show this message.
 
     (If no command is given, 'gen' is assumed for backward compatibility.)
@@ -734,6 +1087,11 @@ function print_usage()
                          with the real simulation time until the run finishes.
       --                 Everything after is forwarded to the executable (run).
 
+    Rule-fire tracing:
+      Put trace(<simulation>, "rule", ...) in the simulations section of simulation.fflow
+      ("*" traces every rule). `run` renders trace_<simulation>.html next to the executable
+      when the run ends; `trace` renders it again with filters (see `trace --help`).
+
     Examples:
       julia ir.jl gen   ../tests/microtubules
       julia ir.jl build ../tests/microtubules out --sundials /opt/sundials
@@ -751,6 +1109,11 @@ function main(args)
     # `watch` has its own (results-dir based) argument shape; delegate directly.
     if args[1] == "watch"
         return PvdWatcher.run_cli(collect(args[2:end]))
+    end
+
+    # `trace` renders traces recorded by an earlier run; it does not regenerate or build.
+    if args[1] == "trace"
+        return TraceViewer.trace_main(collect(args[2:end]))
     end
 
     commands = ("gen", "build", "run")
@@ -888,6 +1251,7 @@ function main(args)
 
     if !do_watch
         Backend.run_executable(exe; args=exec_args)
+        TraceViewer.render_manifest(output_dir, dirname(exe))
         return 0
     end
 
@@ -903,6 +1267,7 @@ function main(args)
     # Watch until the simulation process exits, then flush a final .pvd.
     PvdWatcher.watch_pvd(results_dir; stop = () -> !process_running(proc))
     wait(proc)
+    TraceViewer.render_manifest(output_dir, run_dir)
     return 0
 end
 

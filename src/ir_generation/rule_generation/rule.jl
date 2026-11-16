@@ -2,6 +2,55 @@
 # Included into module IRRuleGeneration (see ../ir_rule_generation.jl).
 
     """
+    Decide the engine node id (ordinal) of every RHS node, by alias name.
+
+    The rewrite engine pairs LHS and RHS nodes purely by equal id
+    (destroy = LHS ids - RHS ids, create = RHS ids - LHS ids). The language,
+    however, identifies nodes by alias name. This bridges the two:
+
+      * an alias present on both sides gets its LHS id, wherever it appears on
+        the RHS, so statement order never changes which node is meant;
+      * an alias only on the RHS is a new node and gets a fresh id above every
+        LHS id, in RHS first-appearance order.
+
+    A different alias on the RHS is therefore a different node, even when it
+    sits at the same position as an LHS alias. To retype a node in place, reuse
+    its alias with the new type, e.g. `(pos : Positive)` -> `(pos : Zipper)`.
+
+    Returns name => ordinal. `lhs_order` / `rhs_order` map alias name to its
+    first-appearance ordinal on that side (see build_node_pos_to_type).
+    """
+    function assign_rhs_ordinals(rule_name, lhs_order, rhs_order)
+        ordinals = Dict{String, Int}()
+        next_free = isempty(lhs_order) ? 0 : maximum(values(lhs_order))
+        for name in keys(rhs_order)
+            if haskey(lhs_order, name)
+                ordinals[name] = lhs_order[name]
+            else
+                next_free += 1
+                ordinals[name] = next_free
+            end
+        end
+
+        # Flag rules whose meaning differs from the old position-based pairing:
+        # an LHS alias that is gone from the RHS, with a new RHS alias at its
+        # position. Under position pairing that was a silent in-place retype.
+        lhs_by_ord = Dict(v => k for (k, v) in lhs_order)
+        for (name, old_ord) in rhs_order
+            old_partner = get(lhs_by_ord, old_ord, nothing)
+            if old_partner !== nothing && !haskey(lhs_order, name) && !haskey(rhs_order, old_partner)
+                @warn "Rule '$rule_name': RHS node '$name' replaces LHS node " *
+                      "'$old_partner' by position, but nodes are paired by alias " *
+                      "name. '$old_partner' is destroyed and '$name' is created as " *
+                      "a new node (edges to nodes outside the pattern are lost). " *
+                      "To retype '$old_partner' in place, reuse the alias '$old_partner' " *
+                      "on the RHS with the new type."
+            end
+        end
+        return ordinals
+    end
+
+    """
     Generates the IR for a rule, including its header, nodes, and edges.
     """
     function ir_rule!(ir_builder, rule_node,
@@ -9,10 +58,11 @@
 
         """
         Visits each node in the rule and builds the graph
-        for the lhs and rhs of the rule
+        for the lhs and rhs of the rule. `ordinals` (name => id) overrides the
+        first-appearance numbering; used for the RHS so ids follow alias names.
         """
         function visit_rule_node!(each_node, graph_table, ir_builder,
-            graph_name, type_namespace=type_namespace)
+            graph_name, type_namespace=type_namespace; ordinals=nothing)
             
             # NOTE: Shouldn't this include adding
             # the symbol table?
@@ -22,10 +72,10 @@
                 right_node = each_node.right_vertex
 
                 visit_rule_node!(left_node, graph_table,
-                                ir_builder, graph_name, type_namespace)
+                                ir_builder, graph_name, type_namespace; ordinals=ordinals)
 
                 visit_rule_node!(right_node, graph_table,
-                                ir_builder, graph_name, type_namespace)
+                                ir_builder, graph_name, type_namespace; ordinals=ordinals)
 
                 rhs_node_count_0 = graph_table[(get_value(left_node.name), get_value(left_node.type.name))]
                 rhs_node_count_1 = graph_table[(get_value(right_node.name), get_value(right_node.type.name))]
@@ -62,7 +112,7 @@
                         throw("Duplicate node name found in rule $graph_name: $node_name, type: $node_type. Are you sure you want to do this?")
                     end
 
-                    res = res + 1
+                    res = ordinals === nothing ? res + 1 : ordinals[node_name]
                     graph_table[(node_name, node_type)] = res
                     # Grab from symbol table
                     # cur_count = graph_table[(node_name, node_type)]
@@ -83,6 +133,12 @@
         rule_name = get_value(rule_node.name)
 
         println("Rule name ====================> ", rule_name)
+
+        # PDE rules (MFEM operator) have their own emitter.
+        if is_pde_clause(rule_node.modify_clause)
+            return ir_pde_rule!(ir_builder, rule_node, type_namespace, symbol_tables, propensity_table,
+                                visit_rule_node!)
+        end
 
         emit_rule_header(ir_builder, rule_node, type_namespace)
         
@@ -111,9 +167,16 @@
         # rhs_count = 1
         rhs_name = "$(rule_name)_rhs"
         emit(ir_builder, "GT $rhs_name;")
+
+        # Node ids follow alias names: a shared alias keeps its LHS id.
+        lhs_names, lhs_types, lhs_order_of_nodes = build_node_pos_to_type(lhs_node_type)
+        rhs_names, rhs_types, rhs_order_of_nodes = build_node_pos_to_type(rhs_node_type)
+        rhs_ordinals = assign_rhs_ordinals(rule_name, lhs_order_of_nodes, rhs_order_of_nodes)
+
         for each_node in rhs_node_type
             visit_rule_node!(each_node, rhs_symbol,
-                            ir_builder, rhs_name, type_namespace)
+                            ir_builder, rhs_name, type_namespace;
+                            ordinals=rhs_ordinals)
         end
         # rhs_symbol = visit_rule_node!(rhs_node_type, rhs_symbol)
         # emit_add_nodes(ir_builder, rhs_name, rhs_node_type, type_namespace, rhs_symbol)
@@ -138,9 +201,6 @@
 
         # println("lhs_types: ", lhs_types)
 
-        lhs_names, lhs_types, lhs_order_of_nodes = build_node_pos_to_type(lhs_node_type)
-
-
         println("rule_name: ", rule_name)
         lhs_param_to_node, lhs_assgn_to_node = link_param_to_nodes(lhs_param,
                                                     lhs_types,
@@ -149,25 +209,21 @@
         # exit(0)
 
         # rhs_node_ix_to_type, rhs_names, rhs_types = build_node_pos_to_type(rhs_node_type)
-        rhs_names, rhs_types, rhs_order_of_nodes = build_node_pos_to_type(rhs_node_type)
-
-        # println("rhs_name: ", rhs_name)
+        # (RHS names/types/ordinals were computed above.)
         rhs_param_to_node, rhs_assgn_to_node = link_param_to_nodes(rhs_param,
                                                 rhs_types,
                                                 symbol_tables,
-                                                rhs_names)
+                                                rhs_names;
+                                                ordinals=rhs_ordinals)
 
         # Map every RHS pattern node name to its (m2 loc, type) using the SAME
-        # first-appearance ordering link_param_to_nodes uses, so implicit carry-over
-        # can resolve a persistent node even when ALL of its RHS attributes are
-        # omitted (and therefore absent from rhs_param_to_node).
+        # ordinals as link_param_to_nodes, so implicit carry-over can resolve a
+        # persistent node even when ALL of its RHS attributes are omitted (and
+        # therefore absent from rhs_param_to_node).
         rhs_node_locs = Dict()
-        let c = 0
-            for (ix, nm) in enumerate(rhs_names)
-                if !haskey(rhs_node_locs, nm)
-                    c += 1
-                    rhs_node_locs[nm] = (c, rhs_types[ix])
-                end
+        for (ix, nm) in enumerate(rhs_names)
+            if !haskey(rhs_node_locs, nm)
+                rhs_node_locs[nm] = (rhs_ordinals[nm], rhs_types[ix])
             end
         end
 

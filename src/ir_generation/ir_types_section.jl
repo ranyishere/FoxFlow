@@ -136,7 +136,10 @@ end
 
 function ir_serialize(fields)
 
-    temp_ir = "\ttemplate <class Archive>\n"
+    temp_ir = "\tstatic std::vector<std::string> field_names() { return {"
+    temp_ir *= join(["\"$(f)\"" for f in fields], ", ")
+    temp_ir *= "}; }\n"
+    temp_ir *= "\ttemplate <class Archive>\n"
     hdr_ir = "\tvoid serialize(Archive& archive) {\n"
     temp_ir *= hdr_ir
     for field in fields

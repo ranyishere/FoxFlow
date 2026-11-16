@@ -174,6 +174,8 @@
 
             ir = "$type $name = $ir_value;"
             emit(ir_builder, ir)
+            # Report the local to the rule-fire trace (no-op unless tracing).
+            emit(ir_builder, "DGGML::Trace::local(\"$name\", $name);")
             # ── Autograd: inject requires_grad_(true) if this var is differentiated over ──
             if name in grad_vars
                 emit(ir_builder, "$name.requires_grad_(true);")

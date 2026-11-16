@@ -16,15 +16,16 @@ module IRRuleGeneration
             IndexAccessNode, ArrayLiteralNode, SliceNode,
             IntegerNode, FloatNode, StringNode,
             FunctionDefinitionNode, FunctionSignatureNode, FunctionArgNode,
-            FunctionBodyExpressionNode, FunctionDefinitionExpressionNode, ReturnNode
+            FunctionBodyExpressionNode, FunctionDefinitionExpressionNode, ReturnNode,
+            PDEEntryNode, PDE_ENTRY_KINDS
 
-    export ir_rules_section!
+    export ir_rules_section!, is_pde_clause, ir_mesh_generator
 
     using OrderedCollections
 
     const BUILT_IN_FUNC = [
         "heaviside", "sqrt", "normal_distr",
-        "uniform_distr", "cos", "sin", "inverse", "pow", "indicator",
+        "uniform_distr", "cos", "sin", "inverse", "pow", "indicator", "exp", "abs", "dot",
         # Matrix / tensor operations (FixedList<<M,N,Float>> treated as 2-D tensor)
         "zeros_matrix", "ones_matrix", "rand_matrix", "eye_matrix",
         "mat_add", "mat_mul", "mat_dot", "transpose",
@@ -66,9 +67,24 @@ module IRRuleGeneration
             "#include \"types.h\"",
             "#include \"parameters.h\"",
             "#include \"functions.h\"",
+            "#include \"RuleTrace.hpp\""
+        ]
+
+        # PDE rules are backed by MFEM operators.
+        if any(r -> is_pde_clause(r.modify_clause), ast.rules_list)
+            append!(rule_section_header, [
+                "#include \"mfem.hpp\"",
+                "#include <algorithm>", "#include <cmath>", "#include <iostream>",
+                "#include <map>", "#include <memory>", "#include <mutex>",
+                "#include <set>", "#include <stdexcept>", "#include <vector>",
+                UMFPACK_WRAPPER_CPP
+            ])
+        end
+
+        append!(rule_section_header, [
             "namespace $rule_section_name {",
             "using GT = $type_namespace::graph_type;"
-        ]
+        ])
 
         rules_ir = IRBuilder([])
 
@@ -133,6 +149,7 @@ module IRRuleGeneration
     include("rule_generation/every.jl")
     include("rule_generation/where_clause.jl")
     include("rule_generation/where_assignment.jl")
+    include("rule_generation/pde.jl")
     include("rule_generation/rule.jl")
 
 end

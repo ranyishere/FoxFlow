@@ -673,12 +673,30 @@ function ir_function_list!(ast, functions_table, ir_builder)
     emit(ir_builder, build(ir_total_functions))
 end
 
+# Input files (initial states, TorchScript models) are named relative to the directory the
+# executable is started from. A replicate runs inside runs/<sim>/run_<i>/ and exports the start
+# directory as FOXFLOW_BASE_DIR, so inputs are looked up there first.
+const FFLOW_INPUT_PATH_HELPER = raw"""
+#ifndef FFLOW_INPUT_PATH_DEFINED
+#define FFLOW_INPUT_PATH_DEFINED
+inline std::string fflow_input_path(const std::string &p) {
+    namespace fs = std::filesystem;
+    if (fs::path(p).is_absolute()) return p;
+    if (const char *base = std::getenv("FOXFLOW_BASE_DIR")) {
+        const fs::path q = fs::path(base) / p;
+        if (fs::exists(q)) return q.string();
+    }
+    return p;
+}
+#endif
+"""
+
 function ir_func_sec_hdr!(ir_builder, section_name)
     """
     Adds ir function section header information
     """
 
-    hdr = "#ifndef DGGML_FUNCTIONS_$(section_name)_HPP\n#define DGGML_FUNCTIONS_$(section_name)_HPP\n#include<cmath>\n#include <algorithm>\n#include <torch/script.h>\n namespace $section_name {\n"
+    hdr = "#ifndef DGGML_FUNCTIONS_$(section_name)_HPP\n#define DGGML_FUNCTIONS_$(section_name)_HPP\n#include<cmath>\n#include <algorithm>\n#include <cstdlib>\n#include <filesystem>\n#include <string>\n#include <torch/script.h>\n" * FFLOW_INPUT_PATH_HELPER * " namespace $section_name {\n"
     emit(ir_builder, hdr)
     return ir_builder
 end
@@ -701,7 +719,7 @@ function ir_load_models!(ir_builder)
 
     emit(ir_builder, "void load_models() {")
     for (model_name, model_path) in MODEL_REGISTRY
-        emit(ir_builder, "    $(model_name)_module = torch::jit::load(\"$(model_path)\");")
+        emit(ir_builder, "    $(model_name)_module = torch::jit::load(fflow_input_path(\"$(model_path)\"));")
         emit(ir_builder, "    $(model_name)_module.eval();")
     end
     emit(ir_builder, "}")

@@ -398,6 +398,8 @@
             return "sin($arg_str)"
         elseif func_name == "abs"
             return "abs($arg_str)"
+        elseif func_name == "exp"
+            return "exp($arg_str)"
         elseif func_name == "pow"
             return "pow($arg_str)"
         elseif func_name == "zeros_matrix"
