@@ -261,8 +261,22 @@ function parse_solve_clause!(tokens)
 
     # Should be an ode token (Type)
     ode_token = popfirst!(tokens)
+
+    # PDE entries (`PDE`, `Mesh`, `Dirichlet`, `Neumann`, `Initial`) are contextual
+    # identifiers, not lexer keywords.
+    if ode_token isa IdentifierToken && ode_token.position.value in PDE_ENTRY_KINDS
+        if var_name isa IndexAccessNode
+            throw("PDE entries cannot be indexed: $(var_name)")
+        end
+        pde_eq = popfirst!(tokens)
+        if !(pde_eq isa EqualToken)
+            throw("Error expected '=' after $(ode_token.position.value) entry, got $pde_eq")
+        end
+        return PDEEntryNode(var_name, String(ode_token.position.value), parse_expression!(tokens))
+    end
+
     if !((ode_token isa ODEToken) || (ode_token isa FloatToken) || (ode_token isa IntegerToken))
-        throw("Error expected an ODE type or Float or Integer. Got: $ode_token.")
+        throw("Error expected an ODE type (ODE, PDE, Mesh, Dirichlet, Neumann, Initial) or Float or Integer. Got: $ode_token.")
     end
 
     eq_token = popfirst!(tokens)

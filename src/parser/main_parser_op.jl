@@ -1,5 +1,5 @@
 import ..Tokens:
-    Token, IdentifierToken, IntegerToken, FloatToken, EndLineToken,
+    Token, IdentifierToken, IntegerToken, FloatToken, EndLineToken, PositionToken,
     LeftParenthesisToken, RightParenthesisToken, LeftAngleBracketToken,
     RightAngleBracketToken, SingleColonToken, DefineToken, LeftBracketToken,
     RightBracketToken, PunctuationToken, TypeSectionToken, ParameterSectionToken,
@@ -9,18 +9,20 @@ import ..Tokens:
     NotToken, AndAndToken, OrOrToken, TypeToken, FunctionSectionToken, FunctionToken, CaretToken, ReturnToken,
     OperatorToken,
     StateToken, SimulationTypesToken, RulesToken, DotToken, ParameterToken, SimulationToken, RunSimulationToken, QuoteToken, SimulationSectionToken, LoadFileToken, StringToken, SimulationParametersToken, DoubleColonToken,
-    LeftSquareBracketToken, RightSquareBracketToken, ObservableSectionToken, ObservableToken, SimulationObservablesToken
+    LeftSquareBracketToken, RightSquareBracketToken, ObservableSectionToken, ObservableToken, AttributeToken, SimulationObservablesToken
 import ..AstNodes:
     Node, IdentifierNode, ParameterNode, TypeInstanceNode, TypeInstanceUpdateNode, TypeClassNode,
     TypeSectionNode, ParameterSectionNode, RuleSectionNode, RuleNode,
     WhereClauseNode, WithClauseNode, EveryClauseNode, SolveClauseNode, CallNode,
     GroupNode, BinaryOpNode, FunctionNode, FloatNode, IntegerNode, UndirectedTypeEdgeNode,
-    BindingVariableNode, ODENode, UnaryOpNode, DefinitionNode, FunctionArgNode, FunctionSignatureNode,
+    BindingVariableNode, ODENode, PDEEntryNode, PDE_ENTRY_KINDS, UnaryOpNode, DefinitionNode, FunctionArgNode, FunctionSignatureNode,
     FunctionBodyExpressionNode, FunctionDefinitionExpressionNode, FunctionDefinitionNode,
     ReturnNode, FunctionSectionNode, SimulationSectionNode, StringNode, LoadNode, SimDeclarationNode,
-    SimulationNode, SimulationRulesNode, SimulationTypesNode, SimulationObservablesNode, SimulationStateNode, SimulationParametersNode,
-    RunSimulationNode, NamedParameterNode, IndexAccessNode, ArrayLiteralNode, ModelLoadNode, SliceNode,
-    ObservableDestructuredParamNode, ObservableLocalFunctionNode, ObservableDefinitionNode, ObservableSectionNode
+    SimulationNode, SimulationRulesNode, SimulationTypesNode, SimulationObservablesNode, SimulationStateNode, SimulationGeneratorStateNode, SimulationParametersNode,
+    RunSimulationNode, TraceNode, MeasureNode, RunNode, SimulationFunctionsNode, SimulationGrammarNode, SimulationConfigNode,
+    NamedParameterNode, IndexAccessNode, ArrayLiteralNode, ModelLoadNode, SliceNode,
+    ObservableDestructuredParamNode, ObservableLocalFunctionNode, ObservableDefinitionNode, ObservableSectionNode,
+    GlobalObservableNode, OBSERVABLE_REDUCTIONS
 
 include("expression_parser.jl")
 include("function_parser.jl")
