@@ -76,7 +76,7 @@ function tokenize(source::String, line_no::Integer)
             elseif value in [
                      "Type", "SimulationParameters",
                      "Function", "Rule",
-                     "Observable", "State",
+                     "Observable", "Attribute", "State",
                      "RunSimulation", "SimulationRules", "SimulationTypes",
                      "SimulationObservables",
                      "Parameter", "Simulation"
@@ -94,6 +94,8 @@ function tokenize(source::String, line_no::Integer)
                     push!(tokens, RuleToken(PositionToken(value, line_no, i-1)))
                 elseif value == "Observable"
                     push!(tokens, ObservableToken(PositionToken(value, line_no, i-1)))
+                elseif value == "Attribute"
+                    push!(tokens, AttributeToken(PositionToken(value, line_no, i-1)))
                 elseif value == "State"
                     push!(tokens, StateToken(PositionToken(value, line_no, i-1)))
                 elseif value == "Simulation"
@@ -191,10 +193,10 @@ function tokenize(source::String, line_no::Integer)
                 end
 
             elseif c == '&' && i + 1 <= length(source) && (source[i + 1] == '&')
-                push!(tokens, AndToken(PositionToken("&&", line_no, i)))
+                push!(tokens, AndAndToken(PositionToken("&&", line_no, i)))
                 i += 2
             elseif c == '|' && i + 1 <= length(source) && (source[i + 1] == '|')
-                push!(tokens, OrToken(PositionToken("||", line_no, i)))
+                push!(tokens, OrOrToken(PositionToken("||", line_no, i)))
                 i += 2
             elseif i + 1 <= length(source) && (source[i + 1] == '=') && (c == '=')
                 push!(tokens, EqEqToken(PositionToken("==", line_no, i)))

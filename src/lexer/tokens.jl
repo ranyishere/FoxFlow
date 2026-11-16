@@ -208,6 +208,10 @@ module Tokens
         position::PositionToken
     end
 
+    struct AttributeToken <: Token
+        position::PositionToken
+    end
+
     struct StateSectionToken <: Token
         position::PositionToken
     end
