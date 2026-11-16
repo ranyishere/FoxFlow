@@ -495,6 +495,56 @@ solving (dpos[0] := D(im_pos[0], t), dpos[1] := D(im_pos[1], t)) {
 }
 ```
 
+### PDE Solve Clause (MFEM)
+
+A solving body that contains an `Element` entry is a PDE rule. It works like an ODE
+solving rule: one match of the LHS pattern is one finite element, so the mesh is the
+set of matches in the graph and follows it when the graph changes. The PDE is written
+in differential form; FoxFlow derives the MFEM weak form `M du/dt = L u + b` and
+generates a `<rule>_Operator` class that the DGGML solver integrates together with the
+grammar ODEs (implicitly when there is no source or Neumann term, explicitly otherwise).
+
+```
+<pde-entry> ::= <symbol-name> ":" <pde-kind> "=" <expression>
+
+<pde-kind>  ::= "Element" | "PDE" | "Dirichlet" | "Neumann"
+```
+
+| Entry | Meaning |
+|---|---|
+| `c : Element = segment(a, b)` / `triangle(a, b, c)` / `quad(a, b, c, d)` / `tet(a, b, c, d)` / `hex(a, ..., h)` | element shape over LHS nodes (exactly one); the pattern edges must cover the element edges |
+| `dua : PDE = <expr>` | right-hand side of `D(ua, t)` (exactly one; named after one binding variable) |
+| `x : Dirichlet = boundary(<predicate>, g)` | hold `u = g` at every mesh vertex whose position satisfies the predicate |
+| `x : Neumann = boundary(<predicate>, g)` | flux `du/dn = g` on boundary faces whose vertices satisfy the predicate |
+
+Predicates and values may use `x`, `y`, `z`, `pi`, parameters, comparisons and `&&`/`||`.
+Supported terms in the `PDE` expression: `c * laplacian(u)`, `div(c * grad(u))`,
+`dot([bx, by], grad(u))`, `dx(u)`/`dy(u)`/`dz(u)`, `c * u`, and `u`-free terms (sources).
+
+Every element node needs one binding variable on the same `Float` field (the unknown).
+Nodes need no extra fields: the field lives on the graph nodes. The initial graph is
+produced in `simulation.fflow` by a generator state:
+
+```
+initialState : State := grid(Vertex, u, <init expr of x, y, z>, [x0, x1, nx], [y0, y1, ny])
+```
+
+Each axis is `[a, b, n]` (n elements) or `[c]` (fixed); missing axes sit at the cell
+centre. When MFEM is not found, the generated CMake fetches MFEM v4.7; pass
+`-DMFEM_DIR=<mfem-build>` (or set the `MFEM_DIR` environment variable) to reuse a
+local build. Examples: `src/tests/heat_rod_pde/`, `heat_plate_pde/`, `heat_coupled_pde/`.
+
+```
+heat := (a : Vertex) -- (b : Vertex) << (ua : a::u), (ub : b::u) >> ->
+        (a : Vertex) -- (b : Vertex) << (dua : a::u), (dub : b::u) >>
+    solving (dua := D(ua, t), dub := D(ub, t)) {
+        cell  : Element   = segment(a, b)
+        dua   : PDE       = kappa * laplacian(ua)
+        left  : Dirichlet = boundary(x < rod_start + 0.000001, u_left)
+        right : Dirichlet = boundary(x > rod_end - 0.000001, u_right)
+    }
+```
+
 ---
 
 ## Functions Section
@@ -556,15 +606,21 @@ functions Microtubule {
                            <sim-declaration-list>
                           "}"
 
-<sim-declaration-list> ::= { <sim-declaration> "\n" }
+<sim-declaration-list> ::= { ( <sim-declaration> | <trace-statement> | <measure-statement> | <run-statement> ) "\n" }
 
 <sim-declaration> ::= <symbol-name> ":" <sim-type> ":=" <sim-value>
+
+<trace-statement> ::= "trace" "(" <symbol-name> { "," <string-literal> } ")"
+
+<measure-statement> ::= "measure" "(" <symbol-name> { "," <symbol-name> } { "," <string-literal> } ")"
 
 <sim-type> ::= "SimulationParameters"
              | "State"
              | "SimulationRules"
              | "SimulationTypes"
              | "SimulationObservables"
+             | "SimulationFunctions"
+             | "Grammar"
              | "Integer"
              | "Float"
              | "Simulation"
@@ -572,6 +628,24 @@ functions Microtubule {
 <sim-value> ::= <load-file>
               | <number>
               | <run-simulation>
+              | <grammar-value>
+              | <simulation-config>
+
+<grammar-value> ::= "Grammar" "(" <symbol-name> { "," <symbol-name> } ")"
+
+<simulation-config> ::= "Simulation" "(" [ <string-literal> "," ]
+                        <symbol-name> ","   (* a Grammar *)
+                        <symbol-name> ","   (* a State *)
+                        <symbol-name> ","   (* SimulationParameters *)
+                        <symbol-or-number>  (* simulation time *)
+                        [ "," <integer-or-symbol> ]   (* checkpoint frequency *)
+                        ")"
+
+<run-statement> ::= "run" "(" <symbol-name> "," <integer>
+                    { "," ( "domain_parallel" "=" ( "true" | "false" )
+                          | "jobs" "=" <integer>
+                          | "seed" "=" <integer> ) }
+                    ")"
 
 <load-file> ::= "load" "(" <string-or-identifier> ")"
 
@@ -584,15 +658,94 @@ functions Microtubule {
                      <symbol-name> ","
                      <symbol-name> ","
                      <symbol-or-number>
+                     [ "," <integer-or-symbol> ]
                      [ "," <symbol-name> ]
                      ")"
 
 <symbol-or-number> ::= <symbol-name> | <number>
+<integer-or-symbol> ::= <integer> | <symbol-name>
 ```
 
 The optional leading `<string-literal>` sets the file name used for the
 "latest" save-state bin file written by the checkpoint (defaults to
 `simulation_state_latest.bin`).
+
+The optional `<integer-or-symbol>` after the simulation time is the checkpoint
+frequency: VTK/CSV output, observables and save-state files are written every N
+steps (and always on the final step). It defaults to 1 (every step). The
+observables argument, when present, always comes last; a single trailing
+identifier bound to an integer is read as the checkpoint frequency.
+
+### Grammars, simulations and replicated runs
+
+A `Grammar` bundles the pieces that define a model: its functions, rules, types
+and (optionally) observables. A `Simulation(...)` then pairs a grammar with an
+initial state, parameters, a time and a checkpoint frequency. `RunSimulation(...)`
+stays as the older, flat form and behaves as before.
+
+```
+funcs   : SimulationFunctions   := load("functions.fflow")
+rules   : SimulationRules       := load("rules_movement.fflow")
+types   : SimulationTypes       := load("types.fflow")
+obs     : SimulationObservables := load("observables.fflow")
+g       : Grammar               := Grammar(funcs, rules, types, obs)
+start   : State                 := load("my_results/boundary_latest.bin")
+sim     : Simulation            := Simulation("movement_latest.bin", g, start, params, time, every)
+
+run(sim, 8, domain_parallel = false)
+```
+
+`Grammar(...)` takes its parts in any order; each is a rules, types, observables
+or functions declaration (a grammar needs rules and types). The functions file
+defaults to `functions.fflow`; stages naming different functions files are an error.
+
+`run(sim, N, ...)` runs `N` replicates of `sim`. A `Simulation(...)` declaration only
+defines the simulation; it is executed only when a `run(...)` statement names it (a
+simulation that is never run can still be measured from existing checkpoints).
+`RunSimulation(...)` runs without a `run` statement, in-process and serially. Options:
+
+- `domain_parallel = true|false`: compiles the simulation with the OpenMP geocell
+  domain-decomposition runner (`true`) or the serial runner (`false`, the default).
+  With `false` each replicate runs single-threaded and several replicates run at once.
+- `jobs = K`: replicates running at once (default 1 when domain parallelism is on,
+  otherwise the number of hardware threads; never more than `N`).
+- `seed = S`: base seed; replicate `i` is seeded with `S + i` (default base 0).
+
+With `N > 1`, the program starts one child process per replicate (the RNG and
+the OpenMP settings are process-global). Replicate `i` runs in
+`runs/<sim>/run_<i>/` with its log in `run.log` and its own `my_results/`. Input
+files named in the `.fflow` (`load("...")` states, torch models) are resolved
+against the base directory first (`FOXFLOW_BASE_DIR`). A failing replicate makes
+the program exit non-zero. `measure(sim, ...)` of a replicated simulation reads
+every replicate and adds a `run` column (see below). Trace and listener files of a
+replicated simulation are written inside the run directories.
+
+### Rule tracing
+
+`trace(<simulation>, "rule1", "rule2", ...)` records every fire of the named
+rules in the simulation `<simulation>` (a `Simulation` declared in the same
+section). `"*"` traces all rules. Each record holds the matched nodes before and
+after the rewrite, their neighbours, edge changes, the propensity and the
+`where` locals. Rule names are checked against the simulation's rules file at
+generation time. Records go to `trace_<simulation>.jsonl` in the run directory;
+when the run ends, `trace_<simulation>.html` is written next to it. Re-render with
+filters, without rebuilding: `./run_example.sh trace <example> --rule <name> --step <n> --max <n>`.
+
+### Measuring global observables over simulations
+
+`measure(sim1, sim2, ..., "obs1", "obs2", ...)` re-evaluates the global observables
+(see the `observables` section) on every checkpointed state of the listed
+simulations. The simulation names come first; the optional trailing strings
+restrict the measurement to those observables (default: all). Each `measure`
+statement produces `my_results/measure_<k>.csv` (`k` counts the statements from 1)
+with columns `simulation,run,step,time,<observable...>` (`run` is the replicate
+index, 0 for a single run). Measuring several simulations
+lists them in one statement; measure statements may overlap.
+
+A measured simulation writes its checkpoints to `my_results/<sim>/state_<step>.bin`
+(cleared when it starts) instead of the shared `simulation_state_<step>.bin`.
+Observable names are checked at generation time. Stages that use the same rules
+file share one generated rules header.
 
 ### Examples
 
@@ -617,6 +770,13 @@ simulations NeuralNetwork {
 simulations Microtubule {
     # Optional first argument: name of the latest save-state bin file.
     sim : Simulation := RunSimulation("my_state_latest.bin", state, params, rules, types, time)
+
+    # Optional checkpoint frequency after the time: output every 60 steps.
+    every : Integer := 60
+    sim2  : Simulation := RunSimulation("my_state_latest.bin", state, params, rules, types, time, every)
+
+    # Trace every fire of the "crossover" rule in sim2.
+    trace(sim2, "crossover")
 }
 ```
 
@@ -624,20 +784,32 @@ simulations Microtubule {
 
 ## Observables Section
 
-An `observables` section defines per-node measurement functions that are
-evaluated after each simulation step and written to output.
+An `observables` section defines two kinds of measurements:
+
+- an **`Observable`** is a functional of the whole state (a pattern plus a
+  reduction over its matches). It is not evaluated during a run: it is only
+  computed by `measure(...)` on the saved checkpoints, and nothing is generated
+  for it when the program has no `measure` statement;
+- an **`Attribute`** is a per-node value written as a ParaView column.
 
 ```
 <observables-section> ::= "observables" <symbol-name> "{"
-                           { <observable-definition> }
+                           { <global-observable> | <observable-definition> }
                           "}"
+
+<global-observable> ::= <symbol-name> ":" "Observable" ":=" <reduction>
+                         <pattern> [ "within" <number> ]
+                         [ "<<" <binding-list> ">>" ]
+                         [ "return" "(" <expression> ")" ]
+
+<reduction> ::= "sum" | "mean" | "count" | "min" | "max"
 
 <observable-definition> ::= <symbol-name> ":" <obs-kind>
                              "<<" <obs-param-block> ">>"
                              "->" <return-type>
                              ":=" <obs-body>
 
-<obs-kind> ::= "Observable" | "Function"
+<obs-kind> ::= "Attribute" | "Function"
 
 <obs-param-block> ::= "(" <symbol-name> ":" <symbol-name> ")"
                       [ "<<" <function-arg-list> ">>" ]
@@ -649,10 +821,46 @@ evaluated after each simulation step and written to output.
   node instance being observed.
 - The inner `<< alias : FieldType, ... >>` block **destructures** that node's
   attributes into named local variables inside the body.
-- `Observable` definitions are called automatically by the runtime for every
-  matching node at each output step.
-- `Function` definitions are helper functions callable from `Observable`
+- `Attribute` definitions are called automatically by the runtime for every
+  matching node at each output step. (The former spelling
+  `name : Observable << ... >>` is still accepted as an `Attribute`.)
+- `Function` definitions are helper functions callable from `Attribute`
   bodies.
+
+### Global observables
+
+```
+n_tips : Observable := count (p : Positive)
+
+tip_segment_length : Observable := mean
+    (a : Intermediate) -- (b : Positive)
+    << (a_pos : a::Position), (b_pos : b::Position) >>
+    return ( HELP::distance(a_pos[0], a_pos[1], b_pos[0], b_pos[1]) )
+
+# pair observable: mean of cos^2 between the growth directions of all tip pairs closer than 0.1
+local_alignment : Observable := mean
+    (a : Positive) (b : Positive) within 0.1
+    << (a_dir : a::Direction), (b_dir : b::Direction) >>
+    return ( HELP::unit_dot3_abs(a_dir[0], a_dir[1], a_dir[2], b_dir[0], b_dir[1], b_dir[2]) *
+             HELP::unit_dot3_abs(a_dir[0], a_dir[1], a_dir[2], b_dir[0], b_dir[1], b_dir[2]) )
+```
+
+- The pattern uses the rule-pattern syntax and must be connected, except for a
+  **pair observable**: `(a : T) (b : U) within r` has exactly two nodes and no
+  edges, and matches every ordered pair of distinct nodes whose spatial distance
+  is at most `r` (found with a uniform grid, so the cost is linear in the node
+  count). The optional `<< ... >>` binds node attributes to names, exactly as in
+  a rule.
+- `return ( expr )` is the value a matched configuration returns, evaluated once per
+  match of the pattern (`with` is reserved for rule propensities and is rejected
+  here). `sum`, `mean`, `min` and `max` combine those values (`mean`/`min`/`max` are `nan` when there
+  is no match); `count` needs no expression and counts the matches (with an
+  expression it counts the matches where it is nonzero).
+- Matches are ordered: a pattern whose nodes have the same type, such as
+  `(a : T) -- (b : T)`, matches each edge twice.
+- Each observable is compiled to a hidden rule `obs_<name>` (header
+  `observable_rules.h`); the model evaluates it at every checkpoint, so output
+  follows the `RunSimulation` checkpoint frequency.
 
 ### Examples
 
@@ -667,8 +875,8 @@ observables NeuralNetwork {
             return argmax(logits)
         }
 
-    # Observable: emit (node_id, predicted_label, true_label) each step
-    accuracy : Observable
+    # Attribute: emit (node_id, predicted_label, true_label) each step
+    accuracy : Attribute
         << (node : InputLayer) << input_id : Integer >> >>
         -> Float := {
             pred  : Integer := classify(node)
