@@ -2,6 +2,16 @@
 # Included into module IRRuleGeneration (see ../ir_rule_generation.jl).
 
     """
+        ode_list_data_ptr(type, ref) -> String
+
+    C++ expression for a `double*` to the elements of a list attribute: a
+    TFArray<N> (FixedList) exposes its inline storage `.v`; a torch::Tensor
+    exposes `data_ptr<double>()`.
+    """
+    ode_list_data_ptr(type, ref) =
+        is_tf_array_type(type) ? "$ref.v" : "$ref.template data_ptr<double>()"
+
+    """
         collect_ode_referenced_vars(expression, lhs_assgn_to_node) -> Set{String}
 
     Walk an ODE RHS expression tree and collect all IdentifierNode names that
@@ -212,7 +222,7 @@
                     # Check if this is a non-dep LHS tensor param (e.g., p_unit[0])
                     # These are declared via ir_where_left_clause! into propensity_table
                     # but are NOT SUNDIALS dep vars, so we just read them directly.
-                    if haskey(assgn_info, obj_name) && assgn_info[obj_name].cpp_var.type == "torch::Tensor"
+                    if haskey(assgn_info, obj_name) && is_list_type_tensor(assgn_info[obj_name].cpp_var.type)
                         # Ensure the tensor variable is declared in the ODE lambda
                         lhs_table = propensity_table["var_local_table"]["rule_lhs"]
                         if haskey(lhs_table, obj_name) && !(obj_name in lhs_table["declared"])
@@ -304,7 +314,7 @@
                     emit(ir_builder, "NV_Ith_S(y, varmap.at(&ix_$id_name))")
                 elseif haskey(assgn_info, id_name)
                     cur_info = assgn_info[id_name]
-                    if cur_info.cpp_var.index <= 3 && cur_info.cpp_var.type != "torch::Tensor"
+                    if cur_info.cpp_var.index <= 3 && !is_list_type_tensor(cur_info.cpp_var.type)
                         emit(ir_builder, create_pos_cpp_var(cur_info, "lhs", "m1"))
                     else
                         emit(ir_builder, create_cpp_var(cur_info, "lhs", "m1"))
@@ -347,7 +357,7 @@
                 # If it's a position attribute, we grab it from the position vector.
                 # If it's a regular attribute, we grab it from the data variant.
                 # Tensor attributes are never spatial position attributes.
-                if pos <= 3 && cur_info.cpp_var.type != "torch::Tensor"
+                if pos <= 3 && !is_list_type_tensor(cur_info.cpp_var.type)
                     ir_node_pos = create_pos_cpp_var(cur_info, "lhs", "m1")
                     # ir_node_pos = "\t\tlhs[m1[$node_pos]].position[$(pos-1)]"
                     emit(ir_builder, ir_node_pos)
@@ -424,7 +434,7 @@
                 rule_param = assgn_info[get_value(expression.rhs)]
                 pos = rule_param.cpp_var.index
 
-                if pos <= 3 && rule_param.cpp_var.type != "torch::Tensor"
+                if pos <= 3 && !is_list_type_tensor(rule_param.cpp_var.type)
                     ir_node_pos = create_pos_cpp_var(assgn_info[get_value(expression.rhs)], "lhs", "m1")
                     # ir_node_pos = "\t\tlhs[m1[$node_pos]].position[$(pos-1)]"
                     emit(ir_builder, ir_node_pos)
@@ -535,7 +545,7 @@
                 bv_type_str = lhs_assgn_to_node[dep_vars].cpp_var.type
                 tensor_size = lhs_assgn_to_node[dep_vars].cpp_var.tensor_size
 
-                if bv_type_str == "torch::Tensor" && tensor_size > 0
+                if is_list_type_tensor(bv_type_str) && tensor_size > 0
                     # === TENSOR VARIABLE BINDING ===
                     # For indexed bindings (dpos[0] := D(im_pos[0], t)) we still
                     # need to set up the full tensor pointer once, since SUNDIALS
@@ -576,7 +586,7 @@
 
                             # Get raw double* pointer from tensor
                             emit(ir_builder, "auto &tensor_ref_$(bv_pos)_$(bv_attr_pos) = $tensor_ref;")
-                            emit(ir_builder, "double* $ptr_name = tensor_ref_$(bv_pos)_$(bv_attr_pos).template data_ptr<double>();")
+                            emit(ir_builder, "double* $ptr_name = " * ode_list_data_ptr(bv_type_str, "tensor_ref_$(bv_pos)_$(bv_attr_pos)") * ";")
 
                             # Register each element with varset
                             for i in 0:(tensor_size - 1)
@@ -640,7 +650,7 @@
                 ro_type_str = ro_info.cpp_var.type
                 ro_tensor_size = ro_info.cpp_var.tensor_size
 
-                if ro_type_str == "torch::Tensor" && ro_tensor_size > 0 && ro_attr_pos != 1
+                if is_list_type_tensor(ro_type_str) && ro_tensor_size > 0 && ro_attr_pos != 1
                     # === NON-POSITION READ-ONLY TENSOR ===
                     # Do NOT bind this tensor into the SUNDIALS solver. Binding it
                     # would capture a raw double* into a shallow, ref-counted,
@@ -658,7 +668,7 @@
                     # which declares the tensor local on demand from the where-clause
                     # binding table. Nothing to register here.
 
-                elseif ro_type_str == "torch::Tensor" && ro_tensor_size > 0
+                elseif is_list_type_tensor(ro_type_str) && ro_tensor_size > 0
                     # === POSITION READ-ONLY TENSOR (attr_pos == 1) ===
                     # A reference position (e.g. the Intermediate's position used
                     # inside a distance() gate) that is NOT solved but must be read
@@ -790,7 +800,7 @@
                     bv_attr = lhs_assgn_to_node[dep_var].cpp_var.name
                     bv_node_type = lhs_assgn_to_node[dep_var].type
                     tensor_ref = "std::get<$type_namespace::$bv_node_type>(lhs[m1[$bv_pos]].data).$bv_attr"
-                    emit(ir_builder, "double* $ptr_name = $tensor_ref.template data_ptr<double>();")
+                    emit(ir_builder, "double* $ptr_name = " * ode_list_data_ptr(lhs_assgn_to_node[dep_var].cpp_var.type, tensor_ref) * ";")
                     # Register per-element refs so traverse_ode_expr can read them via NV_Ith_S
                     for i in 0:(tsize - 1)
                         push!(dep_vars, "$(ptr_name)[$i]")

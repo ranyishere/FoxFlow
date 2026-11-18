@@ -304,21 +304,6 @@
                 end
             end
 
-            # FixedList attributes are stack arrays and cannot be bound into the
-            # ODE solver; only scalars and TFTensor attributes can.
-            let ode_vars = Set{String}(all_ode_ref)
-                for bv_node in solve_clause.variables
-                    ode_var = bv_node.value[1]
-                    push!(ode_vars, ode_var isa IndexAccessNode ? get_value(ode_var.object) : get_value(ode_var))
-                end
-                for v in ode_vars
-                    if haskey(lhs_assgn_to_node, v) && is_tf_array_type(lhs_assgn_to_node[v].cpp_var.type)
-                        throw("ODE variable '$v' is a FixedList (stack array); ODE solving supports " *
-                              "scalars and TFTensor attributes only. Declare the attribute as TFTensor<<...>>.")
-                    end
-                end
-            end
-
             # Compute num_vars: solving vars + read-only vars.
             # For tensor bindings, count tensor_size + position sync elements.
             # For scalar bindings, count 1 as before.
@@ -336,7 +321,7 @@
                 if haskey(lhs_assgn_to_node, dep_vars_name)
                     rp = lhs_assgn_to_node[dep_vars_name]
                     tsize = rp.cpp_var.tensor_size
-                    if rp.cpp_var.type == "torch::Tensor" && tsize > 0
+                    if is_list_type_tensor(rp.cpp_var.type) && tsize > 0
                         if rp.cpp_var.index == 1
                             # Position solving tensor now binds ONLY the deep-copied
                             # `.position[]` array (min(3,tsize) vars) — the aliasable
@@ -358,7 +343,7 @@
                 if haskey(lhs_assgn_to_node, ro_var)
                     rp = lhs_assgn_to_node[ro_var]
                     tsize = rp.cpp_var.tensor_size
-                    if rp.cpp_var.type == "torch::Tensor" && tsize > 0
+                    if is_list_type_tensor(rp.cpp_var.type) && tsize > 0
                         if rp.cpp_var.index == 1
                             # Position read-only tensor still binds its elements.
                             num_vars += tsize
