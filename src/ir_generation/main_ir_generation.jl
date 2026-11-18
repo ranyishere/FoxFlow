@@ -558,9 +558,11 @@ void run_stage() {
     simulator.simulate();
 }
 
-// Number of replicates of `sim` that failed (non-zero exit or could not start).
+// Number of replicates of `sim` that failed (non-zero exit or could not start). Replicate i runs in
+// runs/<dir_name>/run_<i>/ (dir_name is the run(..., name = "...") experiment name, default `sim`).
 inline int run_replicates(const std::string &self, const std::string &settings,
-                          const std::string &sim, int n, int jobs, bool domain_parallel,
+                          const std::string &sim, const std::string &dir_name,
+                          int n, int jobs, bool domain_parallel,
                           std::uint32_t base_seed) {
     namespace fs = std::filesystem;
     const fs::path base = fs::current_path();
@@ -595,7 +597,7 @@ inline int run_replicates(const std::string &self, const std::string &settings,
     envp.push_back(nullptr);
 
     auto launch = [&](int idx, pid_t &pid) -> bool {
-        const fs::path dir = base / "runs" / sim / ("run_" + std::to_string(idx));
+        const fs::path dir = base / "runs" / dir_name / ("run_" + std::to_string(idx));
         std::error_code ec;
         fs::remove_all(dir, ec);
         fs::create_directories(dir, ec);
@@ -626,7 +628,7 @@ inline int run_replicates(const std::string &self, const std::string &settings,
             return false;
         }
         std::cout << "[" << sim << "] run " << idx << " started (seed " << seed_s << ") -> runs/"
-                  << sim << "/run_" << idx << "/" << std::endl;
+                  << dir_name << "/run_" << idx << "/" << std::endl;
         return true;
     };
 
@@ -655,7 +657,7 @@ inline int run_replicates(const std::string &self, const std::string &settings,
         } else {
             ++failed;
             std::cerr << "[" << sim << "] run " << idx << " FAILED (exit " << code
-                      << "); see runs/" << sim << "/run_" << idx << "/run.log" << std::endl;
+                      << "); see runs/" << dir_name << "/run_" << idx << "/run.log" << std::endl;
         }
     }
     return failed;
@@ -730,11 +732,14 @@ function ir_main(name_space, num_stages, function_table=nothing, all_stages=[], 
         domain_parallel = get(stage, "domain_parallel", nothing)
         seed = get(stage, "seed", nothing)
         jobs = get(stage, "jobs", nothing)
+        run_name = get(stage, "run_name", nothing)
         push!(ir_body, "\n\t // ===== Stage $stage_ix: $(stage["name"]) =====\n")
         push!(ir_body, "\t {\n")
-        if replicates > 1
-            # N independent runs, each in its own process and directory (runs/<sim>/run_<i>/).
-            push!(ir_body, "\t\t if (fflow_run::run_replicates(self_exe, filename, \"$(stage["name"])\", $replicates, " *
+        if replicates > 1 || run_name !== nothing
+            # N independent runs, each in its own process and directory
+            # (runs/<name>/run_<i>/, <name> = the run(..., name = "...") experiment name or the simulation).
+            push!(ir_body, "\t\t if (fflow_run::run_replicates(self_exe, filename, \"$(stage["name"])\", " *
+                           "\"$(run_name === nothing ? stage["name"] : run_name)\", $replicates, " *
                            "$(jobs === nothing ? 0 : jobs), $(stage_parallel(stage)), " *
                            "$(seed === nothing ? 0 : seed)u) != 0) {\n")
             push!(ir_body, "\t\t\t std::cerr << \"simulation '$(stage["name"])': some runs failed\" << std::endl;\n")
@@ -752,18 +757,26 @@ function ir_main(name_space, num_stages, function_table=nothing, all_stages=[], 
     # saved snapshots of each named simulation; one CSV per measure statement.
     for (k, spec) in enumerate(measure_specs)
         wanted = join(["\"$o\"" for o in spec["observables"]], ", ")
+        # The CSV goes next to the runs when every measured simulation belongs to the same named
+        # experiment (runs/<name>/measure_<k>.csv); otherwise to my_results/.
+        spec_run_names = unique([get(all_stages[findfirst(s -> s["name"] == sim, all_stages)], "run_name", nothing)
+                                 for sim in spec["simulations"]])
+        csv_dir = (length(spec_run_names) == 1 && spec_run_names[1] !== nothing) ?
+                  "runs/$(spec_run_names[1])" : "my_results"
         push!(ir_body, "\n\t // ===== measure #$k =====\n")
         push!(ir_body, "\t {\n")
-        push!(ir_body, "\t\t std::filesystem::create_directories(\"my_results\");\n")
-        push!(ir_body, "\t\t std::ofstream measure_out(\"my_results/measure_$k.csv\", std::ios::trunc);\n")
+        push!(ir_body, "\t\t std::filesystem::create_directories(\"$csv_dir\");\n")
+        push!(ir_body, "\t\t std::ofstream measure_out(\"$csv_dir/measure_$k.csv\", std::ios::trunc);\n")
         push!(ir_body, "\t\t bool measure_header = false;\n")
         for sim in spec["simulations"]
             stage_ix = findfirst(s -> s["name"] == sim, all_stages)
+            sim_run_name = get(all_stages[stage_ix], "run_name", nothing)
             push!(ir_body, "\t\t $name_space::measure_simulation<$name_space::Model_$(stage_ix - 1)>(" *
                            "\"$sim\", std::vector<std::string>{$wanted}, measure_out, measure_header, " *
-                           "$(get(all_stages[stage_ix], "replicates", 1)));\n")
+                           "$(get(all_stages[stage_ix], "replicates", 1)), " *
+                           "\"$(sim_run_name === nothing ? "" : sim_run_name)\");\n")
         end
-        push!(ir_body, "\t\t std::cout << \"measure #$k written to my_results/measure_$k.csv\" << std::endl;\n")
+        push!(ir_body, "\t\t std::cout << \"measure #$k written to $csv_dir/measure_$k.csv\" << std::endl;\n")
         push!(ir_body, "\t }\n")
     end
 
