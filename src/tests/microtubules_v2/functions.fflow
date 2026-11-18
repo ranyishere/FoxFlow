@@ -77,4 +77,121 @@ functions HELP {
         return [dx/len, dy/len]
     }
 
+    boundary_check : Function << (x1 : Float, y1 : Float), (x2 : Float, y2 : Float), (x3 : Float, y3 : Float) >> -> Float := {
+
+        # Check if the point (x1, y1) is within the rectangle defined by (x2, y2) and (x3, y3)
+        return indicator(x1 >= min(x2, x3)) * indicator(x1 <= max(x2, x3)) * indicator(y1 >= min(y2, y3)) * indicator(y1 <= max(y2, y3))
+    }
+
+    # Scalar re-implementation of DGGML::compute_theta. Returns the acute angle
+    # (degrees, in [0, 90]) between the incoming tip direction u2 and the line
+    # normal of the obstacle segment (unit vector u3) evaluated at point p2.
+    # The signed-distance branch of the C++ helper only flips the normal's sign;
+    # since acos is applied to the dot product, that flip is captured by `s`.
+    compute_theta : Function << (u2x : Float, u2y : Float, u2z : Float),
+        (p2x : Float, p2y : Float),
+        (u3x : Float, u3y : Float, u3z : Float) >> -> Float := {
+
+        # Normal vector of u3: N = (-u3y, u3x, u3z)
+        nx : Float := -u3y
+        ny : Float := u3x
+        nz : Float := u3z
+
+        # Sign of the signed distance of p2 to the line (denominator is positive).
+        signed_num : Float := nx * p2x + ny * p2y
+        s : Float := 2.0 * indicator(signed_num >= 0.0) - 1.0
+
+        raw_dot : Float := u2x * nx + u2y * ny + u2z * nz
+        val : Float := s * raw_dot
+
+        deg : Float := (180.0) / (3.1415926535)
+        angle : Float := arccos(val) * deg
+
+        return min(angle, 180.0 - angle)
+    }
+
+    # Same acute-angle test as compute_theta, but the obstacle direction u3 is
+    # derived from the two segment endpoints (a -> b) and normalized here. Use
+    # this when the segment nodes are Intermediate vertices, whose stored
+    # Direction attribute is not maintained (it stays at the zero vector, which
+    # makes compute_theta collapse to a constant 90 degrees).
+    compute_theta_seg : Function << (u2x : Float, u2y : Float, u2z : Float),
+        (p2x : Float, p2y : Float),
+        (ax : Float, ay : Float, az : Float),
+        (bx : Float, by : Float, bz : Float) >> -> Float := {
+
+        # Unit direction along the obstacle segment a -> b.
+        dx : Float := bx - ax
+        dy : Float := by - ay
+        dz : Float := bz - az
+        seglen : Float := sqrt(dx * dx + dy * dy + dz * dz)
+        u3x : Float := dx / seglen
+        u3y : Float := dy / seglen
+        u3z : Float := dz / seglen
+
+        # Normal vector of u3: N = (-u3y, u3x, u3z)
+        nx : Float := -u3y
+        ny : Float := u3x
+        nz : Float := u3z
+
+        signed_num : Float := nx * p2x + ny * p2y
+        s : Float := 2.0 * indicator(signed_num >= 0.0) - 1.0
+
+        raw_dot : Float := u2x * nx + u2y * ny + u2z * nz
+        val : Float := s * raw_dot
+
+        deg : Float := (180.0) / (3.1415926535)
+        angle : Float := arccos(val) * deg
+
+        return min(angle, 180.0 - angle)
+    }
+
+    # Scalar re-implementation of the first output of
+    # DGGML::paramaterized_intersection(p1, p2, p3, u, s): the ray parameter s[0]
+    # along direction u from p1 to the intersection with segment p2->p3.
+    intersection_s0 : Function << (p1x : Float, p1y : Float), (p2x : Float, p2y : Float),
+        (p3x : Float, p3y : Float), (ux : Float, uy : Float) >> -> Float := {
+
+        denom : Float := -p2y * ux + p3y * ux + (p2x - p3x) * uy
+        num : Float := -p2y * p3x + p1y * (-p2x + p3x) + p1x * (p2y - p3y) + p2x * p3y
+        return num / denom
+    }
+
+    # Scalar re-implementation of the second output s[1]: the fractional position
+    # (0..1) of the intersection along the segment p2->p3.
+    intersection_s1 : Function << (p1x : Float, p1y : Float), (p2x : Float, p2y : Float),
+        (p3x : Float, p3y : Float), (ux : Float, uy : Float) >> -> Float := {
+
+        denom : Float := -p2y * ux + p3y * ux + (p2x - p3x) * uy
+        num : Float := p1y * ux - p2y * ux + (-p1x + p2x) * uy
+        return num / denom
+    }
+
+    # Absolute value of the 3D dot product of two unit vectors. Used to test
+    # whether two microtubule segments are nearly parallel (|u.v| ~ 1).
+    unit_dot3_abs : Function << (ax : Float, ay : Float, az : Float),
+        (bx : Float, by : Float, bz : Float) >> -> Float := {
+        return abs(ax * bx + ay * by + az * bz)
+    }
+
+    # Clamp x into the closed interval [lo, hi]. Used to keep the crossover
+    # junction parameter s1 on the struck segment: intersection_s1's denominator
+    # is the cross product of the two segment directions, which vanishes as the
+    # segments become parallel (exactly the shallow-angle regime where crossover
+    # fires). The propensity guards s1 in [0,1] at MATCH time, but DGGML runs the
+    # rewrite at a later FIRE time after the tip has grown along its ODE; with a
+    # near-zero denominator a tiny position drift makes s1 explode, flinging the
+    # junction (and the new_im / new_pos sprouted from it) far off screen.
+    # Clamping guarantees the junction always lands between the two segment ends.
+    clamp : Function << (x : Float, lo : Float, hi : Float) >> -> Float := {
+        return min(max(x, lo), hi)
+    }
+
+    # |p - q|^2
+    squared_distance : Function << (p : FixedList<<3, Float>>),
+        (q : FixedList<<3, Float>>) >> -> Float := {
+        gap : FixedList := p - q
+        return dot(gap, gap)
+    }
+
 }

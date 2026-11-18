@@ -1,0 +1,41 @@
+observables Microtubule {
+
+    # Global observables are functionals of the whole state. Each one is a pattern
+    # plus a reduction over its matches. They are only evaluated by measure(...) in
+    # simulation.fflow, on the saved checkpoints; one row per checkpoint is written to
+    # my_results/measure_<k>.csv (columns: simulation, run, step, time, one per observable).
+
+    # Number of growing (plus) tips.
+    n_tips : Observable := count (p : Positive)
+
+    # Number of minus ends.
+    n_minus : Observable := count (n : Negative)
+
+    # Mean length of the segment behind each growing tip.
+    tip_segment_length : Observable := mean
+        (a : Intermediate) -- (b : Positive)
+        << (a_pos : a::Position), (b_pos : b::Position) >>
+        return ( HELP::distance(a_pos[0], a_pos[1], b_pos[0], b_pos[1]) )
+
+    # Total length of the segments behind the tips.
+    tip_segment_total : Observable := sum
+        (a : Intermediate) -- (b : Positive)
+        << (a_pos : a::Position), (b_pos : b::Position) >>
+        return ( HELP::distance(a_pos[0], a_pos[1], b_pos[0], b_pos[1]) )
+
+    # Local orientation order of the microtubules: cos^2(theta_ij) averaged over all
+    # ordered pairs (i, j) of distinct microtubules whose growing tips are closer than
+    # 0.1 (`within`). A microtubule is represented by the unit growth direction of its
+    # tip (the Intermediate nodes keep no direction). Random orientations give 1/3 in
+    # 3D (1/2 in the plane); parallel ones give 1.
+    local_alignment : Observable := mean
+        (a : Positive) (b : Positive) within 0.1
+        << (a_dir : a::Direction), (b_dir : b::Direction) >>
+        return ( HELP::unit_dot3_abs(a_dir[0], a_dir[1], a_dir[2], b_dir[0], b_dir[1], b_dir[2]) *
+                 HELP::unit_dot3_abs(a_dir[0], a_dir[1], a_dir[2], b_dir[0], b_dir[1], b_dir[2]) )
+
+    # Number of ordered tip pairs behind local_alignment.
+    n_tip_pairs : Observable := sum
+        (a : Positive) (b : Positive) within 0.1
+        return ( 1.0 )
+}

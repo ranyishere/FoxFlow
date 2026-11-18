@@ -18,9 +18,9 @@ rules Microtubule {
     }
 
     #### Creates nuclear grid ####
-#     create_nucleator_grid_x := (p1 : Nucleator) << ( nuc_pos : FixedList <<3, Float>>, nuc_count : FixedList <<2, Integer>> ) >> ->
-#         (p1 : Nucleator) (p2 : Nucleator) << (nuc_pos : FixedList <<3, Float>>, nuc_count_1 : FixedList <<2, Float >> ),
-#         (nuc_pos_2 : FixedList <<3, Float>>, nuc_count_2 : FixedList <<2, Integer >>) >> with (indicator( 0 != nuc_count[0])) where {
+#     create_nucleator_grid_x := (p1 : Nucleator) << ( nuc_pos : TFTensor <<3, Float>>, nuc_count : TFTensor <<2, Integer>> ) >> ->
+#         (p1 : Nucleator) (p2 : Nucleator) << (nuc_pos : TFTensor <<3, Float>>, nuc_count_1 : TFTensor <<2, Float >> ),
+#         (nuc_pos_2 : TFTensor <<3, Float>>, nuc_count_2 : TFTensor <<2, Integer >>) >> with (indicator( 0 != nuc_count[0])) where {
 # 
 #         nuc_count_1 = [ 0, nuc_count[1] ]
 # 
@@ -28,9 +28,9 @@ rules Microtubule {
 #         nuc_count_2 = [ nuc_count[0] - 1, nuc_count[1] ]
 #     }
 # 
-#     create_nucleator_grid_y := (p1 : Nucleator) << ( nuc_pos : FixedList <<3, Float>>, nuc_count : FixedList <<2, Integer>> ) >> ->
-#         (p1 : Nucleator) (p2 : Nucleator) << (nuc_pos : FixedList <<3, Float>>, nuc_count_1 : FixedList <<2, Float >> ),
-#         (nuc_pos_2 : FixedList <<3, Float>>, nuc_count_2 : FixedList <<2, Integer >>) >> with (indicator( 0 != nuc_count[1])) where {
+#     create_nucleator_grid_y := (p1 : Nucleator) << ( nuc_pos : TFTensor <<3, Float>>, nuc_count : TFTensor <<2, Integer>> ) >> ->
+#         (p1 : Nucleator) (p2 : Nucleator) << (nuc_pos : TFTensor <<3, Float>>, nuc_count_1 : TFTensor <<2, Float >> ),
+#         (nuc_pos_2 : TFTensor <<3, Float>>, nuc_count_2 : TFTensor <<2, Integer >>) >> with (indicator( 0 != nuc_count[1])) where {
 # 
 #         nuc_count_1 = [ nuc_count[0], 0 ]
 # 
@@ -41,9 +41,9 @@ rules Microtubule {
     #### Creates nuclear grid end ####
 
 
-#     make_boundary_bottom := (b0 : CellBoundary) << (cb_pos : FixedList <<3, Float>>, cb_unit : FixedList << 3, Float>>, cb_count : FixedList << 2, Float >> ) >> ->
-#         (b0 : CellBoundary) -- (b1 : CellBoundary) << ( cb_pos : FixedList <<3, Float>>, cb_unit : FixedList << 3, Float>>, cb0_count : FixedList << 2, Integer >> ),
-#         ( cb_pos_1 : FixedList <<3, Float>>, cb_unit : FixedList <<3, Float >>, cb_count_1 : FixedList <<2, Float >> ) >> with (
+#     make_boundary_bottom := (b0 : CellBoundary) << (cb_pos : TFTensor <<3, Float>>, cb_unit : TFTensor << 3, Float>>, cb_count : TFTensor << 2, Float >> ) >> ->
+#         (b0 : CellBoundary) -- (b1 : CellBoundary) << ( cb_pos : TFTensor <<3, Float>>, cb_unit : TFTensor << 3, Float>>, cb0_count : TFTensor << 2, Integer >> ),
+#         ( cb_pos_1 : TFTensor <<3, Float>>, cb_unit : TFTensor <<3, Float >>, cb_count_1 : TFTensor <<2, Float >> ) >> with (
 #             indicator(cb_count[0] != 0) * indicator(cb_count[0] != boundary_pts) * indicator(cb_unit[0] == 1)
 #             * indicator(cb_count[0] <= boundary_pts) * 1.1
 #         ) where {
@@ -54,9 +54,9 @@ rules Microtubule {
 # 
 #     }
 # 
-#     make_boundary_right := (b0 : CellBoundary) << (cb_pos : FixedList <<3, Float>>, cb_unit : FixedList << 3, Float>>, cb_count : FixedList << 2, Float >> ) >> ->
-#         (b0 : CellBoundary) -- (b1 : CellBoundary) << ( cb_pos : FixedList <<3, Float>>, cb_unit : FixedList << 3, Float>>, cb0_count : FixedList << 2, Integer >> ),
-#         ( cb_pos_1 : FixedList <<3, Float>>, cb_unit_1 : FixedList <<3, Float >>, cb_count_1 : FixedList <<2, Float >> ) >> with (
+#     make_boundary_right := (b0 : CellBoundary) << (cb_pos : TFTensor <<3, Float>>, cb_unit : TFTensor << 3, Float>>, cb_count : TFTensor << 2, Float >> ) >> ->
+#         (b0 : CellBoundary) -- (b1 : CellBoundary) << ( cb_pos : TFTensor <<3, Float>>, cb_unit : TFTensor << 3, Float>>, cb0_count : TFTensor << 2, Integer >> ),
+#         ( cb_pos_1 : TFTensor <<3, Float>>, cb_unit_1 : TFTensor <<3, Float >>, cb_count_1 : TFTensor <<2, Float >> ) >> with (
 # 
 #             indicator(cb_count[0] >= boundary_pts) * indicator(cb_count[1] != 0) * indicator(cb_count[1] != boundary_pts) 
 #             * indicator(cb_unit[1] == 1) * 1.1
@@ -71,9 +71,9 @@ rules Microtubule {
 #     }
 # 
 # 
-#     make_boundary_top := (b0 : CellBoundary) << (cb_pos : FixedList <<3, Float>>, cb_unit : FixedList << 3, Float>>, cb_count : FixedList << 2, Float >> ) >> ->
-#         (b0 : CellBoundary) -- (b1 : CellBoundary) << ( cb_pos : FixedList <<3, Float>>, cb_unit_0 : FixedList << 3, Float>>, cb_count : FixedList << 2, Integer >> ),
-#         ( cb_pos_1 : FixedList <<3, Float>>, cb_unit_1 : FixedList <<3, Float >>, cb_count_1 : FixedList <<2, Float >> ) >> with (
+#     make_boundary_top := (b0 : CellBoundary) << (cb_pos : TFTensor <<3, Float>>, cb_unit : TFTensor << 3, Float>>, cb_count : TFTensor << 2, Float >> ) >> ->
+#         (b0 : CellBoundary) -- (b1 : CellBoundary) << ( cb_pos : TFTensor <<3, Float>>, cb_unit_0 : TFTensor << 3, Float>>, cb_count : TFTensor << 2, Integer >> ),
+#         ( cb_pos_1 : TFTensor <<3, Float>>, cb_unit_1 : TFTensor <<3, Float >>, cb_count_1 : TFTensor <<2, Float >> ) >> with (
 # 
 #             indicator( (cb_count[0]) <= (2*boundary_pts - 2) ) * indicator( (cb_count[0]) >= boundary_pts )
 #             * indicator( cb_count[1] >= boundary_pts )
@@ -89,9 +89,9 @@ rules Microtubule {
 # 
 #     }
 # 
-#     make_boundary_left := (b0 : CellBoundary) << (cb_pos : FixedList <<3, Float>>, cb_unit : FixedList << 3, Float>>, cb_count : FixedList << 2, Float >> ) >> ->
-#         (b0 : CellBoundary) -- (b1 : CellBoundary) << ( cb_pos : FixedList <<3, Float>>, cb_unit_0 : FixedList << 3, Float>>, cb_count : FixedList << 2, Integer >> ),
-#         ( cb_pos_1 : FixedList <<3, Float>>, cb_unit_1 : FixedList <<3, Float >>, cb_count_1 : FixedList <<2, Float >> ) >> with (
+#     make_boundary_left := (b0 : CellBoundary) << (cb_pos : TFTensor <<3, Float>>, cb_unit : TFTensor << 3, Float>>, cb_count : TFTensor << 2, Float >> ) >> ->
+#         (b0 : CellBoundary) -- (b1 : CellBoundary) << ( cb_pos : TFTensor <<3, Float>>, cb_unit_0 : TFTensor << 3, Float>>, cb_count : TFTensor << 2, Integer >> ),
+#         ( cb_pos_1 : TFTensor <<3, Float>>, cb_unit_1 : TFTensor <<3, Float >>, cb_count_1 : TFTensor <<2, Float >> ) >> with (
 # 
 #             indicator( (cb_count[0]) > (2*boundary_pts - 2) ) * indicator( cb_count[1] >= boundary_pts )
 #             * indicator(cb_count[1] <= (2*boundary_pts - 2)) * 1.1
