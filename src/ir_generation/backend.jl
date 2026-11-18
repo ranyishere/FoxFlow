@@ -96,7 +96,7 @@ if(NOT Torch_FOUND)
     set(Torch_DIR ${libtorch_SOURCE_DIR}/share/cmake/Torch CACHE PATH "" FORCE)
     find_package(Torch REQUIRED)
 endif()
-
+@MFEM_BLOCK@
 # ---- DGGML include paths ----
 include_directories(${FOXFLOW_DGGML_DIR}/dependencies/YAGL/include)
 include_directories(${FOXFLOW_DGGML_DIR}/thirdparty/simdjson)
@@ -123,6 +123,10 @@ target_link_libraries(@TARGET@ PRIVATE vtu11::vtu11)
 target_link_libraries(@TARGET@ PUBLIC SUNDIALS::arkode SUNDIALS::nvecserial)
 target_link_libraries(@TARGET@ PRIVATE cereal::cereal)
 target_link_libraries(@TARGET@ PRIVATE torch)
+@MFEM_LINK@find_package(OpenMP QUIET)
+if(OpenMP_CXX_FOUND)
+    target_link_libraries(@TARGET@ PRIVATE OpenMP::OpenMP_CXX)
+endif()
 target_compile_features(@TARGET@ PRIVATE cxx_std_17)
 """
 
@@ -136,22 +140,105 @@ via `-DFOXFLOW_DGGML_DIR` or the `FOXFLOW_DGGML_DIR` env var.
 function default_dggml_dir()
     repo = normpath(joinpath(@__DIR__, "..", ".."))
     return joinpath(repo, "src", "tests", "generated_tests", "include",
-                    "FoxFlowDGGML3D", "FoxFlowDGGML")
+                    "FoxFlowDGGML3D")
 end
+
+# CMake snippets added when the generated model uses MFEM (PDE rules).
+# MFEM is located with find_package(mfem) (hint it with -DMFEM_DIR=<mfem build dir>
+# or the MFEM_DIR env var), otherwise it is fetched and built.
+const MFEM_CMAKE_BLOCK = raw"""
+
+# ---- MFEM (finite elements for PDE rules) ----
+if(NOT DEFINED MFEM_DIR AND DEFINED ENV{MFEM_DIR})
+    set(MFEM_DIR "$ENV{MFEM_DIR}")
+endif()
+find_package(MFEM QUIET CONFIG)
+if(NOT MFEM_FOUND)
+    message(STATUS "MFEM not found, fetching with FetchContent (set MFEM_DIR to reuse a build)...")
+    include(FetchContent)
+    set(MFEM_ENABLE_EXAMPLES OFF CACHE BOOL "" FORCE)
+    set(MFEM_ENABLE_MINIAPPS OFF CACHE BOOL "" FORCE)
+    set(MFEM_ENABLE_TESTING OFF CACHE BOOL "" FORCE)
+    FetchContent_Declare(mfem
+        GIT_REPOSITORY https://github.com/mfem/mfem.git
+        GIT_TAG v4.7 GIT_PROGRESS TRUE)
+    FetchContent_MakeAvailable(mfem)
+endif()
+
+# ---- UMFPACK (SuiteSparse): exact sparse solve used by the PDE implicit preconditioner ----
+# Uses an installed SuiteSparse if found, otherwise fetches and builds UMFPACK (+AMD) only.
+# Needs a BLAS. Without it (or with -DFOXFLOW_USE_UMFPACK=OFF) the generated code falls back
+# to GMRES + BlockILU.
+option(FOXFLOW_USE_UMFPACK "Use UMFPACK for PDE implicit solves" ON)
+set(FOXFLOW_UMFPACK_TARGET "")
+if(FOXFLOW_USE_UMFPACK)
+    find_package(UMFPACK CONFIG QUIET)
+    if(TARGET SuiteSparse::UMFPACK)
+        set(FOXFLOW_UMFPACK_TARGET SuiteSparse::UMFPACK)
+    elseif(TARGET SuiteSparse::UMFPACK_static)
+        set(FOXFLOW_UMFPACK_TARGET SuiteSparse::UMFPACK_static)
+    else()
+        find_package(BLAS QUIET)
+        if(NOT BLAS_FOUND)
+            # No development symlink (libblas.so): accept a runtime BLAS by its soname.
+            foreach(_cand libflexiblas.so.3 libopenblas.so.0 libblas.so.3)
+                foreach(_dir /usr/lib64 /usr/lib /usr/lib/x86_64-linux-gnu)
+                    if(NOT BLAS_FOUND AND EXISTS "${_dir}/${_cand}")
+                        set(BLAS_LIBRARIES "${_dir}/${_cand}")
+                        set(BLAS_FOUND TRUE)
+                    endif()
+                endforeach()
+            endforeach()
+        endif()
+        if(BLAS_FOUND)
+            message(STATUS "UMFPACK not found, fetching SuiteSparse with FetchContent...")
+            include(FetchContent)
+            set(SUITESPARSE_ENABLE_PROJECTS "suitesparse_config;amd;umfpack" CACHE STRING "" FORCE)
+            set(SUITESPARSE_USE_FORTRAN OFF CACHE BOOL "" FORCE)
+            set(SUITESPARSE_DEMOS OFF CACHE BOOL "" FORCE)
+            set(UMFPACK_USE_CHOLMOD OFF CACHE BOOL "" FORCE)
+            set(BUILD_STATIC_LIBS ON CACHE BOOL "" FORCE)
+            set(_foxflow_shared ${BUILD_SHARED_LIBS})
+            set(BUILD_SHARED_LIBS OFF)   # scoped to this block: keep other libraries as configured
+            FetchContent_Declare(suitesparse
+                GIT_REPOSITORY https://github.com/DrTimothyAldenDavis/SuiteSparse.git
+                GIT_TAG v7.8.3 GIT_SHALLOW TRUE GIT_PROGRESS TRUE)
+            FetchContent_MakeAvailable(suitesparse)
+            set(BUILD_SHARED_LIBS ${_foxflow_shared})
+            set(FOXFLOW_UMFPACK_TARGET SuiteSparse::UMFPACK_static)
+        else()
+            message(WARNING "No BLAS found: PDE solves use GMRES+ILU instead of UMFPACK.")
+        endif()
+    endif()
+endif()
+"""
+const MFEM_CMAKE_LINK = """target_link_libraries(@TARGET@ PRIVATE mfem)
+if(FOXFLOW_UMFPACK_TARGET)
+    target_link_libraries(@TARGET@ PRIVATE \${FOXFLOW_UMFPACK_TARGET})
+    target_compile_definitions(@TARGET@ PRIVATE FOXFLOW_USE_UMFPACK)
+endif()
+"""
 
 """
     write_project_files(output_dir; dggml_dir=default_dggml_dir(), target="main")
 
 Write a self-contained `CMakeLists.txt` (and an empty `settings.json` if one is
 missing) into `output_dir`, so the generated model can be built on its own with
-`cmake -S output_dir -B build`.
+`cmake -S output_dir -B build`. MFEM is added automatically when the generated
+sources include `mfem.hpp` (PDE rules).
 """
 function write_project_files(output_dir::AbstractString;
                              dggml_dir::AbstractString=default_dggml_dir(),
                              target::AbstractString="main")
     mkpath(output_dir)
 
+    uses_mfem = any(f -> endswith(f, ".h") && occursin("mfem.hpp", read(joinpath(output_dir, f), String)),
+                    readdir(output_dir))
+
     content = replace(CMAKELISTS_TEMPLATE,
+                      "@MFEM_BLOCK@" => (uses_mfem ? MFEM_CMAKE_BLOCK : ""),
+                      "@MFEM_LINK@" => (uses_mfem ? MFEM_CMAKE_LINK : ""))
+    content = replace(content,
                       "@FOXFLOW_DGGML_DIR@" => dggml_dir,
                       "@TARGET@" => target)
     open(joinpath(output_dir, "CMakeLists.txt"), "w") do io

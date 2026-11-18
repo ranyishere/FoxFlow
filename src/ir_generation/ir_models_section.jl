@@ -317,7 +317,7 @@ function ir_get_type_attr(ast, type_namespace, symbol_tables, observable_section
         attrs = Tuple{String, Bool}[]
         for (_, attr) in value
             attr_type = attr[1]
-            is_tensor = (attr_type == "torch::Tensor" && attr[3][1] == true)
+            is_tensor = (is_list_type_tensor(attr_type) && attr[3][1] == true)
             push!(attrs, (attr[2], is_tensor))
         end
         type_to_attrs[String(key)] = attrs
@@ -409,6 +409,122 @@ function ir_get_type_attr(ast, type_namespace, symbol_tables, observable_section
 end
 
 
+"""
+Generate the C++ members that evaluate the global observables (`name : Observable :=
+reduction pattern return (expr)`) on the model's graph; they are only called by
+measure(...). Each observable was synthesized into a hidden rule
+`obs_<name>` (see parse_global_observable!); its propensity lambda is the per-match value.
+"""
+function ir_global_observables(global_observables, observable_section)
+    isempty(global_observables) && return ""
+    ns = get_value(observable_section.name)
+
+    blocks = String[]
+    for obs in global_observables
+        name = get_value(obs.name)
+        rule = get_value(obs.rule.name)
+        accumulate, final = if obs.reduction == "sum"
+            ("acc += v;", "acc")
+        elseif obs.reduction == "mean"
+            ("acc += v;", "(n > 0 ? acc / static_cast<double>(n) : nan_value)")
+        elseif obs.reduction == "count"
+            ("if (v != 0.0) acc += 1.0;", "acc")
+        elseif obs.reduction == "min"
+            ("acc = (n == 0) ? v : std::min(acc, v);", "(n > 0 ? acc : nan_value)")
+        else  # max
+            ("acc = (n == 0) ? v : std::max(acc, v);", "(n > 0 ? acc : nan_value)")
+        end
+        if obs.within !== nothing
+            rc = obs.within
+            push!(blocks, """
+        if (wanted.empty() || std::find(wanted.begin(), wanted.end(), "$name") != wanted.end())
+        {
+            // $name := $(obs.reduction) over the ordered pairs of nodes within $rc of each other
+            // (pattern nodes 1 and 2 of $rule), found with a uniform grid.
+            graph_grammar_t obs_gamma;
+            $ns::$rule(obs_gamma, this->system_graph, settings);
+            auto &r = obs_gamma.stochastic_rules.at("$rule");
+            using match_t = YAGL::Mtype<std::remove_reference_t<decltype(this->system_graph)>>;
+            using key_t = typename match_t::key_type;
+            const auto type_a = r.lhs_graph.findNode(1)->second.getData().type;
+            const auto type_b = r.lhs_graph.findNode(2)->second.getData().type;
+            const double rc = $rc;
+            const double rc2 = rc * rc;
+            auto cell_of = [&](double c) { return static_cast<long long>(std::floor(c / rc)); };
+            auto cell_key = [](long long ix, long long iy, long long iz) {
+                return ((ix + 100000) * 200003LL + (iy + 100000)) * 200003LL + (iz + 100000);
+            };
+            struct Item { key_t key; double x, y, z; };
+            std::vector<Item> items_a, items_b;
+            for (auto it = this->system_graph.node_list_begin(); it != this->system_graph.node_list_end(); ++it) {
+                auto &nd = it->second.getData();
+                Item item{it->first, static_cast<double>(nd.position[0]),
+                          static_cast<double>(nd.position[1]), static_cast<double>(nd.position[2])};
+                if (nd.type == type_a) items_a.push_back(item);
+                if (nd.type == type_b) items_b.push_back(item);
+            }
+            std::unordered_map<long long, std::vector<std::size_t>> grid;
+            for (std::size_t k = 0; k < items_b.size(); ++k)
+                grid[cell_key(cell_of(items_b[k].x), cell_of(items_b[k].y), cell_of(items_b[k].z))].push_back(k);
+            double acc = 0.0;
+            std::size_t n = 0;
+            for (auto &a : items_a) {
+                const long long ix = cell_of(a.x), iy = cell_of(a.y), iz = cell_of(a.z);
+                for (long long dx = -1; dx <= 1; ++dx)
+                for (long long dy = -1; dy <= 1; ++dy)
+                for (long long dz = -1; dz <= 1; ++dz) {
+                    auto cell = grid.find(cell_key(ix + dx, iy + dy, iz + dz));
+                    if (cell == grid.end()) continue;
+                    for (auto k : cell->second) {
+                        auto &b = items_b[k];
+                        if (b.key == a.key) continue;
+                        const double ddx = a.x - b.x, ddy = a.y - b.y, ddz = a.z - b.z;
+                        if (ddx * ddx + ddy * ddy + ddz * ddz > rc2) continue;
+                        match_t m;
+                        m[1] = a.key;
+                        m[2] = b.key;
+                        double v = r.propensity(this->system_graph, m);
+                        $accumulate
+                        ++n;
+                    }
+                }
+            }
+            result.emplace_back("$name", $final);
+        }
+        """)
+            continue
+        end
+        push!(blocks, """
+        if (wanted.empty() || std::find(wanted.begin(), wanted.end(), "$name") != wanted.end())
+        {
+            // $name := $(obs.reduction) over the matches of the pattern of $rule
+            graph_grammar_t obs_gamma;
+            $ns::$rule(obs_gamma, this->system_graph, settings);
+            auto &r = obs_gamma.stochastic_rules.at("$rule");
+            auto matches = YAGL::subgraph_isomorphism2(r.lhs_graph, this->system_graph);
+            double acc = 0.0;
+            std::size_t n = 0;
+            for (auto &m : matches) {
+                double v = r.propensity(this->system_graph, m);
+                $accumulate
+                ++n;
+            }
+            result.emplace_back("$name", $final);
+        }
+        """)
+    end
+
+    return """
+    std::vector<std::pair<std::string, double>> compute_observables(
+            const std::vector<std::string> &wanted = {}) {
+        std::vector<std::pair<std::string, double>> result;
+        const double nan_value = std::numeric_limits<double>::quiet_NaN();
+        $(join(blocks, "\n"))
+        return result;
+    }
+    """
+end
+
 function ir_serialize_torch_tensor()
     ir = "#include <cereal/archives/binary.hpp>
     #include <cereal/types/vector.hpp>
@@ -470,7 +586,8 @@ end
 
 function ir_models_section_multistage(all_stages, type_namespace, symbol_tables,
                                        stage_rules_tables, rules_includes;
-                                       observable_section=nothing)
+                                       observable_section=nothing,
+                                       with_global_observables=false)
     """
     Generate model.h with one Model_N class per simulation stage.
     Each Model_N only registers the rules for its stage.
@@ -484,6 +601,10 @@ function ir_models_section_multistage(all_stages, type_namespace, symbol_tables,
 
     ir_load_graph_ir = ir_load_graph(symbol_tables, type_namespace)
     ir_get_type_fn = ir_get_type_attr(first_stage, type_namespace, symbol_tables, observable_section)
+    # Global observables are only evaluated by measure(...) (compute_observables), never during a run.
+    global_observables = (observable_section === nothing || !with_global_observables) ? [] :
+                         observable_section.global_observables
+    ir_global_obs_fn = ir_global_observables(global_observables, observable_section)
 
     serializer_spatialnode_ir = ir_serialize_spatialnode()
     serializer_torch_tensor_ir = ir_serialize_torch_tensor()
@@ -495,6 +616,10 @@ function ir_models_section_multistage(all_stages, type_namespace, symbol_tables,
         "#ifndef DGGML_MODELS_HPP\n",
         "#define DGGML_MODELS_HPP\n",
         "#include <fstream>\n",
+        "#include <filesystem>\n",
+        "#include <algorithm>\n",
+        "#include <iomanip>\n",
+        "#include <limits>\n",
         "#include \"DGGML.h\"\n",
     ]
 
@@ -504,6 +629,9 @@ function ir_models_section_multistage(all_stages, type_namespace, symbol_tables,
     end
 
     push!(model_header, "#include \"simdjson.h\"\n")
+    if any(rt -> any(r -> r["activated"] == true && is_pde_clause(r["modify_clause"]), values(rt)), stage_rules_tables)
+        push!(model_header, "#include \"mfem.hpp\"\n")
+    end
     push!(model_header, "#include \"ExpandedComplex2D.hpp\"\n")
     push!(model_header, "#include \"ExpandedComplex3D.hpp\"\n")
     push!(model_header, "#include \"YAGL_Algorithms.hpp\"\n")
@@ -527,8 +655,9 @@ function ir_models_section_multistage(all_stages, type_namespace, symbol_tables,
 
         initial_state_file = stage_info["initial_state"]
 
+        generator_spec = initial_state_file isa AbstractString ? nothing : initial_state_file
         load_initial_state = nothing
-        if initial_state_file == "default"
+        if generator_spec !== nothing || initial_state_file == "default"
             load_initial_state = "false"
             initial_state_file = "\"simulation_state.bin\""
         else
@@ -601,6 +730,52 @@ function ir_models_section_multistage(all_stages, type_namespace, symbol_tables,
 
         initial_rules_ir = join(call_rule_ir)
 
+        # PDE rules: each one owns an MFEM operator (created when its rule is registered).
+        pde_rule_names = String[]
+        for rule_name in sort(collect(keys(stage_rt)))
+            if stage_rt[rule_name]["activated"] == true && is_pde_clause(stage_rt[rule_name]["modify_clause"])
+                push!(pde_rule_names, rule_name)
+            end
+        end
+        has_non_pde_rules = any(
+            r -> stage_rt[r]["activated"] == true && !is_pde_clause(stage_rt[r]["modify_clause"]),
+            keys(stage_rt))
+        pde_members_ir = ""
+        if !isempty(pde_rule_names)
+            op_types = ["$(stage_rt[r]["namespace"])::$(r)_Operator" for r in pde_rule_names]
+            fem_type = length(op_types) == 1 ? op_types[1] :
+                       "DGGML::FemOperatorGroup<$(join(op_types, ", "))>"
+            make_ops = length(op_types) == 1 ? "std::make_shared<$(op_types[1])>(settings)" :
+                "std::make_shared<fem_operator_type>($(join(["std::make_shared<$t>(settings)" for t in op_types], ", ")))"
+            # Graph-driven operators: every geocell solver gets its own operator instance, which
+            # builds its mesh from that geocell's rule matches (see FemOperatorGroup / Solver).
+            pde_members_ir = "using fem_operator_type = $fem_type;\n" *
+                "std::map<std::size_t, std::shared_ptr<fem_operator_type>> fem_ops;\n" *
+                "std::shared_ptr<std::mutex> fem_ops_mutex = std::make_shared<std::mutex>();\n" *
+                "fem_operator_type* fem_operator(std::size_t k, bool has_rules) {\n" *
+                "    if (!has_rules) return nullptr;\n" *
+                "    std::lock_guard<std::mutex> lock(*fem_ops_mutex);\n" *
+                "    auto& slot = fem_ops[k];\n" *
+                "    if (!slot) slot = $make_ops;\n" *
+                "    return slot.get();\n}\n"
+            # A pure-PDE stage with a generator needs no StartType: its graph is the generated
+            # lattice. When other (ODE / propensity) rules are active they are seeded from the
+            # StartType node as usual, so keep it alongside the lattice.
+            if generator_spec !== nothing && !has_non_pde_rules
+                model_create_initial_type = ""
+            end
+        end
+        default_type_ir = "this->add_default_type(this->system_graph,
+                        geoplex2D,
+                        settings,
+                        this->gen);"
+        initial_state_ir = default_type_ir
+        if generator_spec !== nothing
+            generator_ir = ir_mesh_generator(generator_spec, type_namespace, symbol_tables,
+                                             keys(propensity_table["parameter_table"]))
+            initial_state_ir = has_non_pde_rules ? default_type_ir * "\n" * generator_ir : generator_ir
+        end
+
         save_graph_ir = ir_save_graph(type_namespace)
 
         # Checkpoint function
@@ -612,6 +787,20 @@ function ir_models_section_multistage(all_stages, type_namespace, symbol_tables,
         if stage_save_name === nothing || stage_save_name == ""
             stage_save_name = "simulation_state_latest.bin"
         end
+
+        # `measure(sim, ...)` evaluates observables on this simulation's saved checkpoints, so a
+        # measured simulation keeps them in my_results/<sim>/state_<step>.bin (cleared at step 0)
+        # instead of the shared my_results/simulation_state_<step>.bin.
+        stage_measured = get(stage_info, "measured", false)
+        stage_sim_name = string(get(stage_info, "name", "stage$(stage_ix - 1)"))
+        snapshot_prefix = stage_measured ? "/$(stage_sim_name)/state_" : "/simulation_state_"
+        snapshot_dir_ir = stage_measured ?
+            "std::filesystem::create_directories(results_dir_name + \"/$(stage_sim_name)\");
+                        for (const auto& snap : std::filesystem::directory_iterator(results_dir_name + \"/$(stage_sim_name)\"))
+                        {
+                            if (snap.is_regular_file() && snap.path().extension() == \".bin\")
+                                std::filesystem::remove(snap.path());
+                        }" : ""
 
         # Clear stale transient output (VTK/CSV) from previous runs at step 0,
         # but preserve saved-state (.bin) files. A blanket remove_all would
@@ -630,11 +819,22 @@ function ir_models_section_multistage(all_stages, type_namespace, symbol_tables,
                         {
                             if (entry.is_regular_file() && entry.path().extension() != \".bin\")
                                 std::filesystem::remove(entry.path());
-                        }"
+                        }
+                        $snapshot_dir_ir"
+
+        # Write VTK/CSV/state output every `checkpoint_freq` steps (and always on the
+        # final step so the stage's "latest" state file is complete). Default: every step.
+        checkpoint_freq = get(stage_info, "checkpoint_frequency", nothing)
+        if checkpoint_freq === nothing
+            checkpoint_freq = 1
+        end
 
         check_point = 
         "void checkpoint(std::size_t step) override {"*
                     "std::string results_dir_name = \"my_results\";"*
+                    "const std::size_t checkpoint_every = $checkpoint_freq;
+                    const bool checkpoint_due = (step != 0) &&
+                        (step % checkpoint_every == 0 || step == static_cast<std::size_t>(settings.NUM_STEPS));"*
                     "if(step == 0)
                     {
                         // Create the local save directory
@@ -654,7 +854,7 @@ function ir_models_section_multistage(all_stages, type_namespace, symbol_tables,
                         { std::ofstream ts(results_dir_name+\"/timesteps.csv\", std::ios::trunc);
                           ts << \"step,time\\n\" << step << \",\" << (static_cast<double>(step) * settings.DELTA) << \"\\n\"; }
                     }
-                    if( step != 0 & step % 1 == 0)
+                    if( checkpoint_due )
                     {
                         std::string title = results_dir_name+\"/simulation_step_\";
                         DGGML::VtkFileWriterComplete<graph_type> vtk_writer;
@@ -665,7 +865,7 @@ function ir_models_section_multistage(all_stages, type_namespace, symbol_tables,
                         vtk_writer.save(system_graph, title+std::to_string(step));
                         collect(step);
                         { std::ofstream ts(results_dir_name+\"/timesteps.csv\", std::ios::app);
-                          ts << step << \",\" << (static_cast<double>(step) * settings.DELTA) << \"\\n\"; }"*"}\n "*"if (save_system_graph) {save_graph(gamma, this->system_graph, settings, results_dir_name+\"/simulation_state_\"+std::to_string(step)+\".bin\");"*
+                          ts << step << \",\" << (static_cast<double>(step) * settings.DELTA) << \"\\n\"; }"*"}\n "*"if (save_system_graph && (step == 0 || checkpoint_due)) {save_graph(gamma, this->system_graph, settings, results_dir_name+\"$snapshot_prefix\"+std::to_string(step)+\".bin\");"*
                         "\nsave_graph(gamma, this->system_graph, settings, results_dir_name+\"/$stage_save_name\");}\n }\n"
 
         # Per-stage simulation time override
@@ -679,6 +879,14 @@ function ir_models_section_multistage(all_stages, type_namespace, symbol_tables,
             "
         end
 
+        # Rule-fire tracing requested with `trace(sim, "rule", ...)`. Always emitted so a stage
+        # without a trace statement switches off tracing left on by an earlier stage.
+        stage_trace_rules = get(stage_info, "trace_rules", String[])
+        stage_trace_file = "trace_" * string(get(stage_info, "name", "stage$(stage_ix - 1)")) * ".jsonl"
+        stage_trace_ir = "DGGML::Trace::begin_stage(std::vector<std::string>{" *
+            join(["\"$(r)\"" for r in stage_trace_rules], ", ") *
+            "}, \"$(stage_trace_file)\");\n"
+
         # Assemble the class
         class_ir = [
             "class $model_class_name : public DGGML::Model3D<graph_grammar_t> {\n",
@@ -686,12 +894,15 @@ function ir_models_section_multistage(all_stages, type_namespace, symbol_tables,
             "\tParameters settings;\n",
             "bool save_system_graph = true;\n",
             "bool load_initial_state = $load_initial_state;\n",
-            "std::string initial_state_filename = $initial_state_file;\n",
+            "std::string initial_state_filename = fflow_input_path($initial_state_file);\n",
+            pde_members_ir,
             ""*model_create_initial_type,
             ""*ir_get_type_fn,
+            ""*ir_global_obs_fn,
             ""*ir_load_graph_ir,
             "void initialize() override {\n",
             stage_time_override,
+            stage_trace_ir,
             "int geoplex_size = settings.CELL_NX;",
             "
              int cell_nx = geoplex_size;
@@ -716,10 +927,7 @@ function ir_models_section_multistage(all_stages, type_namespace, symbol_tables,
                     );
             "*initial_rules_ir,
             "",
-            "\n\t\t if (load_initial_state == false) {this->add_default_type(this->system_graph,
-                        geoplex2D,
-                        settings,
-                        this->gen);} else {load_graph(gamma, this->system_graph, settings, this->gen, 
+            "\n\t\t if (load_initial_state == false) {$initial_state_ir} else {load_graph(gamma, this->system_graph, settings, this->gen, 
                         this->initial_state_filename);}\n",
                 "}\n",
             save_graph_ir,
@@ -730,8 +938,55 @@ function ir_models_section_multistage(all_stages, type_namespace, symbol_tables,
         push!(model_classes, join(class_ir))
     end
 
+    # ===== Post-run measurement (`measure(sim, ...)`) =====
+    # Evaluates the observables on every snapshot my_results/<sim>/state_<step>.bin of a simulation
+    # (of every replicate runs/<sim>/run_<i>/my_results/<sim>/state_<step>.bin when the simulation
+    # was run N>1 times) and appends one row per snapshot to `out`
+    # (columns: simulation,run,step,time,<observables>; run is 0 for a single run).
+    measure_helper_ir = isempty(global_observables) ? "" : """
+    template <class ModelT>
+    void measure_simulation(const std::string &sim_name, const std::vector<std::string> &wanted,
+                            std::ostream &out, bool &header_written, int replicates = 1) {
+        namespace fs = std::filesystem;
+        const int n_runs = replicates < 1 ? 1 : replicates;
+        for (int run = 0; run < n_runs; ++run) {
+        const std::string dir = replicates > 1
+            ? "runs/" + sim_name + "/run_" + std::to_string(run) + "/my_results/" + sim_name
+            : "my_results/" + sim_name;
+        std::vector<std::pair<std::size_t, std::string>> snapshots;
+        if (fs::exists(dir)) {
+            for (const auto &e : fs::directory_iterator(dir)) {
+                const std::string fname = e.path().filename().string();
+                if (e.path().extension() != ".bin" || fname.rfind("state_", 0) != 0) continue;
+                snapshots.emplace_back(std::stoull(fname.substr(6, fname.size() - 10)), e.path().string());
+            }
+        }
+        if (snapshots.empty()) {
+            std::cerr << "measure: no snapshots found in " << dir << " (was '" << sim_name << "' run?)\\n";
+            continue;
+        }
+        std::sort(snapshots.begin(), snapshots.end());
+        for (const auto &snap : snapshots) {
+            ModelT m;
+            m.load_graph(m.gamma, m.system_graph, m.settings, m.gen, snap.second);
+            auto values = m.compute_observables(wanted);
+            if (!header_written) {
+                out << "simulation,run,step,time";
+                for (const auto &v : values) out << "," << v.first;
+                out << "\\n";
+                header_written = true;
+            }
+            out << std::setprecision(10) << sim_name << "," << run << "," << snap.first << ","
+                << (static_cast<double>(snap.first) * m.settings.DELTA);
+            for (const auto &v : values) out << "," << v.second;
+            out << "\\n";
+        }
+        }
+    }
+    """
+
     # ===== Footer =====
-    model_footer = ["};\n", "#endif\n"]
+    model_footer = [measure_helper_ir, "};\n", "#endif\n"]
 
     join([model_header; model_classes; model_footer])
 end

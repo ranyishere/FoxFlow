@@ -26,53 +26,84 @@ rules Microtubule {
             new_dir[1] = im_dir[1]
             new_dir[2] = im_dir[2]
 
-            angle : Float := ~UniformDistribution(-WOBBLE_ANGLE * 0.0174533, WOBBLE_ANGLE * 0.0174533)
+            # Wobble (cmaRules.hpp): rotate the tip direction in the xy-plane by a
+            # random angle in +-WOBBLE_ANGLE degrees (3.14/180 rad per degree, as in CMA).
+            # ENABLE_WOBBLE (0/1) scales the angle, so 0 is an exact no-op rotation.
 
-            # Disable wobble for now so that we can see the effect of the CIC rule more clearly.
-            # pos_dir[0] = pos_dir[0] * cos(angle) - pos_dir[1] * sin(angle)
-            # pos_dir[1] = pos_dir[0] * sin(angle) + pos_dir[1] * cos(angle)
+            # Let's change the angle so it follows a curve instead
+            # of a uniform distribution.
+            angle : Float := ENABLE_WOBBLE * ~UniformDistribution(
+                -WOBBLE_ANGLE * (3.14 / 180.0),
+                WOBBLE_ANGLE * (3.14 / 180.0)
+            )
 
-            pos_dir[0] = pos_dir[0]
-            pos_dir[1] = pos_dir[1]
+            # curved_angle : Float := angle * (1.0 - (abs(angle) / (WOBBLE_ANGLE * (3.14 / 180.0))))
+
+            wdx : Float := pos_dir[0]
+            wdy : Float := pos_dir[1]
+
+            pos_dir[0] = wdx * cos(angle) - wdy * sin(angle)
+            pos_dir[1] = wdx * sin(angle) + wdy * cos(angle)
 
         }
 
     # 2. Continuous ODE Growth Rule
+    # Grow each tip along its OWN (randomized) direction vector so the
+    # microtubule extends in a straight line at speed V_PLUS. A bare
+    # `V_PLUS` on every axis gives every tip the same velocity
+    # (V_PLUS, V_PLUS, V_PLUS) -> they all march diagonally up-right.
     ode_mt_growth :=
         (im : Intermediate) -- (pos : Positive)
-        << (im_pos : im::Position), (pos_pos : pos::Position, pos_dir : pos::Direction) >>
-        ->
+        << 
+            (im_pos : im::Position, im_dir : im::Direction),
+            (pos_pos : pos::Position, pos_dir : pos::Direction) 
+        >>
+        -> 
         (im : Intermediate) -- (pos : Positive)
-        << (im_pos : im::Position), (pos_pos : pos::Position, pos_dir : pos::Direction) >>
-        solving (dpos[0] := D(pos_pos[0], t), dpos[1] := D(pos_pos[1], t), dpos[2] := D(pos_pos[2], t)) {
+        << 
+            (im_pos : im::Position, im_dir : im::Direction),
+            (pos_pos : pos::Position, pos_dir : pos::Direction) 
+        >>
+        solving (
+                dpos[0] := D(pos_pos[0], t),
+                dpos[1] := D(pos_pos[1], t),
+                dpos[2] := D(pos_pos[2], t)
+            ) {
 
-            # Grow each tip along its OWN (randomized) direction vector so the
-            # microtubule extends in a straight line at speed V_PLUS. A bare
-            # `V_PLUS` on every axis gives every tip the same velocity
-            # (V_PLUS, V_PLUS, V_PLUS) -> they all march diagonally up-right.
             dpos[0] : ODE = V_PLUS * pos_dir[0]
             dpos[1] : ODE = V_PLUS * pos_dir[1]
             dpos[2] : ODE = V_PLUS * pos_dir[2]
 
-        }
+    }
+            # min_x : Float := buffer
+            # min_y : Float := buffer
+            # max_x : Float := CELL_NX*CELL_DX - buffer
+            # max_y : Float := CELL_NY*CELL_DY - buffer
+            # dpos[0] : ODE = V_PLUS * pos_dir[0] * HELP::boundary_check(pos_pos[0], pos_pos[1],
+            #                                                      min_x, min_y, max_x, max_y)
+            # dpos[1] : ODE = V_PLUS * pos_dir[1] * HELP::boundary_check(pos_pos[0], pos_pos[1],
+            #                                                      min_x, min_y, max_x, max_y)
+            # dpos[2] : ODE = V_PLUS * pos_dir[2] * HELP::boundary_check(pos_pos[0], pos_pos[1],
+            #                                                      min_x, min_y, max_x, max_y)
+
 
     # 3. Stochastic Retraction Rule
     mt_stochastic_retraction :=
         (neg : Negative) -- (im1 : Intermediate) -- (im2 : Intermediate)
         << (neg_pos : neg::Position, neg_dir : neg::Direction),
-           (im1_pos : im1::Position),
-           (im2_pos : im2::Position) >>
+           (im1_pos : im1::Position, im1_dir : im1::Direction),
+           (im2_pos : im2::Position, im2_dir : im2::Direction) >>
         ->
         (neg : Negative) -- (im2 : Intermediate)
         << (neg_pos : neg::Position, neg_dir : neg::Direction),
-           (im2_pos : im2::Position) >>
+           (im2_pos : im2::Position, im2_dir : im2::Direction) >>
         with (
             WITH_RETRACTION_RATE_FACTOR * heaviside(
                     DIV_LENGTH_RETRACT, HELP::distance(neg_pos[0], neg_pos[1], im1_pos[0], im1_pos[1])
                 )
         ) where {
             dx : Float := im2_pos[0] - neg_pos[0]
-            dy : Float := im2_pos[1] - neg_pos[0]
+            dy : Float := im2_pos[1] - neg_pos[1]
             dz : Float := im2_pos[2] - neg_pos[2]
             len : Float := sqrt(dx * dx + dy * dy + dz * dz)
             neg_dir[0] = dx / len
@@ -86,24 +117,30 @@ rules Microtubule {
     # shorter than DIV_LENGTH_RETRACT / 2. Mirrors mt_ode_retraction in cmaRules.hpp.
     mt_ode_retraction :=
         (neg : Negative) -- (im : Intermediate)
-        << (neg_pos : neg::Position, neg_dir : neg::Direction), (im_pos : im::Position) >>
+        << (neg_pos : neg::Position, neg_dir : neg::Direction), (im_pos : im::Position, im_dir : im::Direction) >>
         ->
         (neg : Negative) -- (im : Intermediate)
-        << (neg_pos : neg::Position, neg_dir : neg::Direction), (im_pos : im::Position) >>
+        << (neg_pos : neg::Position, neg_dir : neg::Direction), (im_pos : im::Position, im_dir : im::Direction) >>
         solving (dneg[0] := D(neg_pos[0], t), dneg[1] := D(neg_pos[1], t), dneg[2] := D(neg_pos[2], t)) {
 
+            # The gate uses the SIGNED remaining distance to im measured along
+            # neg_dir, (im - neg) . neg_dir. It is positive while the tip is still
+            # approaching im and <= 0 once it reaches or passes it, so the tip
+            # cannot overshoot im (a step of V_MINUS*DELTA is larger than the
+            # DIV_LENGTH_RETRACT band) nor slip past it when neg_dir is not exactly
+            # aligned with the segment, and then keep drifting through the domain.
             dneg[0] : ODE = V_MINUS * neg_dir[0] * heaviside(
-                    HELP::distance(neg_pos[0], neg_pos[1], im_pos[0], im_pos[1]),
+                    (im_pos[0] - neg_pos[0]) * neg_dir[0] + (im_pos[1] - neg_pos[1]) * neg_dir[1],
                     DIV_LENGTH_RETRACT / 2.0
                 )
 
             dneg[1] : ODE = V_MINUS * neg_dir[1] * heaviside(
-                    HELP::distance(neg_pos[0], neg_pos[1], im_pos[0], im_pos[1]),
+                    (im_pos[0] - neg_pos[0]) * neg_dir[0] + (im_pos[1] - neg_pos[1]) * neg_dir[1],
                     DIV_LENGTH_RETRACT / 2.0
                 )
 
             dneg[2] : ODE = V_MINUS * neg_dir[2] * heaviside(
-                    HELP::distance(neg_pos[0], neg_pos[1], im_pos[0], im_pos[1]),
+                    (im_pos[0] - neg_pos[0]) * neg_dir[0] + (im_pos[1] - neg_pos[1]) * neg_dir[1],
                     DIV_LENGTH_RETRACT / 2.0
                 )
 
@@ -113,13 +150,13 @@ rules Microtubule {
     boundary_catastrophe1 :=
         (im : Intermediate) -- (pos : Positive)
         (b0 : CellBoundary) -- (b1 : CellBoundary)
-        << (im_pos : im::Position), (pos_pos : pos::Position, pos_dir : pos::Direction),
-           (b0_pos : b0::Position), (b1_pos : b1::Position) >>
+        << (im_pos : im::Position, im_dir : im::Direction), (pos_pos : pos::Position, pos_dir : pos::Direction),
+           (b0_pos : b0::Position, b0_dir : b0::Direction, b0_count : b0::Count), (b1_pos : b1::Position, b1_dir : b1::Direction, b1_count : b1::Count) >>
         ->
-        (im : Intermediate) -- (neg : Negative)
+        (im : Intermediate) -- (pos : Negative)
         (b0 : CellBoundary) -- (b1 : CellBoundary)
-        << (im_pos : im::Position), (neg_pos : neg::Position, neg_dir : neg::Direction),
-           (b0_pos : b0::Position), (b1_pos : b1::Position) >>
+        << (im_pos : im::Position, im_dir : im::Direction), (neg_pos : pos::Position, neg_dir : pos::Direction),
+           (b0_pos : b0::Position, b0_dir : b0::Direction, b0_count : b0::Count), (b1_pos : b1::Position, b1_dir : b1::Direction, b1_count : b1::Count) >>
         with (
             indicator(
                     DGGML::distanceToLineSegment(
@@ -147,48 +184,94 @@ rules Microtubule {
     # they grow straight through the wall. This rule depends only on (im)--(pos),
     # which always exists for a growing tip, so it reliably catches slippers
     # before they cross the grid edge and become unrecoverable.
-    # boundary_clamp :=
-    #     (im : Intermediate) -- (pos : Positive)
-    #     << (im_pos : im::Position), (pos_pos : pos::Position, pos_dir : pos::Direction) >>
-    #     ->
-    #     (im : Intermediate) -- (neg : Negative)
-    #     << (im_pos : im::Position), (neg_pos : neg::Position, neg_dir : neg::Direction) >>
-    #     with (
-    #         (
-    #             heaviside(pos_pos[0], DOMAIN_MAX) +
-    #             heaviside(DOMAIN_MIN, pos_pos[0]) +
-    #             heaviside(pos_pos[1], DOMAIN_MAX) +
-    #             heaviside(DOMAIN_MIN, pos_pos[1])
-    #         ) * BOUNDARY_CLAMP_RATE
-    #     ) where {
+    boundary_clamp :=
+        (im : Intermediate) -- (pos : Positive)
+        << (im_pos : im::Position), (pos_pos : pos::Position, pos_dir : pos::Direction) >>
+        ->
+        (im : Intermediate) -- (pos : Negative)
+        << (im_pos : im::Position), (neg_pos : pos::Position, neg_dir : pos::Direction) >>
+        with (
+            (
+                heaviside(pos_pos[0], DOMAIN_MAX) +
+                heaviside(DOMAIN_MIN, pos_pos[0]) +
+                heaviside(pos_pos[1], DOMAIN_MAX) +
+                heaviside(DOMAIN_MIN, pos_pos[1])
+            ) * BOUNDARY_CLAMP_RATE
+        ) where {
 
-    #         neg_pos[0] = pos_pos[0]
-    #         neg_pos[1] = pos_pos[1]
-    #         neg_pos[2] = pos_pos[2]
+            neg_pos[0] = pos_pos[0]
+            neg_pos[1] = pos_pos[1]
+            neg_pos[2] = pos_pos[2]
 
-    #         neg_dir[0] = pos_dir[0]
-    #         neg_dir[1] = pos_dir[1]
-    #         neg_dir[2] = pos_dir[2]
+            neg_dir[0] = -pos_dir[0]
+            neg_dir[1] = -pos_dir[1]
+            neg_dir[2] = -pos_dir[2]
+        }
 
+    # 4c. Clasp Boundary Catastrophe Rule (CMA boundary_catastrophe2)
+    # Like boundary_catastrophe1, but the obstacle is a clasp segment: a
+    # CellBoundary node bound to a clasp Intermediate (b -- ci). A growing Positive
+    # tip within COLLISION_DISTANCE of that segment flips to a Negative.
+    # Propensity = indicator(d <= COLLISION_DISTANCE) * CLASP_BOUNDARY_CATASTROPHE_RATE,
+    # multiplied by ENABLE_CLASP_BOUNDARY_CATASTROPHE (0 = off).
+    boundary_catastrophe2 :=
+        (im : Intermediate) -- (pos : Positive)
+        (b : CellBoundary) -- (ci : Intermediate)
+        << (im_pos : im::Position, im_dir : im::Direction), (pos_pos : pos::Position, pos_dir : pos::Direction),
+           (b_pos : b::Position), (ci_pos : ci::Position) >>
+        ->
+        (im : Intermediate) -- (pos : Negative)
+        (b : CellBoundary) -- (ci : Intermediate)
+        << (im_pos : im::Position, im_dir : im::Direction), (neg_pos : pos::Position, neg_dir : pos::Direction) >>
+        with (
+            indicator(
+                    DGGML::distanceToLineSegment(
+                        b_pos[0], b_pos[1], ci_pos[0], ci_pos[1], pos_pos[0], pos_pos[1]
+                    ) <= COLLISION_DISTANCE
+                ) * CLASP_BOUNDARY_CATASTROPHE_RATE * ENABLE_CLASP_BOUNDARY_CATASTROPHE
+            ) where {
 
-    #     }
+            neg_pos[0] = pos_pos[0]
+            neg_pos[1] = pos_pos[1]
+            neg_pos[2] = pos_pos[2]
+
+            neg_dir[0] = -pos_dir[0]
+            neg_dir[1] = -pos_dir[1]
+            neg_dir[2] = -pos_dir[2]
+        }
 
     # 5. Intermediate Collision-Induced Catastrophe (CIC)
+    # A growing Positive tip that runs into another microtubule's Intermediate
+    # segment (im3 -- im4) at a steep angle (theta < CATASTROPHE_ANGLE) flips to a
+    # Negative. The `pos` alias is reused on the RHS so the tip is retyped in place
+    # (a renamed alias would be destroy + create). Mirrors catastrophe2_case1.
     catastrophe2_case1 :=
         (im1 : Intermediate) -- (pos : Positive)
-        (im2 : Intermediate) -- (im3 : Intermediate)
-        << (im1_pos : im1::Position), (pos_pos : pos::Position, pos_dir : pos::Direction),
-           (im2_pos : im2::Position), (im3_pos : im3::Position) >>
+        (im3 : Intermediate) -- (im4 : Intermediate)
+        << (im1_pos : im1::Position, im1_dir : im1::Direction), (pos_pos : pos::Position, pos_dir : pos::Direction),
+           (im3_pos : im3::Position, im3_dir : im3::Direction), (im4_pos : im4::Position, im4_dir : im4::Direction) >>
         ->
-        (im1 : Intermediate) -- (neg : Negative)
-        (im2 : Intermediate) -- (im3 : Intermediate)
-        << (im1_pos : im1::Position), (neg_pos : neg::Position, neg_dir : neg::Direction),
-           (im2_pos : im2::Position), (im3_pos : im3::Position) >>
+        (im1 : Intermediate) -- (pos : Negative)
+        (im3 : Intermediate) -- (im4 : Intermediate)
+        << (im1_pos : im1::Position, im1_dir : im1::Direction), (neg_pos : pos::Position, neg_dir : pos::Direction),
+           (im3_pos : im3::Position, im3_dir : im3::Direction), (im4_pos : im4::Position, im4_dir : im4::Direction) >>
         with (
             indicator(
                 DGGML::distanceToLineSegment(
-                        im2_pos[0], im2_pos[1], im3_pos[0], im3_pos[1], pos_pos[0], pos_pos[1]
+                        im3_pos[0], im3_pos[1], im4_pos[0], im4_pos[1], pos_pos[0], pos_pos[1]
                     ) <= COLLISION_DISTANCE
+                ) *
+            indicator(
+                    HELP::compute_theta_seg(
+                        pos_dir[0], pos_dir[1], pos_dir[2], pos_pos[0], pos_pos[1],
+                        im3_pos[0], im3_pos[1], im3_pos[2], im4_pos[0], im4_pos[1], im4_pos[2]
+                    ) < CATASTROPHE_ANGLE
+                ) *
+            indicator(
+                    HELP::intersection_s0(
+                        pos_pos[0], pos_pos[1], im4_pos[0], im4_pos[1],
+                        im3_pos[0], im3_pos[1], pos_dir[0], pos_dir[1]
+                    ) > 0.0
                 ) * INTERMEDIATE_CIC_RATE
             ) where {
             neg_pos[0] = pos_pos[0]
@@ -200,14 +283,454 @@ rules Microtubule {
             neg_dir[2] = -pos_dir[2]
         }
 
+    # 5b. Positive Collision-Induced Catastrophe (CIC)
+    # A growing Positive tip that runs into another microtubule's Positive
+    # segment (im2 -- pos2) undergoes catastrophe and flips to a Negative.
+    catastrophe2_case2 :=
+        (im1 : Intermediate) -- (pos : Positive)
+        (im2 : Intermediate) -- (pos2 : Positive)
+        << (im1_pos : im1::Position, im1_dir : im1::Direction), (pos_pos : pos::Position, pos_dir : pos::Direction),
+           (im2_pos : im2::Position, im2_dir : im2::Direction), (pos2_pos : pos2::Position, pos2_dir : pos2::Direction) >>
+        ->
+        (im1 : Intermediate) -- (pos : Negative)
+        (im2 : Intermediate) -- (pos2 : Positive)
+        << (im1_pos : im1::Position, im1_dir : im1::Direction), (neg_pos : pos::Position, neg_dir : pos::Direction),
+           (im2_pos : im2::Position, im2_dir : im2::Direction), (pos2_pos : pos2::Position, pos2_dir : pos2::Direction) >>
+        with (
+            indicator(
+                    DGGML::distanceToLineSegment(
+                        im2_pos[0], im2_pos[1], pos2_pos[0], pos2_pos[1], pos_pos[0], pos_pos[1]
+                    ) <= COLLISION_DISTANCE / 2.0
+                ) * POSITIVE_CIC_RATE
+            ) where {
+            neg_pos[0] = pos_pos[0]
+            neg_pos[1] = pos_pos[1]
+            neg_pos[2] = pos_pos[2]
+
+            neg_dir[0] = -pos_dir[0]
+            neg_dir[1] = -pos_dir[1]
+            neg_dir[2] = -pos_dir[2]
+        }
+
+    # 5c. Negative Collision-Induced Catastrophe (CIC)
+    # A growing Positive tip that runs into another microtubule's Negative
+    # segment (im2 -- neg2) undergoes catastrophe and flips to a Negative.
+    catastrophe2_case3 :=
+        (im1 : Intermediate) -- (pos : Positive)
+        (im2 : Intermediate) -- (neg2 : Negative)
+        << (im1_pos : im1::Position, im1_dir : im1::Direction), (pos_pos : pos::Position, pos_dir : pos::Direction),
+           (im2_pos : im2::Position, im2_dir : im2::Direction), (neg2_pos : neg2::Position, neg2_dir : neg2::Direction) >>
+        ->
+        (im1 : Intermediate) -- (pos : Negative)
+        (im2 : Intermediate) -- (neg2 : Negative)
+        << (im1_pos : im1::Position, im1_dir : im1::Direction), (neg_pos : pos::Position, neg_dir : pos::Direction),
+           (im2_pos : im2::Position, im2_dir : im2::Direction), (neg2_pos : neg2::Position, neg2_dir : neg2::Direction) >>
+        with (
+            indicator(
+                    DGGML::distanceToLineSegment(
+                        im2_pos[0], im2_pos[1], neg2_pos[0], neg2_pos[1], pos_pos[0], pos_pos[1]
+                    ) <= COLLISION_DISTANCE / 2.0
+                ) * NEGATIVE_CIC_RATE
+            ) where {
+            neg_pos[0] = pos_pos[0]
+            neg_pos[1] = pos_pos[1]
+            neg_pos[2] = pos_pos[2]
+
+            neg_dir[0] = -pos_dir[0]
+            neg_dir[1] = -pos_dir[1]
+            neg_dir[2] = -pos_dir[2]
+        }
+
+    # 5d. Crossover Rule
+    # A growing Positive tip (im1--pos) that strikes another microtubule segment
+    # (im3--im4) at a shallow angle crosses over it by forming a four-way
+    # Junction hub. The tip position becomes the Junction (placed at the exact
+    # intersection point of the two segments), the struck segment's edge is
+    # broken so both its ends bind to the hub, and a fresh Intermediate + Positive
+    # tip sprout out the far side to continue growing. Mirrors CMA crossover.
+    crossover :=
+        (im1 : Intermediate) -- (pos : Positive)
+        (im3 : Intermediate) -- (im4 : Intermediate)
+        << (im1_pos : im1::Position, im1_dir : im1::Direction), (pos_pos : pos::Position, pos_dir : pos::Direction),
+           (im3_pos : im3::Position, im3_dir : im3::Direction), (im4_pos : im4::Position, im4_dir : im4::Direction) >>
+        ->
+        (im1 : Intermediate) -- (pos : Junction) -- (im3 : Intermediate)
+        (pos : Junction) -- (im4 : Intermediate)
+        (pos : Junction) -- (new_im : Intermediate) -- (new_pos : Positive)
+        << (im1_pos : im1::Position, im1_dir : im1::Direction),
+           (junction_pos : pos::Position, junction_dir : pos::Direction),
+           (new_im_pos : new_im::Position, new_im_dir : new_im::Direction),
+           (new_pos_pos : new_pos::Position, new_pos_dir : new_pos::Direction) >>
+        with (
+            indicator(
+                    DGGML::distanceToLineSegment(
+                        im3_pos[0], im3_pos[1], im4_pos[0], im4_pos[1], pos_pos[0], pos_pos[1]
+                    ) <= COLLISION_DISTANCE
+                ) *
+            indicator(
+                    HELP::compute_theta_seg(
+                        pos_dir[0], pos_dir[1], pos_dir[2], pos_pos[0], pos_pos[1],
+                        im3_pos[0], im3_pos[1], im3_pos[2], im4_pos[0], im4_pos[1], im4_pos[2]
+                    ) < CROSSOVER_ANGLE
+                ) *
+            indicator(
+                    HELP::intersection_s0(
+                        pos_pos[0], pos_pos[1], im4_pos[0], im4_pos[1],
+                        im3_pos[0], im3_pos[1], pos_dir[0], pos_dir[1]
+                    ) > 0.0
+                ) *
+            indicator(
+                    HELP::intersection_s1(
+                        pos_pos[0], pos_pos[1], im4_pos[0], im4_pos[1],
+                        im3_pos[0], im3_pos[1], pos_dir[0], pos_dir[1]
+                    ) >= 0.0
+                ) *
+            indicator(
+                    HELP::intersection_s1(
+                        pos_pos[0], pos_pos[1], im4_pos[0], im4_pos[1],
+                        im3_pos[0], im3_pos[1], pos_dir[0], pos_dir[1]
+                    ) <= 1.0
+                ) * CROSSOVER_RATE
+            ) where {
+
+            # Junction sits at the intersection point of the two segments:
+            # junction = im4 + (im3 - im4) * s1, with s1 the segment parameter.
+            # Clamp s1 to [0,1] so the junction stays ON the struck segment even
+            # when intersection_s1 blows up: crossover fires at shallow angles
+            # (near-parallel segments) where its denominator -> 0, and the rewrite
+            # runs at fire time after the tip has drifted along its ODE, so an
+            # unclamped s1 can be huge and hurl the new nodes far off screen.
+            s1_raw : Float := HELP::intersection_s1(
+                    pos_pos[0], pos_pos[1], im4_pos[0], im4_pos[1],
+                    im3_pos[0], im3_pos[1], pos_dir[0], pos_dir[1]
+                )
+            s1 : Float := HELP::clamp(s1_raw, 0.0, 1.0)
+            jpx : Float := im4_pos[0]
+                    + (im3_pos[0] - im4_pos[0]) * s1
+            jpy : Float := im4_pos[1]
+                    + (im3_pos[1] - im4_pos[1]) * s1
+            jpz : Float := im4_pos[2]
+                    + (im3_pos[2] - im4_pos[2]) * s1
+
+            # Hub direction points from the incoming Intermediate (im1) THROUGH the
+            # junction, i.e. the direction of travel. cmaRules.hpp:
+            # set_unit_vector(junction.pos, im1.pos, u) = (junction - im1) / |.|.
+            jdx : Float := jpx - im1_pos[0]
+            jdy : Float := jpy - im1_pos[1]
+            jdz : Float := jpz - im1_pos[2]
+
+            jlen : Float := sqrt(jdx * jdx + jdy * jdy + jdz * jdz)
+            jux : Float := jdx / jlen
+            juy : Float := jdy / jlen
+            juz : Float := jdz / jlen
+
+            junction_pos[0] = jpx
+            junction_pos[1] = jpy
+            junction_pos[2] = jpz
+            junction_dir[0] = jux
+            junction_dir[1] = juy
+            junction_dir[2] = juz
+
+            # Re-aim the incoming Intermediate toward the new hub.
+            im1_dir[0] = jux
+            im1_dir[1] = juy
+            im1_dir[2] = juz
+
+            # Sprout a short Intermediate on the far side of the junction.
+            new_im_pos[0] = jpx + 0.01 * jux
+            new_im_pos[1] = jpy + 0.01 * juy
+            new_im_pos[2] = jpz + 0.01 * juz
+            new_im_dir[0] = jux
+            new_im_dir[1] = juy
+            new_im_dir[2] = juz
+
+            # And a new growing tip just beyond it (cmaRules: junction + 0.011 * hub dir).
+            new_pos_pos[0] = jpx + 0.011 * jux
+            new_pos_pos[1] = jpy + 0.011 * juy
+            new_pos_pos[2] = jpz + 0.011 * juz
+            new_pos_dir[0] = jux
+            new_pos_dir[1] = juy
+            new_pos_dir[2] = juz
+        }
+
+    # 5e. Uncrossover Rule
+    # A Junction hub between two nearly parallel microtubules relaxes back into
+    # a plain crossing: the Junction reverts to an Intermediate and the two
+    # bundled segments (im3, im4) detach from the hub and reconnect to each
+    # other. Fires only when the two segments are nearly parallel and the
+    # incoming Negative tip is very close. Mirrors CMA uncrossover.
+    # The hub alias `j` is reused with type Intermediate (in-place retype); the
+    # edges im3--j and im4--j are dropped and im3--im4 is added.
+    uncrossover :=
+        (neg : Negative) -- (im2 : Intermediate) -- (j : Junction)
+        (im3 : Intermediate) -- (j : Junction)
+        (im4 : Intermediate) -- (j : Junction)
+        << (neg_pos : neg::Position, neg_dir : neg::Direction),
+           (im2_pos : im2::Position, im2_dir : im2::Direction),
+           (j_pos : j::Position, j_dir : j::Direction),
+           (im3_pos : im3::Position, im3_dir : im3::Direction),
+           (im4_pos : im4::Position, im4_dir : im4::Direction) >>
+        ->
+        (neg : Negative) -- (im2 : Intermediate) -- (j : Intermediate)
+        (im3 : Intermediate) -- (im4 : Intermediate)
+        << (neg_pos : neg::Position, neg_dir : neg::Direction),
+           (im2_pos : im2::Position, im2_dir : im2::Direction),
+           (j2_pos : j::Position, j2_dir : j::Direction),
+           (im3_pos : im3::Position, im3_dir : im3::Direction),
+           (im4_pos : im4::Position, im4_dir : im4::Direction) >>
+        with (
+            indicator(
+                    HELP::unit_dot3_abs(
+                        im3_dir[0], im3_dir[1], im3_dir[2], im4_dir[0], im4_dir[1], im4_dir[2]
+                    ) > 0.95
+                ) *
+            indicator(
+                    HELP::distance(neg_pos[0], neg_pos[1], im2_pos[0], im2_pos[1]) < DIV_LENGTH_RETRACT
+                ) * UNCROSSOVER_RATE
+            ) where {
+            j2_pos[0] = j_pos[0]
+            j2_pos[1] = j_pos[1]
+            j2_pos[2] = j_pos[2]
+
+            j2_dir[0] = j_dir[0]
+            j2_dir[1] = j_dir[1]
+            j2_dir[2] = j_dir[2]
+        }
+
+    # 5f. Zippering Rule (case 1)
+    # A growing Positive tip (im1--pos) that meets another microtubule segment
+    # (im3--im4) at a steep angle deflects and runs parallel to it instead of
+    # crossing. The tip position becomes a Zipper marker, and a new short
+    # Intermediate + Positive tip are laid down along the deflected direction.
+    # Mirrors CMA zippering_case1. The deflected direction is
+    # parallel_deflection(u2, u3): the component of the tip direction u2 that is
+    # parallel to the obstacle direction u3, renormalized (the signed-distance
+    # sign flip in the C++ helper cancels out under this projection).
+    # Nodes are identified by alias: reusing `pos` on the RHS with type Zipper retypes
+    # the tip in place (keeping its id and edges); new_im / new_pos are new nodes.
+    # RHS statement order is irrelevant.
+    zippering_case1 :=
+        (im1 : Intermediate) -- (pos : Positive)
+        (im3 : Intermediate) -- (im4 : Intermediate)
+        << (im1_pos : im1::Position, im1_dir : im1::Direction), (pos_pos : pos::Position, pos_dir : pos::Direction),
+           (im3_pos : im3::Position, im3_dir : im3::Direction), (im4_pos : im4::Position, im4_dir : im4::Direction) >>
+        ->
+        (im1 : Intermediate) -- (pos : Zipper)
+        (im3 : Intermediate) -- (im4 : Intermediate)
+        (pos : Zipper) -- (new_im : Intermediate) -- (new_pos : Positive)
+        << (zip_pos : pos::Position, zip_dir : pos::Direction),
+           (new_im_pos : new_im::Position, new_im_dir : new_im::Direction),
+           (new_pos_pos : new_pos::Position, new_pos_dir : new_pos::Direction) >>
+        with (
+            indicator(
+                    DGGML::distanceToLineSegment(
+                        im3_pos[0], im3_pos[1], im4_pos[0], im4_pos[1], pos_pos[0], pos_pos[1]
+                    ) <= SEPARATION_DISTANCE
+                ) *
+            indicator(
+                    HELP::compute_theta_seg(
+                        pos_dir[0], pos_dir[1], pos_dir[2], pos_pos[0], pos_pos[1],
+                        im3_pos[0], im3_pos[1], im3_pos[2], im4_pos[0], im4_pos[1], im4_pos[2]
+                    ) >= CRITICAL_ANGLE
+                ) *
+            indicator(
+                    HELP::compute_theta_seg(
+                        pos_dir[0], pos_dir[1], pos_dir[2], pos_pos[0], pos_pos[1],
+                        im3_pos[0], im3_pos[1], im3_pos[2], im4_pos[0], im4_pos[1], im4_pos[2]
+                    ) < 88.0
+                ) *
+            indicator(
+                    HELP::intersection_s0(
+                        pos_pos[0], pos_pos[1], im4_pos[0], im4_pos[1],
+                        im3_pos[0], im3_pos[1], pos_dir[0], pos_dir[1]
+                    ) > 0.0
+                ) * ZIPPERING_HIT_RATE
+            ) where {
+
+            # parallel_deflection(u2 = pos_dir, u3): project the tip direction onto
+            # the plane whose normal is N = (-u3y, u3x, u3z), then renormalize.
+            # This yields the direction parallel to the obstacle.
+            # u3 is taken from the obstacle's actual geometry (im3 -> im4), NOT from
+            # im3_dir: an Intermediate's stored Direction is only the tip direction
+            # at the moment it was laid down, and drifts up to ~20+ degrees from
+            # the real segment (the tip wobbles). Using it deflected the new tip
+            # slightly INTO the obstacle, so it crossed instead of zippering. The
+            # match test (compute_theta_seg) already uses the true segment.
+            sdx : Float := im4_pos[0] - im3_pos[0]
+            sdy : Float := im4_pos[1] - im3_pos[1]
+            sdz : Float := im4_pos[2] - im3_pos[2]
+            slen : Float := sqrt(sdx * sdx + sdy * sdy + sdz * sdz)
+            u3x : Float := sdx / slen
+            u3y : Float := sdy / slen
+            u3z : Float := sdz / slen
+            nx : Float := -u3y
+            ny : Float := u3x
+            nz : Float := u3z
+            proj : Float := pos_dir[0] * nx + pos_dir[1] * ny + pos_dir[2] * nz
+            rx : Float := pos_dir[0] - proj * nx
+            ry : Float := pos_dir[1] - proj * ny
+            rz : Float := pos_dir[2] - proj * nz
+            rlen : Float := sqrt(rx * rx + ry * ry + rz * rz)
+            parx : Float := rx / rlen
+            pary : Float := ry / rlen
+            parz : Float := rz / rlen
+
+            # Zipper marker: sits at the tip position, aligned with the obstacle.
+            zip_pos[0] = pos_pos[0]
+            zip_pos[1] = pos_pos[1]
+            zip_pos[2] = pos_pos[2]
+            zip_dir[0] = u3x
+            zip_dir[1] = u3y
+            zip_dir[2] = u3z
+
+            # New intermediate just past the marker along the deflected direction.
+            new_im_dir[0] = parx
+            new_im_dir[1] = pary
+            new_im_dir[2] = parz
+            new_im_pos[0] = pos_pos[0] + 0.005 * parx
+            new_im_pos[1] = pos_pos[1] + 0.005 * pary
+            new_im_pos[2] = pos_pos[2] + 0.005 * parz
+
+            # New growing tip continuing parallel to the obstacle.
+            new_pos_dir[0] = parx
+            new_pos_dir[1] = pary
+            new_pos_dir[2] = parz
+            new_pos_pos[0] = pos_pos[0] + 0.01 * parx
+            new_pos_pos[1] = pos_pos[1] + 0.01 * pary
+            new_pos_pos[2] = pos_pos[2] + 0.01 * parz
+        }
+
+    # 5f'. Bundling Rule
+    # A free Positive tip (pos) close to, and nearly parallel with, the middle
+    # node of a microtubule chain (im1 -- im2 -- im3) joins that microtubule:
+    # im2 becomes a Junction (the bundle hub), and the tip is retyped to an
+    # Intermediate bound to the hub (im4 -- junction).
+    #   propensity = rho_bundle(|u2.u4| / |cos(theta_crit)|) * exp(-|x2 - x4|^2 / 2L^2)
+    # u2 is the chain direction (im1 -> im3) and u4 the tip direction. Node
+    # is identified by alias: im2 is retyped to Junction and pos to Intermediate in
+    # place (same alias, new type), which keeps the tip's edge to its own chain.
+    # The propensity is built piece by piece below, mirroring the equation:
+    #   BUNDLE_RATE                                  base rate
+    #   u2 = im3_pos - im1_pos, u4 = pos_dir         chain and tip directions
+    #   |u2 . u4| / (|u2| |u4|)                      |cos| of the angle between them (numerator)
+    #   abs(cos(CRITICAL_ANGLE))                     |cos(theta_crit)|  (denominator)
+    #   indicator(numerator / denominator >= 1.0)    rho_bundle: aligned within theta_crit
+    #   exp(-|x2 - x4|^2 / (2 L^2))                  decays with tip-to-hub distance
+    # bundling :=
+    #     (im1 : Intermediate) -- (im2 : Intermediate) -- (im3 : Intermediate)
+    #     (pos : Positive)
+    #     << (im1_pos : im1::Position, im1_dir : im1::Direction),
+    #        (im2_pos : im2::Position, im2_dir : im2::Direction),
+    #        (im3_pos : im3::Position, im3_dir : im3::Direction),
+    #        (pos_pos : pos::Position, pos_dir : pos::Direction) >>
+    #     ->
+    #     (im1 : Intermediate) -- (im2 : Junction) -- (im3 : Intermediate)
+    #     (pos : Intermediate) -- (im2 : Junction)
+    #     << (junction_pos : im2::Position, junction_dir : im2::Direction),
+    #        (im3_pos : im3::Position, im3_dir : im3::Direction),
+    #        (im4_pos : pos::Position, im4_dir : pos::Direction) >>
+    #     with (
+    #         BUNDLE_RATE *
+    #         indicator(
+    #                 abs(dot(im3_pos - im1_pos, pos_dir)) /
+    #                 (sqrt(dot(im3_pos - im1_pos, im3_pos - im1_pos)) * sqrt(dot(pos_dir, pos_dir)))
+    #                 / abs(cos(CRITICAL_ANGLE * 0.0174533)) >= 1.0
+    #             ) *
+    #         exp(-1.0 * HELP::squared_distance(im2_pos, pos_pos) / (2.0 * BUNDLE_LENGTH * BUNDLE_LENGTH))
+    #     ) where {
+
+    #         bd : TFTensor <<3, Float>> := im3_pos - im1_pos
+
+    #         junction_pos = im2_pos
+    #         junction_dir = bd / (sqrt(dot(bd, bd)) + 0.0000001)
+
+    #         im4_pos = pos_pos
+    #         im4_dir = pos_dir
+
+    #     }
+
+    # 5g. Zipper Catastrophe Rule
+    # A growing Positive tip that has been captured near a Zipper marker
+    # (the deflection point of an earlier zippering event) undergoes catastrophe
+    # and flips to a Negative when it drifts too close to that marker. Mirrors
+    # CMA zipper_catastrophe. The Zipper and its two flanking Intermediates are
+    # context that is preserved unchanged.
+    # The tip alias `pos` is reused with type Negative (in-place retype).
+    zipper_catastrophe :=
+        (im1 : Intermediate) -- (pos : Positive)
+        (im4 : Intermediate) -- (zip : Zipper) -- (im5 : Intermediate)
+        << (im1_pos : im1::Position, im1_dir : im1::Direction), (pos_pos : pos::Position, pos_dir : pos::Direction),
+           (im4_pos : im4::Position, im4_dir : im4::Direction), (zip_pos : zip::Position, zip_dir : zip::Direction),
+           (im5_pos : im5::Position, im5_dir : im5::Direction) >>
+        ->
+        (im1 : Intermediate) -- (pos : Negative)
+        (im4 : Intermediate) -- (zip : Zipper) -- (im5 : Intermediate)
+        << (im1_pos : im1::Position, im1_dir : im1::Direction), (neg_pos : pos::Position, neg_dir : pos::Direction),
+           (im4_pos : im4::Position, im4_dir : im4::Direction), (zip_pos : zip::Position, zip_dir : zip::Direction),
+           (im5_pos : im5::Position, im5_dir : im5::Direction) >>
+        with (
+            indicator(
+                    HELP::distance(pos_pos[0], pos_pos[1], zip_pos[0], zip_pos[1]) <= 0.7 * SEPARATION_DISTANCE
+                ) * ZIPPERING_GUARD_RATE
+            ) where {
+            neg_pos[0] = pos_pos[0]
+            neg_pos[1] = pos_pos[1]
+            neg_pos[2] = pos_pos[2]
+
+            neg_dir[0] = -pos_dir[0]
+            neg_dir[1] = -pos_dir[1]
+            neg_dir[2] = -pos_dir[2]
+        }
+
+    # 5h. Zipper Retraction Rule
+    # A Negative (shrinking) tip that reaches a Zipper marker consumes both the
+    # short trailing Intermediate segment and the Zipper: the marker is absorbed
+    # into a plain Intermediate and the tip re-aims along the newly exposed
+    # segment. Fires only when the Negative--Intermediate segment is short.
+    # Mirrors CMA zipper_retraction.
+    # The marker alias `zip` is reused with type Intermediate (in-place retype),
+    # so its edge to the other flank is kept; `im` is destroyed.
+    zipper_retraction :=
+        (neg : Negative) -- (im : Intermediate) -- (zip : Zipper)
+        << (neg_pos : neg::Position, neg_dir : neg::Direction),
+           (im_pos : im::Position, im_dir : im::Direction),
+           (zip_pos : zip::Position, zip_dir : zip::Direction) >>
+        ->
+        (neg : Negative) -- (zip : Intermediate)
+        << (neg_pos : neg::Position, neg_dir : neg::Direction),
+           (new_im_pos : zip::Position, new_im_dir : zip::Direction) >>
+        with (
+            ZIPPERING_RETRACTION_RATE * heaviside(
+                    DIV_LENGTH_RETRACT, HELP::distance(neg_pos[0], neg_pos[1], im_pos[0], im_pos[1])
+                )
+        ) where {
+            # The retyped marker inherits the Zipper's position.
+            new_im_pos[0] = zip_pos[0]
+            new_im_pos[1] = zip_pos[1]
+            new_im_pos[2] = zip_pos[2]
+
+            new_im_dir[0] = zip_dir[0]
+            new_im_dir[1] = zip_dir[1]
+            new_im_dir[2] = zip_dir[2]
+
+            # Re-aim the Negative tip along the newly exposed segment.
+            dx : Float := zip_pos[0] - neg_pos[0]
+            dy : Float := zip_pos[1] - neg_pos[1]
+            dz : Float := zip_pos[2] - neg_pos[2]
+            len : Float := sqrt(dx * dx + dy * dy + dz * dz)
+            neg_dir[0] = dx / len
+            neg_dir[1] = dy / len
+            neg_dir[2] = dz / len
+        }
+
     # 6. Nucleation / Creation Rule
     creation_case1 :=
         (nuc : Nucleator)
-        << (nuc_pos : nuc::Position) >>
+        << (nuc_pos : nuc::Position, nuc_dir : nuc::Direction) >>
         ->
         (nuc : Nucleator)
         (neg : Negative) -- (im : Intermediate) -- (pos : Positive)
-        << (nuc_pos : nuc::Position),
+        << (nuc_pos : nuc::Position, nuc_dir : nuc::Direction),
            (neg_pos : neg::Position, neg_dir : neg::Direction),
            (im_pos  : im::Position,  im_dir  : im::Direction),
            (pos_pos : pos::Position, pos_dir : pos::Direction) >>
@@ -221,24 +744,25 @@ rules Microtubule {
             im_pos[1] = nuc_pos[1]
             im_pos[2] = 0.0
 
-            # FIXME: Something with the direction is not quite correct.
-            # Need to get this to match.
-            im_dir_vector : FixedList<<2, Float>> := HELP::calculate_unit_vector(
-                neg_pos[0], neg_pos[1], pos_pos[0], pos_pos[1]
-            )
-
             # POSITIVE NODE
             pos_pos[0] = nuc_pos[0] + seg_len * sin(theta)
             pos_pos[1] = nuc_pos[1] + seg_len * cos(theta)
             pos_pos[2] = 0.0
 
             pos_dir_vector : FixedList<<2, Float>> := HELP::calculate_unit_vector(
-                im_pos[0], im_pos[1], pos_pos[0], pos_pos[1]
-                )
+                im_pos[0], im_pos[1],
+                pos_pos[0], pos_pos[1]
+            )
 
             pos_dir[0] = pos_dir_vector[0]
             pos_dir[1] = pos_dir_vector[1]
             pos_dir[2] = 0.0
+
+            # INTERMEDIATE direction: cmaRules sets u3 = unit(pos - im), the same
+            # forward (im -> pos) direction as the Positive tip.
+            im_dir[0] = pos_dir_vector[0]
+            im_dir[1] = pos_dir_vector[1]
+            im_dir[2] = 0.0
 
             # NEGATIVE NODE
             neg_pos[0] = nuc_pos[0] - seg_len * sin(theta)
@@ -255,22 +779,272 @@ rules Microtubule {
 
         }
 
-    # 7. Destruction Rule (Proximity-based removal)
+    # 7. Destruction Rule case 1 (double-shrinking depolymerization)
+    # An Intermediate flanked by two Negative (shrinking) tips is fully
+    # depolymerized: all three nodes are removed (empty RHS). Mirrors the CMA
+    # destruction_case1 rule.
+    destruction_case1 :=
+        (neg1 : Negative) -- (im : Intermediate) -- (neg2 : Negative)
+        << (neg1_pos : neg1::Position, neg1_dir : neg1::Direction),
+           (im_pos : im::Position, im_dir : im::Direction),
+           (neg2_pos : neg2::Position, neg2_dir : neg2::Direction) >>
+        ->
+        <<>>
+        with (MT_DESTRUCTION_RATE) where {
+        }
+
+    # 7b. Destruction Rule (Proximity-based removal)
+    # CMA: both halves shorter than 1.2 * MT_MAX_SEGMENT_INIT and a foreign
+    # Intermediate within COLLISION_DISTANCE of the middle node -> fixed rate 500000
+    # (a high-priority destruction).
     destruction_case2 :=
         (neg : Negative) -- (im1 : Intermediate) -- (pos : Positive)
         (im2 : Intermediate)
-        << (neg_pos : neg::Position), (im1_pos : im1::Position), (pos_pos : pos::Position),
-           (im2_pos : im2::Position) >>
+        << (neg_pos : neg::Position, neg_dir : neg::Direction), (im1_pos : im1::Position, im1_dir : im1::Direction), (pos_pos : pos::Position, pos_dir : pos::Direction),
+           (im2_pos : im2::Position, im2_dir : im2::Direction) >>
         ->
         (im2 : Intermediate)
-        << (im2_pos : im2::Position) >>
+        << (im2_pos : im2::Position, im2_dir : im2::Direction) >>
         with (
+            indicator(
+                    HELP::distance(
+                            neg_pos[0], neg_pos[1], im1_pos[0], im1_pos[1]
+                        ) < 1.2 * MT_MAX_SEGMENT_INIT
+                ) *
+            indicator(
+                    HELP::distance(
+                            im1_pos[0], im1_pos[1], pos_pos[0], pos_pos[1]
+                        ) < 1.2 * MT_MAX_SEGMENT_INIT
+                ) *
             indicator(
                     HELP::distance(
                             im1_pos[0], im1_pos[1], im2_pos[0], im2_pos[1]
                         ) < COLLISION_DISTANCE
-                ) * MT_DESTRUCTION_RATE
+                ) * 500000.0
             ) where {
+        }
+
+    # 8. Recovery / Rescue Rule
+    # A shrinking Negative tip stochastically switches back to a growing
+    # Positive tip, keeping its position and reversing its direction so it
+    # extends outward again. Mirrors the CMA `rescue` rule.
+    # The tip alias `neg` is reused with type Positive (in-place retype).
+    rescue :=
+        (im : Intermediate) -- (neg : Negative)
+        << (im_pos : im::Position, im_dir : im::Direction), (neg_pos : neg::Position, neg_dir : neg::Direction) >>
+        ->
+        (im : Intermediate) -- (neg : Positive)
+        << (im_pos : im::Position, im_dir : im::Direction), (pos_pos : neg::Position, pos_dir : neg::Direction) >>
+        with (RECOVERY_FACTOR * RECOVERY_RATE) where {
+            pos_pos[0] = neg_pos[0]
+            pos_pos[1] = neg_pos[1]
+            pos_pos[2] = neg_pos[2]
+
+            pos_dir[0] = -neg_dir[0]
+            pos_dir[1] = -neg_dir[1]
+            pos_dir[2] = -neg_dir[2]
+        }
+
+    # 9. Clasp rules (CMA create_with_clasp_*). A clasp is an Intermediate node
+    # attached to a boundary edge (b1 -- ci -- b2), i.e. a microtubule end anchored
+    # at the cell wall; the original b1 -- b2 edge is replaced while it is present.
+    # Every propensity is multiplied by its CLASP_ENABLE_* flag (params.fflow);
+    # set a flag to 0 to switch that rule off.
+
+    # 9a. Clasp Entry (CMA clasp_creation_case1)
+    # A boundary edge spawns a clasp Intermediate at its midpoint plus a Positive
+    # tip growing inward: direction = the edge normal rotated by a random angle in
+    # +-CLASP_ENTRY_ANGLE degrees (3.14/180 rad per degree, as CMA). The tip always
+    # points toward the domain centre (the edge's normal is flipped if needed, since
+    # an edge can be matched in either orientation).
+    # Propensity = CLASP_ENTRY_RATE (constant) * CLASP_ENABLE_ENTRY.
+    clasp_creation_case1 :=
+        (b1 : CellBoundary) -- (b2 : CellBoundary)
+        << (b1_pos : b1::Position), (b2_pos : b2::Position) >>
+        ->
+        (b1 : CellBoundary) -- (ci : Intermediate) -- (b2 : CellBoundary)
+        (ci : Intermediate) -- (cp : Positive)
+        << (ci_pos : ci::Position, ci_dir : ci::Direction),
+           (cp_pos : cp::Position, cp_dir : cp::Direction) >>
+        with (CLASP_ENTRY_RATE * CLASP_ENABLE_ENTRY) where {
+
+            # Edge normal, as in CMA: unit(b2 - b1) = (ux, uy) -> (-uy, ux).
+            ex : Float := b2_pos[0] - b1_pos[0]
+            ey : Float := b2_pos[1] - b1_pos[1]
+            elen : Float := sqrt(ex * ex + ey * ey)
+            nrx : Float := -ey / elen
+            nry : Float := ex / elen
+
+            rot : Float := ~UniformDistribution(-CLASP_ENTRY_ANGLE * (3.14 / 180.0), CLASP_ENTRY_ANGLE * (3.14 / 180.0))
+
+            # Normal scaled to the entry length, rotated by rot.
+            sx : Float := nrx * CLASP_ENTRY_LENGTH
+            sy : Float := nry * CLASP_ENTRY_LENGTH
+            rtx : Float := sx * cos(rot) + sy * sin(rot)
+            rty : Float := -sx * sin(rot) + sy * cos(rot)
+
+            cx : Float := (b1_pos[0] + b2_pos[0]) / 2.0
+            cy : Float := (b1_pos[1] + b2_pos[1]) / 2.0
+
+            # Point the tip into the domain: flip the (rotated) normal when it faces away
+            # from the domain centre. (CMA's boundary_check_2D tests the tip against the
+            # domain edges, but here the boundary rectangle is inset from the domain edges,
+            # so an outward tip would still pass that test.)
+            toward : Float := (CELL_NX * CELL_DX / 2.0 - cx) * nrx + (CELL_NY * CELL_DY / 2.0 - cy) * nry
+            sgn : Float := 2.0 * indicator(toward > 0.0) - 1.0
+
+            ci_pos[0] = cx
+            ci_pos[1] = cy
+            ci_pos[2] = 0.0
+
+            cp_pos[0] = cx + sgn * rtx
+            cp_pos[1] = cy + sgn * rty
+            cp_pos[2] = 0.0
+
+            # Both nodes point from the clasp node toward the tip.
+            ddx : Float := sgn * rtx
+            ddy : Float := sgn * rty
+            dlen : Float := sqrt(ddx * ddx + ddy * ddy)
+
+            ci_dir[0] = ddx / dlen
+            ci_dir[1] = ddy / dlen
+            ci_dir[2] = 0.0
+
+            cp_dir[0] = ddx / dlen
+            cp_dir[1] = ddy / dlen
+            cp_dir[2] = 0.0
+        }
+
+    # 9b. Clasp Exit (CMA clasp_boundary_cross_case1)
+    # A growing Positive tip that hits a boundary segment (b3 -- b4) at a shallow
+    # angle (< CLASP_EXIT_ANGLE) attaches to it: the tip becomes an Intermediate
+    # clasp node placed at the intersection point, bound to both boundary nodes
+    # (the b3 -- b4 edge is dropped). Same hit test as crossover.
+    # Propensity = indicator(d <= COLLISION_DISTANCE) * indicator(theta < CLASP_EXIT_ANGLE)
+    #   * indicator(s0 > 0) * indicator(0 <= s1 <= 1) * CLASP_EXIT_RATE * CLASP_ENABLE_EXIT.
+    clasp_boundary_cross_case1 :=
+        (im1 : Intermediate) -- (pos : Positive)
+        (b3 : CellBoundary) -- (b4 : CellBoundary)
+        << (im1_pos : im1::Position, im1_dir : im1::Direction), (pos_pos : pos::Position, pos_dir : pos::Direction),
+           (b3_pos : b3::Position), (b4_pos : b4::Position) >>
+        ->
+        (im1 : Intermediate) -- (pos : Intermediate) -- (b3 : CellBoundary)
+        (pos : Intermediate) -- (b4 : CellBoundary)
+        << (im1_pos : im1::Position, im1_dir : im1::Direction),
+           (clasp_pos : pos::Position, clasp_dir : pos::Direction) >>
+        with (
+            indicator(
+                    DGGML::distanceToLineSegment(
+                        b3_pos[0], b3_pos[1], b4_pos[0], b4_pos[1], pos_pos[0], pos_pos[1]
+                    ) <= COLLISION_DISTANCE
+                ) *
+            indicator(
+                    HELP::compute_theta_seg(
+                        pos_dir[0], pos_dir[1], pos_dir[2], pos_pos[0], pos_pos[1],
+                        b3_pos[0], b3_pos[1], b3_pos[2], b4_pos[0], b4_pos[1], b4_pos[2]
+                    ) < CLASP_EXIT_ANGLE
+                ) *
+            indicator(
+                    HELP::intersection_s0(
+                        pos_pos[0], pos_pos[1], b4_pos[0], b4_pos[1],
+                        b3_pos[0], b3_pos[1], pos_dir[0], pos_dir[1]
+                    ) > 0.0
+                ) *
+            indicator(
+                    HELP::intersection_s1(
+                        pos_pos[0], pos_pos[1], b4_pos[0], b4_pos[1],
+                        b3_pos[0], b3_pos[1], pos_dir[0], pos_dir[1]
+                    ) >= 0.0
+                ) *
+            indicator(
+                    HELP::intersection_s1(
+                        pos_pos[0], pos_pos[1], b4_pos[0], b4_pos[1],
+                        b3_pos[0], b3_pos[1], pos_dir[0], pos_dir[1]
+                    ) <= 1.0
+                ) * CLASP_EXIT_RATE * CLASP_ENABLE_EXIT
+            ) where {
+
+            # Clasp node sits at the intersection with the boundary segment:
+            # b4 + (b3 - b4) * s1 (s1 clamped to [0,1], as in crossover, so the
+            # node stays on the segment when the tip has drifted by fire time).
+            s1_raw : Float := HELP::intersection_s1(
+                    pos_pos[0], pos_pos[1], b4_pos[0], b4_pos[1],
+                    b3_pos[0], b3_pos[1], pos_dir[0], pos_dir[1]
+                )
+            s1 : Float := HELP::clamp(s1_raw, 0.0, 1.0)
+            cpx : Float := b4_pos[0] + (b3_pos[0] - b4_pos[0]) * s1
+            cpy : Float := b4_pos[1] + (b3_pos[1] - b4_pos[1]) * s1
+            cpz : Float := b4_pos[2] + (b3_pos[2] - b4_pos[2]) * s1
+
+            # Both Intermediates point from im1 toward the clasp node
+            # (CMA: set_unit_vector(clasp.pos, im1.pos, u)).
+            cdx : Float := cpx - im1_pos[0]
+            cdy : Float := cpy - im1_pos[1]
+            cdz : Float := cpz - im1_pos[2]
+            clen : Float := sqrt(cdx * cdx + cdy * cdy + cdz * cdz)
+
+            clasp_pos[0] = cpx
+            clasp_pos[1] = cpy
+            clasp_pos[2] = cpz
+            clasp_dir[0] = cdx / clen
+            clasp_dir[1] = cdy / clen
+            clasp_dir[2] = cdz / clen
+
+            im1_dir[0] = cdx / clen
+            im1_dir[1] = cdy / clen
+            im1_dir[2] = cdz / clen
+        }
+
+    # 9c. Clasp Catastrophe (CMA clasp_catastrophe_case1)
+    # A Negative tip that has retracted back to within CLASP_CAT_DISTANCE of its
+    # clasp node removes both, and the boundary edge b1 -- b2 is restored.
+    # Propensity = indicator(|ci - neg| <= CLASP_CAT_DISTANCE) * CLASP_CAT_RATE * CLASP_ENABLE_CAT.
+    clasp_catastrophe_case1 :=
+        (b1 : CellBoundary) -- (ci : Intermediate) -- (b2 : CellBoundary)
+        (ci : Intermediate) -- (neg : Negative)
+        << (b1_pos : b1::Position), (ci_pos : ci::Position), (neg_pos : neg::Position) >>
+        ->
+        (b1 : CellBoundary) -- (b2 : CellBoundary)
+        << (b1_pos : b1::Position) >>
+        with (
+            indicator(
+                    HELP::distance(ci_pos[0], ci_pos[1], neg_pos[0], neg_pos[1]) <= CLASP_CAT_DISTANCE
+                ) * CLASP_CAT_RATE * CLASP_ENABLE_CAT
+            ) where {
+        }
+
+    # 9d. Clasp Detachment (CMA clasp_detachment_case1)
+    # A clasp node that still has a microtubule segment (ci -- im4) lets go of the
+    # wall: it is retyped to a Negative at the midpoint of the ci -- im4 segment,
+    # aimed at im4, and the boundary edge b1 -- b2 is restored.
+    # Propensity = CLASP_DETACHMENT_RATE (constant) * CLASP_ENABLE_DETACHMENT.
+    clasp_detachment_case1 :=
+        (b1 : CellBoundary) -- (ci : Intermediate) -- (b2 : CellBoundary)
+        (ci : Intermediate) -- (im4 : Intermediate)
+        << (ci_pos : ci::Position, ci_dir : ci::Direction), (im4_pos : im4::Position, im4_dir : im4::Direction) >>
+        ->
+        (b1 : CellBoundary) -- (b2 : CellBoundary)
+        (ci : Negative) -- (im4 : Intermediate)
+        << (neg_pos : ci::Position, neg_dir : ci::Direction) >>
+        with (CLASP_DETACHMENT_RATE * CLASP_ENABLE_DETACHMENT) where {
+
+            # Negative tip at the midpoint of ci -- im4.
+            mx : Float := (ci_pos[0] + im4_pos[0]) / 2.0
+            my : Float := (ci_pos[1] + im4_pos[1]) / 2.0
+            mz : Float := (ci_pos[2] + im4_pos[2]) / 2.0
+
+            neg_pos[0] = mx
+            neg_pos[1] = my
+            neg_pos[2] = mz
+
+            # Aimed at im4 (CMA: set_unit_vector(im4, new tip, u)).
+            ndx : Float := im4_pos[0] - mx
+            ndy : Float := im4_pos[1] - my
+            ndz : Float := im4_pos[2] - mz
+            nlen : Float := sqrt(ndx * ndx + ndy * ndy + ndz * ndz)
+            neg_dir[0] = ndx / nlen
+            neg_dir[1] = ndy / nlen
+            neg_dir[2] = ndz / nlen
         }
 
 }

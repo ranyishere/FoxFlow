@@ -1,8 +1,10 @@
 simulations Microtubule {
 
-    # Parameters and types are shared across both stages.
+    # Parameters, types, functions and observables are shared across both stages.
     params : SimulationParameters := load("params.fflow")
     simTypes : SimulationTypes := load("types.fflow")
+    simFunctions : SimulationFunctions := load("functions.fflow")
+    simObservables : SimulationObservables := load("observables.fflow")
 
     # How long each stage runs.
     # boundary/grid frontier advances ~1 node per ~10 steps, and the rectangle
@@ -10,19 +12,42 @@ simulations Microtubule {
     # boundaryTime / DELTA = number of steps (DELTA = 0.1 -> 1000 steps).
 
     boundaryTime : Float := 40
-    movementTime : Float := 10
+    # CMA reference: TOTAL_TIME = 7200, DELTA = 0.4 (18000 steps), checkpoint every 60 steps.
+    movementTime : Float := 600
+    checkpointEvery : Integer := 60
 
     # ---------------- STAGE 1: build the rectangular boundary + grid ----------------
-    initialState : State := load("default")
-    boundaryRules : SimulationRules := load("rules_boundary.fflow")
-    buildBoundary : Simulation := RunSimulation(initialState, params,
-                boundaryRules, simTypes, boundaryTime)
+    # initialState : State := load("default")
+    # boundaryRules : SimulationRules := load("rules_boundary.fflow")
+    # boundaryGrammar : Grammar := Grammar(simFunctions, boundaryRules, simTypes)
+    # buildBoundary : Simulation := Simulation("boundary_latest.bin", boundaryGrammar, initialState,
+    #             params, boundaryTime)
 
     # ---------------- STAGE 2: microtubule dynamics ----------------
     # Load the state produced by STAGE 1 (checkpoints are written under my_results/).
-    nextState : State := load("my_results/simulation_state_latest.bin")
+    nextState : State := load("my_results/boundary_latest.bin")
     movementRules : SimulationRules := load("rules_movement.fflow")
-    moveMicrotubules : Simulation := RunSimulation(nextState, params,
-                movementRules, simTypes, movementTime)
+    movementGrammar : Grammar := Grammar(simFunctions, movementRules, simTypes, simObservables)
+    moveMicrotubules : Simulation := Simulation("movement_latest.bin", movementGrammar, nextState,
+                params, movementTime, checkpointEvery)
+
+    # A Simulation only runs when a run(...) statement names it.
+    # domain_parallel = true  : compile in the OpenMP geocell domain-decomposition runner (all threads
+    #                           work on one run); default/false: serial runner, one thread per run,
+    #                           replicates run side by side.
+    # Independent replicates (own seeds) go to runs/moveMicrotubules/run_<i>/ when N > 1.
+    run(moveMicrotubules, 64, domain_parallel = false)
+    # run(moveMicrotubules, 1, domain_parallel = false)
+
+    # Record every fire of these rules (matched nodes before/after, neighbours, edge changes,
+    # propensity, where-locals). After the run, trace_moveMicrotubules.html is written next to
+    # the executable. Use "*" for all rules.
+    # trace(moveMicrotubules, "boundary_catastrophe2", "clasp_creation_case1", "clasp_boundary_cross_case1",
+    #       "clasp_catastrophe_case1", "clasp_detachment_case1")
+
+    # Re-evaluate global observables over every checkpointed state of the listed simulations
+    # (optionally restricted to the named observables) -> my_results/measure_<k>.csv
+    measure(moveMicrotubules, "local_alignment", "n_tip_pairs", "n_tips")
+    # measure(buildBoundary, moveMicrotubules, "n_tips", "tip_segment_total")
 
 }

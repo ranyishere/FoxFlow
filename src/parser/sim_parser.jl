@@ -91,8 +91,11 @@ function parse_sim_state!(tokens)
     if lookahead(tokens) isa LoadFileToken
         state_node = parse_load_file!(tokens)
         return SimulationStateNode(state_node)
+    elseif lookahead(tokens) isa IdentifierToken
+        # generator call, e.g. grid(Vertex, u, 0.0, [0.0, 1.0, 10])
+        return SimulationGeneratorStateNode(parse_expression!(tokens))
     else
-        throw(ErrorException("Expected LoadFileToken got $(lookahead(tokens))"))
+        throw(ErrorException("Expected LoadFileToken or a generator call got $(lookahead(tokens))"))
     end
 end
 
@@ -151,6 +154,196 @@ function parse_sim_param!(tokens)
     end
 end
 
+function expect_comma!(tokens, ctx)
+    if !(lookahead(tokens) isa PunctuationToken)
+        throw(ErrorException("$ctx: expected , got $(lookahead(tokens))"))
+    end
+    popfirst!(tokens)  # pop ,
+    remove_endlines_func_args!(tokens)
+end
+
+function expect_ident!(tokens, ctx)
+    if !(lookahead(tokens) isa IdentifierToken)
+        throw(ErrorException("$ctx: expected an identifier got $(lookahead(tokens))"))
+    end
+    return IdentifierNode(popfirst!(tokens))
+end
+
+function parse_sim_functions!(tokens)
+    """
+    `f : SimulationFunctions := load("functions.fflow")` (after the type name was consumed).
+    """
+    if !(lookahead(tokens) isa DefineToken)
+        throw(ErrorException("Expected := got $(lookahead(tokens))"))
+    end
+    popfirst!(tokens)  # pop :=
+    if !(lookahead(tokens) isa LoadFileToken)
+        throw(ErrorException("Expected load(...) got $(lookahead(tokens))"))
+    end
+    return SimulationFunctionsNode(parse_load_file!(tokens))
+end
+
+function parse_sim_grammar!(tokens)
+    """
+    `g : Grammar := Grammar(a, b, c [, d])` (after the type name was consumed). The arguments
+    name SimulationFunctions / SimulationRules / SimulationTypes / SimulationObservables
+    declarations; the IR classifies them by their declared type.
+    """
+    if !(lookahead(tokens) isa DefineToken)
+        throw(ErrorException("Expected := got $(lookahead(tokens))"))
+    end
+    popfirst!(tokens)  # pop :=
+    if !(lookahead(tokens) isa IdentifierToken && lookahead(tokens).position.value == "Grammar")
+        throw(ErrorException("Expected Grammar(...) got $(lookahead(tokens))"))
+    end
+    popfirst!(tokens)  # pop Grammar
+    if !(lookahead(tokens) isa LeftParenthesisToken)
+        throw(ErrorException("Grammar: expected ( got $(lookahead(tokens))"))
+    end
+    popfirst!(tokens)  # pop (
+    remove_endlines_func_args!(tokens)
+
+    parts = IdentifierNode[]
+    while true
+        remove_endlines_func_args!(tokens)
+        push!(parts, expect_ident!(tokens, "Grammar"))
+        remove_endlines_func_args!(tokens)
+        if lookahead(tokens) isa PunctuationToken
+            popfirst!(tokens)  # pop ,
+        else
+            break
+        end
+    end
+    if !(lookahead(tokens) isa RightParenthesisToken)
+        throw(ErrorException("Grammar: expected ) got $(lookahead(tokens))"))
+    end
+    popfirst!(tokens)  # pop )
+    return SimulationGrammarNode(parts)
+end
+
+function parse_simulation_config!(tokens)
+    """
+    `Simulation(["save.bin",] grammar, state, params, time [, checkpoint])`; the leading
+    `Simulation` token is the current token.
+    """
+    popfirst!(tokens)  # pop Simulation
+    if !(lookahead(tokens) isa LeftParenthesisToken)
+        throw(ErrorException("Simulation: expected ( got $(lookahead(tokens))"))
+    end
+    popfirst!(tokens)  # pop (
+    remove_endlines_func_args!(tokens)
+
+    save_name = nothing
+    if lookahead(tokens) isa StringToken
+        save_name = StringNode(popfirst!(tokens))
+        expect_comma!(tokens, "Simulation")
+    end
+
+    grammar = expect_ident!(tokens, "Simulation (grammar)")
+    expect_comma!(tokens, "Simulation")
+    state = expect_ident!(tokens, "Simulation (initial state)")
+    expect_comma!(tokens, "Simulation")
+    params = expect_ident!(tokens, "Simulation (parameters)")
+    expect_comma!(tokens, "Simulation")
+
+    steps = nothing
+    if lookahead(tokens) isa IntegerToken
+        steps = IntegerNode(popfirst!(tokens))
+    elseif lookahead(tokens) isa IdentifierToken
+        steps = IdentifierNode(popfirst!(tokens))
+    else
+        throw(ErrorException("Simulation: expected the simulation time got $(lookahead(tokens))"))
+    end
+
+    remove_endlines_func_args!(tokens)
+    checkpoint = nothing
+    if lookahead(tokens) isa PunctuationToken
+        popfirst!(tokens)
+        remove_endlines_func_args!(tokens)
+        if lookahead(tokens) isa IntegerToken
+            checkpoint = IntegerNode(popfirst!(tokens))
+        elseif lookahead(tokens) isa IdentifierToken
+            checkpoint = IdentifierNode(popfirst!(tokens))
+        else
+            throw(ErrorException("Simulation: expected the checkpoint frequency got $(lookahead(tokens))"))
+        end
+        remove_endlines_func_args!(tokens)
+    end
+
+    if !(lookahead(tokens) isa RightParenthesisToken)
+        throw(ErrorException("Simulation: expected ) got $(lookahead(tokens))"))
+    end
+    popfirst!(tokens)  # pop )
+    return SimulationConfigNode(save_name, grammar, state, params, steps, checkpoint)
+end
+
+function parse_run_statement!(tokens)
+    """
+    `run(sim, N [, domain_parallel = true|false] [, jobs = K] [, seed = S])`.
+    """
+    popfirst!(tokens)  # pop `run`
+    popfirst!(tokens)  # pop (
+    remove_endlines_func_args!(tokens)
+
+    sim = expect_ident!(tokens, "run (simulation)")
+    expect_comma!(tokens, "run")
+
+    replicates = nothing
+    if lookahead(tokens) isa IntegerToken
+        replicates = IntegerNode(popfirst!(tokens))
+    elseif lookahead(tokens) isa IdentifierToken
+        replicates = IdentifierNode(popfirst!(tokens))
+    else
+        throw(ErrorException("run: expected the number of runs got $(lookahead(tokens))"))
+    end
+
+    domain_parallel = nothing
+    jobs = nothing
+    seed = nothing
+    while true
+        remove_endlines_func_args!(tokens)
+        lookahead(tokens) isa PunctuationToken || break
+        popfirst!(tokens)  # pop ,
+        remove_endlines_func_args!(tokens)
+
+        opt = expect_ident!(tokens, "run (option)").token.position.value
+        if !(lookahead(tokens) isa EqualToken)
+            throw(ErrorException("run: expected `$opt = value`, got $(lookahead(tokens)) after $opt"))
+        end
+        popfirst!(tokens)  # pop =
+
+        if opt == "domain_parallel"
+            v = lookahead(tokens) isa IdentifierToken ? lookahead(tokens).position.value : ""
+            if v != "true" && v != "false"
+                throw(ErrorException("run: domain_parallel must be true or false, got $(lookahead(tokens))"))
+            end
+            popfirst!(tokens)
+            domain_parallel = (v == "true")
+        elseif opt == "jobs" || opt == "seed"
+            val = nothing
+            if lookahead(tokens) isa IntegerToken
+                val = IntegerNode(popfirst!(tokens))
+            elseif lookahead(tokens) isa IdentifierToken
+                val = IdentifierNode(popfirst!(tokens))
+            else
+                throw(ErrorException("run: $opt must be an integer, got $(lookahead(tokens))"))
+            end
+            opt == "jobs" ? (jobs = val) : (seed = val)
+        else
+            throw(ErrorException("run: unknown option `$opt` (expected domain_parallel, jobs or seed)"))
+        end
+    end
+
+    if !(lookahead(tokens) isa RightParenthesisToken)
+        throw(ErrorException("run: expected ) got $(lookahead(tokens))"))
+    end
+    popfirst!(tokens)  # pop )
+    while lookahead(tokens) isa EndLineToken
+        popfirst!(tokens)
+    end
+    return RunNode(sim, replicates, domain_parallel, jobs, seed)
+end
+
 function parse_run_simulation!(tokens)
 
     if !(lookahead(tokens) isa DefineToken)
@@ -158,6 +351,10 @@ function parse_run_simulation!(tokens)
     end
 
     popfirst!(tokens)  # pop DefineToken
+
+    if lookahead(tokens) isa SimulationToken
+        return parse_simulation_config!(tokens)
+    end
 
     if !(lookahead(tokens) isa RunSimulationToken)
         throw(ErrorException("Expected RunToken got $(lookahead(tokens))"))
@@ -259,16 +456,39 @@ function parse_run_simulation!(tokens)
         throw(ErrorException("Expected IntegerToken got $(lookahead(tokens))"))
     end
 
-    # Optional observables argument: , observablesVar
+    # Optional trailing arguments, in order: , checkpointFrequency , observablesVar
+    #   checkpointFrequency: an integer literal (or an identifier bound to an integer)
+    #                        = write output every N steps.
+    #   observablesVar:      identifier bound to an observables file.
+    # A single trailing identifier is kept as the observables argument for backwards
+    # compatibility; the IR stage reclassifies it if it names an integer.
     remove_endlines_func_args!(tokens)
     sim_observables = nothing
+    sim_checkpoint_frequency = nothing
     if isa(lookahead(tokens), PunctuationToken)
         popfirst!(tokens)  # pop CommaToken
         remove_endlines_func_args!(tokens)
-        if lookahead(tokens) isa IdentifierToken
+        if lookahead(tokens) isa IntegerToken
+            # Numeric literal (e.g. 60), not an `Integer := 60` declaration.
+            sim_checkpoint_frequency = IntegerNode(popfirst!(tokens))
+        elseif lookahead(tokens) isa IdentifierToken
             sim_observables = IdentifierNode(popfirst!(tokens))
         else
-            throw(ErrorException("Expected IdentifierToken for observables arg got $(lookahead(tokens))"))
+            throw(ErrorException("Expected IntegerToken or IdentifierToken after simulation time got $(lookahead(tokens))"))
+        end
+
+        remove_endlines_func_args!(tokens)
+        if isa(lookahead(tokens), PunctuationToken)
+            popfirst!(tokens)  # pop CommaToken
+            remove_endlines_func_args!(tokens)
+            if !(lookahead(tokens) isa IdentifierToken)
+                throw(ErrorException("Expected IdentifierToken for observables arg got $(lookahead(tokens))"))
+            end
+            if sim_checkpoint_frequency === nothing
+                # first extra arg was an identifier => it is the checkpoint frequency
+                sim_checkpoint_frequency = sim_observables
+            end
+            sim_observables = IdentifierNode(popfirst!(tokens))
         end
     end
 
@@ -277,7 +497,8 @@ function parse_run_simulation!(tokens)
     end
     popfirst!(tokens)  # pop RightParenthesisToken
 
-    return RunSimulationNode(save_name, initial_state, sim_paramters, sim_rules, sim_types, sim_iterations, sim_observables)
+    return RunSimulationNode(save_name, initial_state, sim_paramters, sim_rules, sim_types, sim_iterations,
+                             sim_checkpoint_frequency, sim_observables)
 end
 
 function parse_sim_observables!(tokens)
@@ -333,8 +554,14 @@ function parse_simulation_declaration!(tokens)
     elseif lookahead(tokens) isa SimulationToken
         popfirst!(tokens)  # pop SimulationToken
         node_value = parse_run_simulation!(tokens)
+    elseif lookahead(tokens) isa IdentifierToken && lookahead(tokens).position.value == "Grammar"
+        popfirst!(tokens)  # pop Grammar
+        node_value = parse_sim_grammar!(tokens)
+    elseif lookahead(tokens) isa IdentifierToken && lookahead(tokens).position.value == "SimulationFunctions"
+        popfirst!(tokens)  # pop SimulationFunctions
+        node_value = parse_sim_functions!(tokens)
     else
-        throw(ErrorException("Expected SimulationParameterToken, StateToken, RulesToken, IntegerToken or FloatToken got $(lookahead(tokens))"))
+        throw(ErrorException("Expected SimulationParameterToken, StateToken, RulesToken, Grammar, SimulationFunctions, IntegerToken or FloatToken got $(lookahead(tokens))"))
     end
 
     while lookahead(tokens) isa EndLineToken
@@ -342,6 +569,96 @@ function parse_simulation_declaration!(tokens)
     end
 
     decl_node = SimDeclarationNode(node_name, node_value)
+end
+
+function parse_trace_statement!(tokens)
+    """
+    Parses `trace(simulationName, "rule", ...)`. Rule names are string literals
+    ("*" selects every rule).
+    """
+
+    popfirst!(tokens)  # pop `trace`
+    popfirst!(tokens)  # pop (
+    remove_endlines_func_args!(tokens)
+
+    if !(lookahead(tokens) isa IdentifierToken)
+        throw(ErrorException("trace: expected a simulation name as first argument, got $(lookahead(tokens))"))
+    end
+    sim_node = IdentifierNode(popfirst!(tokens))
+
+    rules = StringNode[]
+    while true
+        remove_endlines_func_args!(tokens)
+        if lookahead(tokens) isa PunctuationToken
+            popfirst!(tokens)  # pop ,
+            remove_endlines_func_args!(tokens)
+            if !(lookahead(tokens) isa StringToken)
+                throw(ErrorException("trace: rule names must be string literals, e.g. trace(sim, \"crossover\"); got $(lookahead(tokens))"))
+            end
+            push!(rules, StringNode(popfirst!(tokens)))
+        else
+            break
+        end
+    end
+
+    if !(lookahead(tokens) isa RightParenthesisToken)
+        throw(ErrorException("trace: expected ) got $(lookahead(tokens))"))
+    end
+    popfirst!(tokens)  # pop )
+
+    if isempty(rules)
+        throw(ErrorException("trace($(sim_node.token.position.value)): give at least one rule name, e.g. trace($(sim_node.token.position.value), \"crossover\") or \"*\" for all rules"))
+    end
+
+    while lookahead(tokens) isa EndLineToken
+        popfirst!(tokens)
+    end
+    return TraceNode(sim_node, rules)
+end
+
+function parse_measure_statement!(tokens)
+    """
+    Parses `measure(sim1, sim2, ..., "observable", ...)`. Simulation names are identifiers,
+    observable names are string literals ("*" or none selects every observable).
+    """
+
+    popfirst!(tokens)  # pop `measure`
+    popfirst!(tokens)  # pop (
+
+    sims = IdentifierNode[]
+    obs = StringNode[]
+    while true
+        remove_endlines_func_args!(tokens)
+        tok = lookahead(tokens)
+        if tok isa IdentifierToken
+            isempty(obs) || throw(ErrorException("measure: list the simulations before the observable names, got $(tok.position.value) after a string"))
+            push!(sims, IdentifierNode(popfirst!(tokens)))
+        elseif tok isa StringToken
+            push!(obs, StringNode(popfirst!(tokens)))
+        else
+            throw(ErrorException("measure: expected a simulation name or an observable name string, got $(tok)"))
+        end
+        remove_endlines_func_args!(tokens)
+        if lookahead(tokens) isa PunctuationToken
+            popfirst!(tokens)  # pop ,
+        else
+            break
+        end
+    end
+
+    if !(lookahead(tokens) isa RightParenthesisToken)
+        throw(ErrorException("measure: expected ) got $(lookahead(tokens))"))
+    end
+    popfirst!(tokens)  # pop )
+
+    if isempty(sims)
+        throw(ErrorException("measure: give at least one simulation, e.g. measure(mySim) or measure(simA, simB, \"n_tips\")"))
+    end
+
+    while lookahead(tokens) isa EndLineToken
+        popfirst!(tokens)
+    end
+    return MeasureNode(sims, obs)
 end
 
 function parse_sim_declarations!(tokens)
@@ -362,6 +679,27 @@ function parse_sim_declarations!(tokens)
 
         if lookahead(tokens) isa RightBracketToken
             break
+        end
+
+        # `trace(sim, "rule", ...)` statement (contextual keyword, not reserved).
+        if lookahead(tokens) isa IdentifierToken && lookahead(tokens).position.value == "trace" &&
+                length(tokens) >= 2 && tokens[2] isa LeftParenthesisToken
+            push!(declarations, parse_trace_statement!(tokens))
+            continue
+        end
+
+        # `measure(sim1, sim2, "observable", ...)` statement (contextual keyword, not reserved).
+        if lookahead(tokens) isa IdentifierToken && lookahead(tokens).position.value == "measure" &&
+                length(tokens) >= 2 && tokens[2] isa LeftParenthesisToken
+            push!(declarations, parse_measure_statement!(tokens))
+            continue
+        end
+
+        # `run(sim, N, domain_parallel = false, ...)` statement (contextual keyword, not reserved).
+        if lookahead(tokens) isa IdentifierToken && lookahead(tokens).position.value == "run" &&
+                length(tokens) >= 2 && tokens[2] isa LeftParenthesisToken
+            push!(declarations, parse_run_statement!(tokens))
+            continue
         end
 
         decl = parse_simulation_declaration!(tokens)

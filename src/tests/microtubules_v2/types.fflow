@@ -1,13 +1,28 @@
 types Microtubule {
-    Intermediate << Position : FixedList<<3, Float>>, Direction : FixedList<<3, Float>> >> : Type
-    Positive     << Position : FixedList<<3, Float>>, Direction : FixedList<<3, Float>> >> : Type
-    Negative     << Position : FixedList<<3, Float>>, Direction : FixedList<<3, Float>> >> : Type
-    Nucleator    << Position : FixedList<<3, Float>>, Direction : FixedList<<2, Integer>> >> : Type
 
+    # 1 -> default type
+
+    # 2
+    Intermediate << Position : FixedList<<3, Float>>, Direction : FixedList<<3, Float>> >> : Type
+
+    # 3
+    Positive     << Position : FixedList<<3, Float>>, Direction : FixedList<<3, Float>> >> : Type
+
+    # 4
+    Negative     << Position : FixedList<<3, Float>>, Direction : FixedList<<3, Float>> >> : Type
+
+    # 5
+    Nucleator    << Position : FixedList<<3, Float>>, Direction : TFTensor<<2, Integer>> >> : Type
+
+    # 6
     CellBoundary << 
         Position : FixedList<<3, Float>>, Direction : FixedList<<3, Float>>, 
-        Count : FixedList<<2, Integer>> 
+        Count : TFTensor<<2, Integer>> 
         >> : Type
+
+    # 7
     Zipper       << Position : FixedList<<3, Float>>, Direction : FixedList<<3, Float>> >> : Type
+
+    # 8
     Junction     << Position : FixedList<<3, Float>>, Direction : FixedList<<3, Float>> >> : Type
 }

@@ -152,9 +152,24 @@ module AstNodes
         value :: Node
     end
 
+    # One entry of a PDE `solving` block, e.g.
+    #   du   : PDE       = kappa * laplacian(u)
+    #   mesh : Mesh      = interval(L, n)
+    #   left : Dirichlet = boundary(left, u_left)
+    #   flux : Neumann   = boundary(top, g)
+    #   init : Initial   = sin(pi * x / L)
+    # `kind` is one of PDE_ENTRY_KINDS (contextual identifiers, not lexer keywords).
+    struct PDEEntryNode <: Node
+        name :: IdentifierNode
+        kind :: String
+        value :: Node
+    end
+
+    const PDE_ENTRY_KINDS = ("PDE", "Element", "Dirichlet", "Neumann", "Mesh", "Initial")
+
     struct SolveClauseNode <: ModifyClauseNode
         variables::Array{BindingVariableNode}
-        clause::Array{Union{ODENode, DefinitionNode}}
+        clause::Array{Union{ODENode, DefinitionNode, PDEEntryNode}}
     end
 
     struct WhereClauseNode <: ModifyClauseNode
@@ -171,6 +186,16 @@ module AstNodes
                               IntegerNode, GroupNode
                              }
         # clause::Array{Token}
+        where_clause::WhereClauseNode
+    end
+
+    # Clocked rule: `every (n_r, p_r, T_clock) [additive] where { ... }`.
+    # Any of the three schedule expressions may be omitted (`nothing`).
+    struct EveryClauseNode <: ModifyClauseNode
+        n_r     :: Union{Node, Nothing}
+        p_r     :: Union{Node, Nothing}
+        t_clock :: Union{Node, Nothing}
+        additive :: Bool
         where_clause::WhereClauseNode
     end
 
@@ -311,10 +336,32 @@ module AstNodes
         body_return :: ReturnNode
     end
 
+    # A global observable: a functional of the whole state,
+    #   name : Observable := <reduction> <pattern> [<< bindings >>] [with ( expr )]
+    # The pattern is stored as a synthesized RuleNode (rhs == lhs, the `with`
+    # expression as the propensity) so it is generated through the rule machinery:
+    # each match of the pattern contributes the value of the expression, and
+    # `reduction` (sum, mean, count, min, max) combines the contributions.
+    struct GlobalObservableNode <: Node
+        name      :: IdentifierNode
+        reduction :: String
+        rule      :: RuleNode
+        # `within r`: a pair observable over two unconnected nodes closer than r (nothing otherwise)
+        within    :: Union{Nothing, Float64}
+    end
+    GlobalObservableNode(name, reduction, rule) = GlobalObservableNode(name, reduction, rule, nothing)
+
+    const OBSERVABLE_REDUCTIONS = ("sum", "mean", "count", "min", "max")
+
+    # `definitions` are the per-node `Attribute` definitions (ParaView columns);
+    # `global_observables` are the whole-state `Observable` definitions.
     struct ObservableSectionNode <: Node
         name        :: IdentifierNode
         definitions :: Vector{ObservableDefinitionNode}
+        global_observables :: Vector{GlobalObservableNode}
     end
+    ObservableSectionNode(name, definitions) =
+        ObservableSectionNode(name, definitions, GlobalObservableNode[])
 
     struct GrammarSectionNode <: Node
         name :: IdentifierNode
@@ -424,6 +471,33 @@ module AstNodes
         value :: LoadNode
     end
 
+    # `f : SimulationFunctions := load("functions.fflow")`
+    struct SimulationFunctionsNode <: Node
+        value :: LoadNode
+    end
+
+    # `g : Grammar := Grammar(functions, rules, types [, observables])`: the compile-time unit of a
+    # simulation. Each argument names a SimulationFunctions / SimulationRules / SimulationTypes /
+    # SimulationObservables declaration (in any order).
+    struct SimulationGrammarNode <: Node
+        parts :: Vector{IdentifierNode}
+    end
+
+    # `s : Simulation := Simulation(["save.bin",] grammar, state, params, time [, checkpoint])`
+    struct SimulationConfigNode <: Node
+        saveName :: Union{StringNode, Nothing}
+        grammar :: IdentifierNode
+        initialState :: IdentifierNode
+        parameters :: IdentifierNode
+        steps :: Union{IntegerNode, FloatNode, IdentifierNode}
+        checkpointFrequency :: Union{IntegerNode, IdentifierNode, Nothing}
+    end
+
+    # `State := grid(...)`: an initial graph produced by a generator call (see ir_mesh_generator)
+    struct SimulationGeneratorStateNode <: Node
+        value :: Node
+    end
+
     struct RunSimulationNode <: Node
         saveName :: Union{StringNode, Nothing}
         initialState :: IdentifierNode
@@ -431,6 +505,8 @@ module AstNodes
         rules :: IdentifierNode
         types :: IdentifierNode
         steps :: Union{IntegerNode, FloatNode, IdentifierNode}
+        # Optional: write output/state every N steps (and always on the final step).
+        checkpointFrequency :: Union{IntegerNode, IdentifierNode, Nothing}
         observables :: Union{IdentifierNode, Nothing}
     end
 
@@ -438,12 +514,42 @@ module AstNodes
         name :: IdentifierNode
         value :: Union{FloatNode, IntegerNode, SimulationParametersNode,
               SimulationNode, SimulationRulesNode, SimulationTypesNode,
-              SimulationObservablesNode, SimulationStateNode, StringNode, RunSimulationNode}
+              SimulationObservablesNode, SimulationStateNode, SimulationGeneratorStateNode,
+              StringNode, RunSimulationNode, SimulationFunctionsNode, SimulationGrammarNode,
+              SimulationConfigNode}
+    end
+
+    # `trace(simulationName, "rule1", "rule2", ...)`: record every fire of the named rules
+    # while `simulationName` (a RunSimulation declaration) runs, and render the before/after
+    # report. A rule name of "*" selects every rule.
+    struct TraceNode <: Node
+        simulation :: IdentifierNode
+        rules :: Vector{StringNode}
+    end
+
+    # `measure(sim1, sim2, ..., "observable", ...)`: after the run, re-evaluate the global
+    # observables on every saved checkpoint of each named simulation. No observable names (or
+    # "*") means all observables.
+    struct MeasureNode <: Node
+        simulations :: Vector{IdentifierNode}
+        observables :: Vector{StringNode}
+    end
+
+    # `run(sim, N [, domain_parallel = true|false] [, jobs = K] [, seed = S])`: execute the
+    # Simulation `sim` N times (a Simulation only runs when a run statement names it).
+    # `domain_parallel = true` compiles in the OpenMP geocell domain-decomposition runner
+    # (default: serial runner); with it off the replicates run concurrently, `jobs` at a time.
+    struct RunNode <: Node
+        simulation :: IdentifierNode
+        replicates :: Union{IntegerNode, IdentifierNode}
+        domainParallel :: Union{Bool, Nothing}
+        jobs :: Union{IntegerNode, IdentifierNode, Nothing}
+        seed :: Union{IntegerNode, IdentifierNode, Nothing}
     end
 
     struct SimulationSectionNode <: Node
         name :: IdentifierNode
-        declarations :: Array{SimDeclarationNode}
+        declarations :: Array{Union{SimDeclarationNode, TraceNode, MeasureNode, RunNode}}
     end
     
 end

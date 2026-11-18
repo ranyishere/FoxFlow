@@ -11,8 +11,8 @@ function ir_grammar_parameter!(ast, parameter_table)
         param_name = get_value(ast.name)
         type_class_name = get_value(ast.type.name)
 
-        # FixedList<<dims..., ElemType>>  emit torch::Tensor
-        if type_class_name == "FixedList"
+        # FixedList<<dims..., ElemType>> / TFTensor<<...>>  emit torch::Tensor
+        if type_class_name in ("FixedList", "TFTensor")
             inner = ast.type.parameter.token  # [IntegerNode/FloatNode, ...]
             dims = String[]
             elem_type = "Float"

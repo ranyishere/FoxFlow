@@ -22,6 +22,15 @@
 #   # In a second terminal, keep a ParaView .pvd in sync with the running sim:
 #   ./run_example.sh watch <build_dir>/my_results
 #
+#   # Rule-fire traces: put trace(<simulation>, "rule", ...) in simulation.fflow, then `run` renders
+#   # trace_<simulation>.html in the build dir. Re-render with filters (no rebuild):
+#   ./run_example.sh trace microtubules_v2 --rule crossover --max 20
+#
+#   # Rule provenance / run report from the listener CSVs (needs python3):
+#   ./run_example.sh inspect report  <build_dir>      # HTML report
+#   ./run_example.sh inspect explain <build_dir>      # nodes outside the domain + rules that touched them
+#   ./run_example.sh inspect node    <build_dir> 1686 # history of one node id
+#
 # Environment:
 #   FOXFLOW_SUNDIALS_DIR   passed through to CMake as -DSUNDIALS_DIR
 #
@@ -36,7 +45,7 @@ COMMAND="gen"
 # Extra flags injected by convenience commands (e.g. "gdb" -> run --gdb).
 EXTRA_FLAGS=()
 case "${1:-}" in
-    gen|build|run)
+    gen|build|run|trace)
         COMMAND="$1"; shift ;;
     gdb)
         # Convenience: build a Debug model and drop into gdb.
@@ -45,6 +54,11 @@ case "${1:-}" in
         # ./run_example.sh watch <results_dir> [--once ...]
         shift
         julia "$IR_SCRIPT" watch "$@"
+        exit $? ;;
+    inspect)
+        # ./run_example.sh inspect <summary|node|explain|report> <build_dir> [...]
+        shift
+        python3 "$SCRIPT_DIR/src/utils/inspect_run.py" "$@"
         exit $? ;;
     help|-h|--help)
         julia "$IR_SCRIPT" help; exit 0 ;;

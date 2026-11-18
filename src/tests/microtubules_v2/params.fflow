@@ -4,7 +4,7 @@ parameters Microtubule {
     TOTAL_TIME : Float := 400
 
     # How often the simulation is updated
-    DELTA : Float := 0.1
+    DELTA : Float := 0.4
 
     # 1 -> is 1 micrometer (um)
     # Widened from 0.1 so the tip<->boundary co-location match forms reliably
@@ -14,18 +14,19 @@ parameters Microtubule {
     # varepsilon : Float := MAXIMAL_REACTION_RADIUS * 0.01
 
     # Anything bigger than this is considered "infinity" for the purposes of the simulation.
-    varepsilon : Float := MAXIMAL_REACTION_RADIUS
+    varepsilon : Float := MAXIMAL_REACTION_RADIUS/2
 
     # Number of steps in the simulation
     NUM_STEPS : Integer := TOTAL_TIME / DELTA
 
-    MIN_DELTA_STEPS : Integer := 5
+    MIN_DELTA_STEPS : Integer := 10
     DELTA_DELTA_T : Float := DELTA / MIN_DELTA_STEPS
 
     # Prevents solver from shrinking too much.
     # The minimum allowable integration step.
     DELTA_T_MIN : Float := DELTA_DELTA_T
 
+    # Length of domain is CELL_NX, CELL_NY, CELL_NZ. The domain is a cube of size CELL_NX x CELL_NY x CELL_NZ.
     CELL_NX : Float := 3
     CELL_NY : Float := 3
     CELL_NZ : Float := 3
@@ -111,20 +112,19 @@ parameters Microtubule {
 
     WITH_GROWTH_RATE_FACTOR            : Float := 100.0
     DIV_LENGTH                         : Float := 0.075
-    WOBBLE_ANGLE                       : Float := 5.0
+    WOBBLE_ANGLE                       : Float := 8.0
     ENABLE_WOBBLE                      : Integer := 1
 
     V_PLUS                             : Float := 0.0615
     WITH_RETRACTION_RATE_FACTOR        : Float := 10.0
     DIV_LENGTH_RETRACT                 : Float := 0.0025
 
-    V_MINUS                            : Float := 0.05
+    V_MINUS                            : Float := 0.00883
 
     COLLISION_DISTANCE                 : Float := 0.025
 
-    COLLISION_DISTANCE_BOUNDARY        : Float := 0.02
-
-    STANDARD_BOUNDARY_CATASTROPHE_RATE : Float := 100.0
+    COLLISION_DISTANCE_BOUNDARY        : Float := 0.025
+    STANDARD_BOUNDARY_CATASTROPHE_RATE : Float := 40000.0
 
     # Deterministic boundary clamp backstop: catches any Positive tip that has
     # slipped past the inset wall (into the band between the wall and the grid
@@ -140,10 +140,62 @@ parameters Microtubule {
     POSITIVE_CIC_RATE                  : Float := 5.0
     NEGATIVE_CIC_RATE                  : Float := 5.0
     CATASTROPHE_ANGLE                  : Float := 40.0
-    CREATION_RATE                      : Float := 0.5
+    CREATION_RATE                      : Float := 0.0026
     CREATION_FACTOR                    : Float := 1.0
     MT_MIN_SEGMENT_INIT                : Float := 0.005
     MT_MAX_SEGMENT_INIT                : Float := 0.01
-    MT_DESTRUCTION_RATE                : Float := 100.0
+    # MT_DESTRUCTION_RATE                : Float := 100.0
+    MT_DESTRUCTION_RATE                : Float := 200.0
+
+    # Recovery / rescue: a Negative (shrinking) tip resumes growth as a Positive.
+    RECOVERY_RATE                      : Float := 0.016
+    RECOVERY_FACTOR                    : Float := 1.0
+
+    # Crossover: a growing Positive tip that hits another MT at a shallow angle
+    # bundles through it, forming a Junction hub.
+    CROSSOVER_RATE                     : Float := 40.0
+    CROSSOVER_ANGLE                    : Float := 50.0
+    # Uncrossover: a Junction between two nearly parallel MTs relaxes back.
+    UNCROSSOVER_RATE                   : Float := 0.01
+
+    # Zippering: a Positive tip that hits another MT at a steep angle deflects
+    # and runs parallel (forming a Zipper marker) instead of crossing.
+    ZIPPERING_HIT_RATE                 : Float := 4000.0
+    ZIPPERING_GUARD_RATE               : Float := 100.0
+    ZIPPERING_RETRACTION_RATE          : Float := 10.0
+    CRITICAL_ANGLE                     : Float := 50.0
+    SEPARATION_DISTANCE                : Float := 0.025
+
+    # Bundling: a free Positive tip aligned (within CRITICAL_ANGLE) with a nearby
+    # microtubule segment joins it, turning the nearest node into a Junction.
+    # Propensity decays as exp(-d^2 / (2 BUNDLE_LENGTH^2)) with distance d.
+    BUNDLE_RATE                        : Float := 100.0
+    BUNDLE_LENGTH                      : Float := 0.025
+
+    # Clasp rules (CMA GRAMMAR.BOUNDARY_RULES / CLASP_RULES). A clasp is an
+    # Intermediate node attached to a boundary edge (b1 -- clasp -- b2), a
+    # microtubule end anchored at the cell wall. Each rule's propensity is
+    # multiplied by its enable flag (0 = off, 1 = on); all are on here.
+    # Rates/angles mirror CMA settings.json.
+    ENABLE_CLASP_BOUNDARY_CATASTROPHE  : Integer := 1
+    CLASP_BOUNDARY_CATASTROPHE_RATE    : Float := 40000.0
+
+    CLASP_ENABLE_ENTRY                 : Integer := 1
+    CLASP_ENTRY_RATE                   : Float := 0.0005
+    CLASP_ENTRY_ANGLE                  : Float := 15.0
+    # Length of the freshly entered clasp segment (hard-coded 0.027 in CMA).
+    CLASP_ENTRY_LENGTH                 : Float := 0.027
+
+    CLASP_ENABLE_EXIT                  : Integer := 1
+    CLASP_EXIT_RATE                    : Float := 40000.0
+    CLASP_EXIT_ANGLE                   : Float := 15.0
+
+    CLASP_ENABLE_CAT                   : Integer := 1
+    CLASP_CAT_RATE                     : Float := 1000.0
+    # Negative tip within this distance of the clasp node removes the clasp (0.01 in CMA).
+    CLASP_CAT_DISTANCE                 : Float := 0.01
+
+    CLASP_ENABLE_DETACHMENT            : Integer := 1
+    CLASP_DETACHMENT_RATE              : Float := 0.01
 
 }
