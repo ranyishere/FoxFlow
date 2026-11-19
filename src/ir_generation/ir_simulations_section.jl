@@ -215,12 +215,14 @@ end
 
 function apply_run_statements!(ir_run_sims, ir_runs, sim_table)
     """
-    `run(sim, N, domain_parallel = ..., jobs = ..., seed = ...)`: mark the simulation they name as
+    `run(sim, N, domain_parallel = ..., jobs = ..., seed = ..., name = "exp", listeners = ..., log = ...)`:
+    mark the simulation they name as
     one to execute and attach the run options. `domain_parallel = true` selects the OpenMP
     domain-decomposition runner (compiled in only for that simulation); the default, and `false`,
     is the serial runner.
     """
     seen = Set{String}()
+    used_names = Dict{String, String}()
     for r in ir_runs
         sim_name = get_value(r.simulation)
         ix = findfirst(s -> s["name"] == sim_name, ir_run_sims)
@@ -236,6 +238,8 @@ function apply_run_statements!(ir_run_sims, ir_runs, sim_table)
         stage["active"] = true
         stage["replicates"] = parse_positive_int("run($sim_name, N): N", sim_int_value(r.replicates, sim_table))
         stage["domain_parallel"] = r.domainParallel === true
+        stage["listeners"] = r.listeners !== false   # default: on
+        stage["log"] = r.log !== false               # default: on
         r.jobs === nothing ||
             (stage["jobs"] = parse_positive_int("run($sim_name, jobs = ...)", sim_int_value(r.jobs, sim_table)))
         if r.seed !== nothing
@@ -245,6 +249,16 @@ function apply_run_statements!(ir_run_sims, ir_runs, sim_table)
         end
         if stage["replicates"] == 1 && r.jobs !== nothing
             println("Warning: run($sim_name, 1, jobs = ...): jobs is ignored for a single run")
+        end
+        if r.name !== nothing
+            run_name = String(get_value(r.name))
+            occursin(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$", run_name) ||
+                error("run($sim_name, name = \"$run_name\"): the name may only contain letters, digits, '_', '-' and '.' " *
+                      "and must start with a letter or digit")
+            run_name in values(used_names) &&
+                error("run($sim_name, name = \"$run_name\"): the name is already used by another run statement")
+            used_names[sim_name] = run_name
+            stage["run_name"] = run_name
         end
     end
 end

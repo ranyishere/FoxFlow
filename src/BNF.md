@@ -644,7 +644,10 @@ functions Microtubule {
 <run-statement> ::= "run" "(" <symbol-name> "," <integer>
                     { "," ( "domain_parallel" "=" ( "true" | "false" )
                           | "jobs" "=" <integer>
-                          | "seed" "=" <integer> ) }
+                          | "seed" "=" <integer>
+                          | "name" "=" <string-literal>
+                          | "listeners" "=" ( "true" | "false" )
+                          | "log" "=" ( "true" | "false" ) ) }
                     ")"
 
 <load-file> ::= "load" "(" <string-or-identifier> ")"
@@ -710,6 +713,18 @@ simulation that is never run can still be measured from existing checkpoints).
 - `jobs = K`: replicates running at once (default 1 when domain parallelism is on,
   otherwise the number of hardware threads; never more than `N`).
 - `seed = S`: base seed; replicate `i` is seeded with `S + i` (default base 0).
+- `name = "exp"`: names the experiment. Its runs go to `runs/<name>/run_<i>/` instead of
+  `runs/<sim>/run_<i>/`, also for `N = 1` (which is then run in a child process instead of
+  in `my_results/`). The name may contain letters, digits, `_`, `-` and `.`, and must be
+  unique among the `run` statements. A `measure(...)` whose simulations all belong to the
+  same named experiment writes its CSV to `runs/<name>/measure_<k>.csv`.
+- `listeners = true|false`: with `false` the simulator writes no listener files
+  (`PropensityListener.csv`, `RuleFireListener.csv`, `TimeProgressListener.csv`,
+  `InvalidationValidationListener.csv`, `cell_listener.txt`). Default `true`. `trace(...)`
+  output is independent of this option.
+- `log = true|false`: with `false` the standard output of the run (progress and per-geocell
+  timing) is discarded. For replicates `run.log` is then empty apart from errors, which
+  are still written to it. Default `true`.
 
 With `N > 1`, the program starts one child process per replicate (the RNG and
 the OpenMP settings are process-global). Replicate `i` runs in

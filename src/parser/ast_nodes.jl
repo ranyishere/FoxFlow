@@ -535,16 +535,21 @@ module AstNodes
         observables :: Vector{StringNode}
     end
 
-    # `run(sim, N [, domain_parallel = true|false] [, jobs = K] [, seed = S])`: execute the
+    # `run(sim, N [, domain_parallel = true|false] [, jobs = K] [, seed = S] [, name = "exp"]
+    #  [, listeners = true|false] [, log = true|false])`: execute the
     # Simulation `sim` N times (a Simulation only runs when a run statement names it).
     # `domain_parallel = true` compiles in the OpenMP geocell domain-decomposition runner
     # (default: serial runner); with it off the replicates run concurrently, `jobs` at a time.
+    # `name` names the experiment: its runs are written to runs/<name>/run_<i>/ (also for N = 1).
     struct RunNode <: Node
         simulation :: IdentifierNode
         replicates :: Union{IntegerNode, IdentifierNode}
         domainParallel :: Union{Bool, Nothing}
         jobs :: Union{IntegerNode, IdentifierNode, Nothing}
         seed :: Union{IntegerNode, IdentifierNode, Nothing}
+        name :: Union{StringNode, Nothing}
+        listeners :: Union{Bool, Nothing}   # listeners = true|false: liveliness/cell listener files
+        log :: Union{Bool, Nothing}         # log = true|false: standard output of the run
     end
 
     struct SimulationSectionNode <: Node

@@ -203,7 +203,7 @@ function tokenize(source::String, line_no::Integer)
                 i += 2
             elseif c == '='
                 push!(tokens, EqualToken(PositionToken("=", line_no, i)))
-                i += 2
+                i += 1
             elseif c == '/'
                 push!(tokens, SlashToken(PositionToken("/", line_no, i)))
                 i += 1

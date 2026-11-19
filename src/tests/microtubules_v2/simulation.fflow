@@ -36,7 +36,13 @@ simulations Microtubule {
     #                           work on one run); default/false: serial runner, one thread per run,
     #                           replicates run side by side.
     # Independent replicates (own seeds) go to runs/moveMicrotubules/run_<i>/ when N > 1.
-    run(moveMicrotubules, 64, domain_parallel = false)
+    # name = "exp_a"          : runs go to runs/exp_a/run_<i>/ instead (also for N = 1).
+    # listeners = false       : write no listener files (Propensity/RuleFire/TimeProgress/
+    #                           InvalidationValidation .csv, cell_listener.txt).
+    # log = false             : discard standard output (run.log then only holds errors).
+
+    num_replicates : Integer := 1
+    run(moveMicrotubules, 64, domain_parallel=false, name="exp_a", listeners=false, log=false)
     # run(moveMicrotubules, 1, domain_parallel = false)
 
     # Record every fire of these rules (matched nodes before/after, neighbours, edge changes,

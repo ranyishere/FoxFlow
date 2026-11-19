@@ -940,18 +940,19 @@ function ir_models_section_multistage(all_stages, type_namespace, symbol_tables,
 
     # ===== Post-run measurement (`measure(sim, ...)`) =====
     # Evaluates the observables on every snapshot my_results/<sim>/state_<step>.bin of a simulation
-    # (of every replicate runs/<sim>/run_<i>/my_results/<sim>/state_<step>.bin when the simulation
-    # was run N>1 times) and appends one row per snapshot to `out`
-    # (columns: simulation,run,step,time,<observables>; run is 0 for a single run).
+    # (of every replicate runs/<name>/run_<i>/my_results/<sim>/state_<step>.bin when the simulation
+    # was run N>1 times or with run(..., name = "<name>"); <name> defaults to <sim>) and appends one row
+    # per snapshot to `out` (columns: simulation,run,step,time,<observables>; run is 0 for a single run).
     measure_helper_ir = isempty(global_observables) ? "" : """
     template <class ModelT>
     void measure_simulation(const std::string &sim_name, const std::vector<std::string> &wanted,
-                            std::ostream &out, bool &header_written, int replicates = 1) {
+                            std::ostream &out, bool &header_written, int replicates = 1,
+                            const std::string &run_name = "") {
         namespace fs = std::filesystem;
         const int n_runs = replicates < 1 ? 1 : replicates;
         for (int run = 0; run < n_runs; ++run) {
-        const std::string dir = replicates > 1
-            ? "runs/" + sim_name + "/run_" + std::to_string(run) + "/my_results/" + sim_name
+        const std::string dir = (replicates > 1 || !run_name.empty())
+            ? "runs/" + (run_name.empty() ? sim_name : run_name) + "/run_" + std::to_string(run) + "/my_results/" + sim_name
             : "my_results/" + sim_name;
         std::vector<std::pair<std::size_t, std::string>> snapshots;
         if (fs::exists(dir)) {
