@@ -279,7 +279,8 @@ end
 
 function parse_run_statement!(tokens)
     """
-    `run(sim, N [, domain_parallel = true|false] [, jobs = K] [, seed = S])`.
+    `run(sim, N [, domain_parallel = true|false] [, jobs = K] [, seed = S] [, name = "exp"]
+     [, listeners = true|false] [, log = true|false])`.
     """
     popfirst!(tokens)  # pop `run`
     popfirst!(tokens)  # pop (
@@ -300,6 +301,9 @@ function parse_run_statement!(tokens)
     domain_parallel = nothing
     jobs = nothing
     seed = nothing
+    run_name = nothing
+    listeners = nothing
+    run_log = nothing
     while true
         remove_endlines_func_args!(tokens)
         lookahead(tokens) isa PunctuationToken || break
@@ -312,13 +316,19 @@ function parse_run_statement!(tokens)
         end
         popfirst!(tokens)  # pop =
 
-        if opt == "domain_parallel"
+        if opt == "domain_parallel" || opt == "listeners" || opt == "log"
             v = lookahead(tokens) isa IdentifierToken ? lookahead(tokens).position.value : ""
             if v != "true" && v != "false"
-                throw(ErrorException("run: domain_parallel must be true or false, got $(lookahead(tokens))"))
+                throw(ErrorException("run: $opt must be true or false, got $(lookahead(tokens))"))
             end
             popfirst!(tokens)
-            domain_parallel = (v == "true")
+            if opt == "domain_parallel"
+                domain_parallel = (v == "true")
+            elseif opt == "listeners"
+                listeners = (v == "true")
+            else
+                run_log = (v == "true")
+            end
         elseif opt == "jobs" || opt == "seed"
             val = nothing
             if lookahead(tokens) isa IntegerToken
@@ -329,8 +339,12 @@ function parse_run_statement!(tokens)
                 throw(ErrorException("run: $opt must be an integer, got $(lookahead(tokens))"))
             end
             opt == "jobs" ? (jobs = val) : (seed = val)
+        elseif opt == "name"
+            lookahead(tokens) isa StringToken ||
+                throw(ErrorException("run: name must be a string, e.g. name = \"exp_a\", got $(lookahead(tokens))"))
+            run_name = StringNode(popfirst!(tokens))
         else
-            throw(ErrorException("run: unknown option `$opt` (expected domain_parallel, jobs or seed)"))
+            throw(ErrorException("run: unknown option `$opt` (expected domain_parallel, jobs, seed, name, listeners or log)"))
         end
     end
 
@@ -341,7 +355,7 @@ function parse_run_statement!(tokens)
     while lookahead(tokens) isa EndLineToken
         popfirst!(tokens)
     end
-    return RunNode(sim, replicates, domain_parallel, jobs, seed)
+    return RunNode(sim, replicates, domain_parallel, jobs, seed, run_name, listeners, run_log)
 end
 
 function parse_run_simulation!(tokens)

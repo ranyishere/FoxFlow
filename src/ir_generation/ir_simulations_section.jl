@@ -215,7 +215,8 @@ end
 
 function apply_run_statements!(ir_run_sims, ir_runs, sim_table)
     """
-    `run(sim, N, domain_parallel = ..., jobs = ..., seed = ..., name = "exp")`: mark the simulation they name as
+    `run(sim, N, domain_parallel = ..., jobs = ..., seed = ..., name = "exp", listeners = ..., log = ...)`:
+    mark the simulation they name as
     one to execute and attach the run options. `domain_parallel = true` selects the OpenMP
     domain-decomposition runner (compiled in only for that simulation); the default, and `false`,
     is the serial runner.
@@ -237,6 +238,8 @@ function apply_run_statements!(ir_run_sims, ir_runs, sim_table)
         stage["active"] = true
         stage["replicates"] = parse_positive_int("run($sim_name, N): N", sim_int_value(r.replicates, sim_table))
         stage["domain_parallel"] = r.domainParallel === true
+        stage["listeners"] = r.listeners !== false   # default: on
+        stage["log"] = r.log !== false               # default: on
         r.jobs === nothing ||
             (stage["jobs"] = parse_positive_int("run($sim_name, jobs = ...)", sim_int_value(r.jobs, sim_table)))
         if r.seed !== nothing

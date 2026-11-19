@@ -645,7 +645,9 @@ functions Microtubule {
                     { "," ( "domain_parallel" "=" ( "true" | "false" )
                           | "jobs" "=" <integer>
                           | "seed" "=" <integer>
-                          | "name" "=" <string-literal> ) }
+                          | "name" "=" <string-literal>
+                          | "listeners" "=" ( "true" | "false" )
+                          | "log" "=" ( "true" | "false" ) ) }
                     ")"
 
 <load-file> ::= "load" "(" <string-or-identifier> ")"
@@ -716,6 +718,13 @@ simulation that is never run can still be measured from existing checkpoints).
   in `my_results/`). The name may contain letters, digits, `_`, `-` and `.`, and must be
   unique among the `run` statements. A `measure(...)` whose simulations all belong to the
   same named experiment writes its CSV to `runs/<name>/measure_<k>.csv`.
+- `listeners = true|false`: with `false` the simulator writes no listener files
+  (`PropensityListener.csv`, `RuleFireListener.csv`, `TimeProgressListener.csv`,
+  `InvalidationValidationListener.csv`, `cell_listener.txt`). Default `true`. `trace(...)`
+  output is independent of this option.
+- `log = true|false`: with `false` the standard output of the run (progress and per-geocell
+  timing) is discarded. For replicates `run.log` is then empty apart from errors, which
+  are still written to it. Default `true`.
 
 With `N > 1`, the program starts one child process per replicate (the RNG and
 the OpenMP settings are process-global). Replicate `i` runs in

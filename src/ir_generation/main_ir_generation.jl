@@ -550,8 +550,38 @@ struct DomainScope {
 
 // DomainParallel picks the runner at compile time (see SimulatorInterface): true -> the OpenMP
 // geocell domain decomposition, false -> the serial runner.
+// listeners = false: the simulator creates no listener files (FOXFLOW_LISTENERS=0 is read by the
+// library when it builds its listeners). log = false: std::cout is discarded while it runs.
+struct NullBuf : std::streambuf {
+    int overflow(int c) override { return c; }
+    std::streamsize xsputn(const char *, std::streamsize n) override { return n; }
+};
+
+struct RunOptionsScope {
+    bool listeners_off, log_off;
+    bool had_env = false;
+    std::string saved_env;
+    NullBuf null_buf;
+    std::streambuf *saved_cout = nullptr;
+    RunOptionsScope(bool listeners, bool log) : listeners_off(!listeners), log_off(!log) {
+        if (listeners_off) {
+            if (const char *e = std::getenv("FOXFLOW_LISTENERS")) { had_env = true; saved_env = e; }
+            setenv("FOXFLOW_LISTENERS", "0", 1);
+        }
+        if (log_off) saved_cout = std::cout.rdbuf(&null_buf);
+    }
+    ~RunOptionsScope() {
+        if (log_off) std::cout.rdbuf(saved_cout);
+        if (listeners_off) {
+            if (had_env) setenv("FOXFLOW_LISTENERS", saved_env.c_str(), 1);
+            else unsetenv("FOXFLOW_LISTENERS");
+        }
+    }
+};
+
 template <class ModelT, bool DomainParallel = false>
-void run_stage() {
+void run_stage(bool listeners = true, bool log = true) {
+    RunOptionsScope options(listeners, log);
     DGGML::SimulatorInterface<ModelT, 3, DomainParallel> simulator;
     ModelT model;
     simulator.setModel(model);
@@ -563,7 +593,7 @@ void run_stage() {
 inline int run_replicates(const std::string &self, const std::string &settings,
                           const std::string &sim, const std::string &dir_name,
                           int n, int jobs, bool domain_parallel,
-                          std::uint32_t base_seed) {
+                          std::uint32_t base_seed, bool listeners = true, bool log = true) {
     namespace fs = std::filesystem;
     const fs::path base = fs::current_path();
     const std::string settings_abs = fs::absolute(settings).string();
@@ -581,12 +611,14 @@ inline int run_replicates(const std::string &self, const std::string &settings,
     for (char **e = environ; *e; ++e) {
         const std::string s(*e);
         if (s.rfind("FOXFLOW_BASE_DIR=", 0) == 0) continue;
+        if (!listeners && s.rfind("FOXFLOW_LISTENERS=", 0) == 0) continue;
         if (!domain_parallel && (s.rfind("OMP_NUM_THREADS=", 0) == 0 ||
                                  s.rfind("OPENBLAS_NUM_THREADS=", 0) == 0 ||
                                  s.rfind("MKL_NUM_THREADS=", 0) == 0)) continue;
         env_strs.push_back(s);
     }
     env_strs.push_back("FOXFLOW_BASE_DIR=" + base.string());
+    if (!listeners) env_strs.push_back("FOXFLOW_LISTENERS=0");
     if (!domain_parallel) {
         env_strs.push_back("OMP_NUM_THREADS=1");
         env_strs.push_back("OPENBLAS_NUM_THREADS=1");
@@ -605,7 +637,7 @@ inline int run_replicates(const std::string &self, const std::string &settings,
             std::cerr << "[" << sim << "] run " << idx << ": cannot create " << dir << ": " << ec.message() << std::endl;
             return false;
         }
-        const std::string log = (dir / "run.log").string();
+        const std::string log_path = (dir / "run.log").string();
         const std::string dir_s = dir.string();
         const std::string idx_s = std::to_string(idx);
         const std::string seed_s = std::to_string(base_seed + static_cast<std::uint32_t>(idx));
@@ -618,8 +650,12 @@ inline int run_replicates(const std::string &self, const std::string &settings,
         posix_spawn_file_actions_t fa;
         posix_spawn_file_actions_init(&fa);
         posix_spawn_file_actions_addchdir_np(&fa, dir_s.c_str());
-        posix_spawn_file_actions_addopen(&fa, 1, log.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
-        posix_spawn_file_actions_adddup2(&fa, 1, 2);
+        // Standard output goes to run.log (or is discarded with log = false); standard error always
+        // goes to run.log so failures stay diagnosable.
+        posix_spawn_file_actions_addopen(&fa, 1, log ? log_path.c_str() : "/dev/null",
+                                         O_WRONLY | O_CREAT | O_TRUNC, 0644);
+        if (log) posix_spawn_file_actions_adddup2(&fa, 1, 2);
+        else posix_spawn_file_actions_addopen(&fa, 2, log_path.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
         const int rc = posix_spawn(&pid, self.c_str(), &fa, nullptr, argv.data(), envp.data());
         posix_spawn_file_actions_destroy(&fa);
         if (rc != 0) {
@@ -741,14 +777,16 @@ function ir_main(name_space, num_stages, function_table=nothing, all_stages=[], 
             push!(ir_body, "\t\t if (fflow_run::run_replicates(self_exe, filename, \"$(stage["name"])\", " *
                            "\"$(run_name === nothing ? stage["name"] : run_name)\", $replicates, " *
                            "$(jobs === nothing ? 0 : jobs), $(stage_parallel(stage)), " *
-                           "$(seed === nothing ? 0 : seed)u) != 0) {\n")
+                           "$(seed === nothing ? 0 : seed)u, $(get(stage, "listeners", true)), " *
+                           "$(get(stage, "log", true))) != 0) {\n")
             push!(ir_body, "\t\t\t std::cerr << \"simulation '$(stage["name"])': some runs failed\" << std::endl;\n")
             push!(ir_body, "\t\t\t return 1;\n\t\t }\n")
         else
             domain_parallel === false &&
                 push!(ir_body, "\t\t fflow_run::DomainScope domain_scope(false);\n")
             seed === nothing || push!(ir_body, "\t\t DGGML::seed_omp_threads($(seed)u);\n")
-            push!(ir_body, "\t\t fflow_run::run_stage<$name_space::$model_class, $(stage_parallel(stage))>();\n")
+            push!(ir_body, "\t\t fflow_run::run_stage<$name_space::$model_class, $(stage_parallel(stage))>(" *
+                           "$(get(stage, "listeners", true)), $(get(stage, "log", true)));\n")
         end
         push!(ir_body, "\t }\n")
     end
