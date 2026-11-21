@@ -257,15 +257,35 @@ function parse_simulation_config!(tokens)
 
     remove_endlines_func_args!(tokens)
     checkpoint = nothing
-    if lookahead(tokens) isa PunctuationToken
+    dim = nothing
+    while lookahead(tokens) isa PunctuationToken
         popfirst!(tokens)
         remove_endlines_func_args!(tokens)
-        if lookahead(tokens) isa IntegerToken
-            checkpoint = IntegerNode(popfirst!(tokens))
-        elseif lookahead(tokens) isa IdentifierToken
-            checkpoint = IdentifierNode(popfirst!(tokens))
+        if length(tokens) >= 2 && lookahead(tokens) isa IdentifierToken && tokens[2] isa EqualToken
+            # keyword option: `dim = 2|3`
+            opt = expect_ident!(tokens, "Simulation (option)").token.position.value
+            popfirst!(tokens)  # pop =
+            if opt == "dim"
+                if !(lookahead(tokens) isa IntegerToken)
+                    throw(ErrorException("Simulation: dim must be 2 or 3, got $(lookahead(tokens))"))
+                end
+                dim = tryparse(Int, string(get_value(IntegerNode(popfirst!(tokens)))))
+                if dim != 2 && dim != 3
+                    throw(ErrorException("Simulation: dim must be 2 or 3, got $dim"))
+                end
+            else
+                throw(ErrorException("Simulation: unknown option `$opt` (expected dim)"))
+            end
+        elseif checkpoint === nothing
+            if lookahead(tokens) isa IntegerToken
+                checkpoint = IntegerNode(popfirst!(tokens))
+            elseif lookahead(tokens) isa IdentifierToken
+                checkpoint = IdentifierNode(popfirst!(tokens))
+            else
+                throw(ErrorException("Simulation: expected the checkpoint frequency got $(lookahead(tokens))"))
+            end
         else
-            throw(ErrorException("Simulation: expected the checkpoint frequency got $(lookahead(tokens))"))
+            throw(ErrorException("Simulation: unexpected argument $(lookahead(tokens)) after the checkpoint frequency (options are written `dim = 2|3`)"))
         end
         remove_endlines_func_args!(tokens)
     end
@@ -274,7 +294,7 @@ function parse_simulation_config!(tokens)
         throw(ErrorException("Simulation: expected ) got $(lookahead(tokens))"))
     end
     popfirst!(tokens)  # pop )
-    return SimulationConfigNode(save_name, grammar, state, params, steps, checkpoint)
+    return SimulationConfigNode(save_name, grammar, state, params, steps, checkpoint, dim)
 end
 
 function parse_run_statement!(tokens)

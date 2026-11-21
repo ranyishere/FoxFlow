@@ -15,7 +15,7 @@ include("ir_simulations_section.jl")
 import .IRRuleGeneration: ir_rules_section!, is_pde_clause, ir_mesh_generator
 import .IRTypeInheritance: reset_type_hierarchy!, register_type!
 import .IRBuildUtils: emit, build, IRBuilder, build_sameline
-import ..AstNodes: IntegerNode, FloatNode, IdentifierNode, BinaryOpNode, GroupNode, CallNode, IndexAccessNode, ArrayLiteralNode, NamedParameterNode, UnaryOpNode, RuleSectionNode
+import ..AstNodes: IntegerNode, FloatNode, IdentifierNode, BinaryOpNode, GroupNode, CallNode, IndexAccessNode, ArrayLiteralNode, NamedParameterNode, UnaryOpNode, RuleSectionNode, ViaClauseNode
 
 import ..Tokens: IntegerToken, FloatToken, PositionToken, LiteralToken, ErrorToken, OperatorToken
 import .IRUtils: get_value, convert_type_name, convert_type_node, write_file, TF_RUNTIME_HEADER,
@@ -579,10 +579,10 @@ struct RunOptionsScope {
     }
 };
 
-template <class ModelT, bool DomainParallel = false>
+template <class ModelT, bool DomainParallel = false, int Dim = 3>
 void run_stage(bool listeners = true, bool log = true) {
     RunOptionsScope options(listeners, log);
-    DGGML::SimulatorInterface<ModelT, 3, DomainParallel> simulator;
+    DGGML::SimulatorInterface<ModelT, Dim, DomainParallel> simulator;
     ModelT model;
     simulator.setModel(model);
     simulator.simulate();
@@ -741,6 +741,7 @@ function ir_main(name_space, num_stages, function_table=nothing, all_stages=[], 
 
     stage_name(ix) = string(all_stages[ix]["name"])
     stage_parallel(stage) = get(stage, "domain_parallel", nothing) === true ? "true" : "false"
+    stage_dim(stage) = get(stage, "dim", 3)
 
     # A replicate child (started by `run(sim, N)`) runs exactly its own simulation, seeded, and exits.
     push!(ir_body, "\n\t // ===== Replicate child: run one simulation and exit =====\n")
@@ -752,7 +753,7 @@ function ir_main(name_space, num_stages, function_table=nothing, all_stages=[], 
         push!(ir_body, "\t\t\t DGGML::seed_omp_threads(replicate.seed);\n")
         push!(ir_body, "\t\t\t std::cout << \"[$(stage_name(stage_ix))] replicate \" << replicate.index << \", seed \" << replicate.seed" *
                        " << \", domain parallelism \" << (replicate.domain_parallel ? \"on\" : \"off\") << std::endl;\n")
-        push!(ir_body, "\t\t\t fflow_run::run_stage<$name_space::Model_$(stage_ix - 1), $(stage_parallel(all_stages[stage_ix]))>();\n")
+        push!(ir_body, "\t\t\t fflow_run::run_stage<$name_space::Model_$(stage_ix - 1), $(stage_parallel(all_stages[stage_ix])), $(stage_dim(all_stages[stage_ix]))>();\n")
         push!(ir_body, "\t\t\t return 0;\n\t\t }\n")
     end
     push!(ir_body, "\t\t std::cerr << \"unknown simulation '\" << replicate.sim << \"'\" << std::endl;\n")
@@ -785,7 +786,7 @@ function ir_main(name_space, num_stages, function_table=nothing, all_stages=[], 
             domain_parallel === false &&
                 push!(ir_body, "\t\t fflow_run::DomainScope domain_scope(false);\n")
             seed === nothing || push!(ir_body, "\t\t DGGML::seed_omp_threads($(seed)u);\n")
-            push!(ir_body, "\t\t fflow_run::run_stage<$name_space::$model_class, $(stage_parallel(stage))>(" *
+            push!(ir_body, "\t\t fflow_run::run_stage<$name_space::$model_class, $(stage_parallel(stage)), $(stage_dim(stage))>(" *
                            "$(get(stage, "listeners", true)), $(get(stage, "log", true)));\n")
         end
         push!(ir_body, "\t }\n")
@@ -876,6 +877,46 @@ function write_generated(output_dir, file_name, text)
     write_file(joinpath(output_dir, file_name), text)
 end
 
+function add_via_subgrammar_stages!(all_stages, sim_table, input_dir)
+    # A rule `via g(...)` runs grammar `g` (a `g : Grammar := Grammar(...)` declaration) as a nested
+    # simulation. Each such grammar becomes an extra, never-run stage: it gets its rules header and a
+    # headless Model_N (see ir_via_subgrammar_model) but no entry in main(). Sub-grammars may
+    # themselves contain via rules, so keep scanning until no new grammar shows up.
+    scanned = Set{String}()
+    queue = String[s["rules"] for s in all_stages]
+    added = Set{String}()
+    while !isempty(queue)
+        rules_file = popfirst!(queue)
+        rules_file in scanned && continue
+        push!(scanned, rules_file)
+        ast_rules = parse_file!(tokenize_file(joinpath(input_dir, rules_file)))[1]
+        for r in ast_rules.rules_list
+            r.modify_clause isa ViaClauseNode || continue
+            gname = get_value(r.modify_clause.grammar)
+            gname in added && continue
+            g = get(sim_table, gname, nothing)
+            (g isa Dict && get(g, "__grammar__", false)) ||
+                error("rule '$(get_value(r.name))' in $rules_file: `via $gname(...)` needs a Grammar " *
+                      "declaration named '$gname' in the simulations section")
+            push!(added, gname)
+            stage = new_stage("via_$gname", "default", all_stages[1]["parameters"], g["rules"], g["types"],
+                              nothing, nothing, g["observables"], nothing;
+                              functions=g["functions"], grammar=gname, active=false)
+            stage["via_sub"] = true
+            stage["via_grammar"] = gname
+            stage["trace_rules"] = String[]
+            push!(all_stages, stage)
+            push!(queue, g["rules"])
+        end
+    end
+    if any(s -> get(s, "via_sub", false), all_stages) &&
+       any(s -> get(s, "active", true) && get(s, "domain_parallel", nothing) === true, all_stages)
+        error("via rules run nested simulations and are not supported with domain_parallel = true; " *
+              "run the simulation serially")
+    end
+    return all_stages
+end
+
 function do_simulation(input_dir::AbstractString, output_dir::AbstractString)
     """
     Do Simulation — supports multiple sequential RunSimulation stages.
@@ -899,6 +940,7 @@ function do_simulation(input_dir::AbstractString, output_dir::AbstractString)
     # ir_simulation_section! returns the namespace name and a list of ir_run_sim dicts (one per RunSimulation call)
     name_space, all_stages, measure_specs = ir_simulation_section!(ast[1], sim_table)
     global type_namespace = name_space
+    add_via_subgrammar_stages!(all_stages, sim_table, input_dir)
     num_stages = length(all_stages)
     println("Simulation namespace: ", name_space)
     println("Found $num_stages simulation stage(s)")
