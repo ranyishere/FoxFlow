@@ -191,6 +191,8 @@
         elseif modify_clause isa EveryClauseNode
             validate_every_rule(rule_name, rule_node, lhs_symbol, rhs_symbol)
             rule_hdr = "DGGML::EveryRule<GT> $rule_name(\"$rule_name\", $lhs_name, $rhs_name,"
+        elseif modify_clause isa ViaClauseNode
+            rule_hdr = "DGGML::WithRule<GT> $rule_name(\"$rule_name\", $lhs_name, $rhs_name,"
         elseif modify_clause isa SolveClauseNode
             rule_hdr = "DGGML::SolvingRule<GT> $rule_name(\"$rule_name\", $lhs_name, $lhs_name,"
         else
@@ -286,6 +288,24 @@
                 principal_type = first(k[2] for (k, v) in lhs_symbol if v == 1)
                 emit(ir_builder, ",\n" * ir_every_combine(type_namespace, principal_type, rhs_assgn_to_node))
             end
+        elseif modify_clause isa ViaClauseNode
+            # Same shape as a `with` rule: propensity lambda, then the update lambda, which here
+            # unpacks -> runs the sub-grammar for `t` -> packs.
+            prop_ir_builder = IRBuilder([])
+            prop_body_ir = IRBuilder([])
+            emit(prop_body_ir, "[&](auto &lhs, auto &m1) {\n")
+            emit(prop_ir_builder, "return ")
+            ir_propensity!(modify_clause, prop_ir_builder, propensity_table, prop_body_ir)
+            emit(prop_ir_builder, ";},")
+            emit(ir_builder, build(prop_body_ir))
+            emit(ir_builder, build(prop_ir_builder))
+
+            _via_reset_local_state!(propensity_table)
+            _, _, via_update_ir = ir_via_update(rule_name, modify_clause, visit_rule_node!,
+                    type_namespace, symbol_tables, propensity_table, lhs_names, rhs_names,
+                    lhs_param_to_node, lhs_assgn_to_node,
+                    rhs_param_to_node, rhs_assgn_to_node, rhs_node_locs)
+            emit(ir_builder, via_update_ir)
         elseif modify_clause isa SolveClauseNode
             solve_clause = modify_clause
 

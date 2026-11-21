@@ -575,6 +575,87 @@ function ir_serialize_spatialnode()
     "
 end
 
+function ir_via_subgrammar_model(stage_info, stage_idx, stage_rt, type_namespace)
+    # Headless model of a grammar called by a `via` rule, and `via_run_<grammar>` which runs it on a
+    # graph for a given time. The model starts from `seed_graph` (shifted so the rule's cell sits at
+    # the middle of a small geoplex of its own), registers the grammar's rules and writes no output.
+    gname = stage_info["via_grammar"]
+    cls = "Model_$stage_idx"
+
+    for (rule_name, info) in stage_rt
+        info["activated"] == true && is_pde_clause(info["modify_clause"]) &&
+            error("via grammar '$gname': PDE rule '$rule_name' is not supported in a sub-grammar")
+    end
+    register_rules_ir = join(["\t$(stage_rt[r]["namespace"])::$r(gamma, this->system_graph, settings);\n"
+                              for r in sort(collect(keys(stage_rt))) if stage_rt[r]["activated"] == true])
+
+    return """
+class $cls : public DGGML::Model3D<graph_grammar_t> {
+    public:
+    Parameters settings;
+    graph_type seed_graph;
+    double seed_origin[3] = {0.0, 0.0, 0.0};
+    double seed_center[3] = {0.0, 0.0, 0.0};
+
+    void initialize() override {
+        int cell_nx = settings.CELL_NX;
+        int cell_ny = settings.CELL_NY;
+        int cell_nz = settings.CELL_NZ;
+        geoplex2D.init(cell_nx, cell_ny, cell_nz,
+                       settings.CELL_DX, settings.CELL_DY, settings.CELL_DZ,
+                       false, settings.varepsilon);
+$register_rules_ir
+        DGGML::CartesianGrid3D &reaction_grid = geoplex2D.reaction_grid;
+        auto center_cell = reaction_grid.cardinalCellIndex(
+            reaction_grid._nx/2, reaction_grid._ny/2, reaction_grid._nz/2);
+        reaction_grid.cardinalCellToPoint(seed_center[0], seed_center[1], seed_center[2], center_cell);
+
+        this->system_graph = seed_graph;
+        std::size_t max_key = 0;
+        for (auto &kv : this->system_graph.getNodeSetRef()) {
+            max_key = std::max<std::size_t>(max_key, kv.first);
+            auto &pos = kv.second.getData().position;
+            for (int d = 0; d < 3; ++d) pos[d] += seed_center[d] - seed_origin[d];
+        }
+        this->gen.current_key = max_key + 1;
+    }
+    void checkpoint(std::size_t) override {}
+    void collect(std::size_t) override {}
+    void print_metrics(std::size_t) override {}
+}; // end $cls ($gname)
+
+// Runs grammar '$gname' on `graph` for `duration` time units (quietly, in a geoplex of its own).
+// `origin` is where the calling rule's cell lives; positions are mapped to and from the sub-domain.
+inline void via_run_$gname(graph_type &graph, Parameters &outer, double duration, const double *origin) {
+    if (!(duration > 0.0)) return;
+    $cls model;
+    model.settings = outer;
+    auto &s = model.settings;
+    s.TOTAL_TIME = duration;
+    s.DELTA = duration;
+    s.NUM_STEPS = 1;
+    s.DELTA_DELTA_T = std::min(outer.DELTA_DELTA_T, duration / s.MIN_DELTA_STEPS);
+    s.DELTA_T_MIN = std::min(outer.DELTA_T_MIN, s.DELTA_DELTA_T);
+    s.CELL_NX = 3;
+    s.CELL_NY = 3;
+    s.CELL_NZ = 3;
+    model.seed_graph = graph;
+    for (int d = 0; d < 3; ++d) model.seed_origin[d] = origin[d];
+
+    fflow_via::QuietScope quiet;
+    DGGML::SimulationRunner<$cls, 3> runner(model);
+    runner.initialize();
+    runner.run();
+    graph = runner.model->system_graph;
+    for (auto &kv : graph.getNodeSetRef()) {
+        auto &pos = kv.second.getData().position;
+        for (int d = 0; d < 3; ++d) pos[d] += origin[d] - runner.model->seed_center[d];
+    }
+}
+
+"""
+end
+
 function ir_models_section(ast, type_namespace, symbol_tables)
     # Single-stage backwards-compatible wrapper
     ir_models_section_multistage(
@@ -636,6 +717,9 @@ function ir_models_section_multistage(all_stages, type_namespace, symbol_tables,
     push!(model_header, "#include \"ExpandedComplex3D.hpp\"\n")
     push!(model_header, "#include \"YAGL_Algorithms.hpp\"\n")
     push!(model_header, "#include \"parameters.h\"\n")
+    if any(s -> get(s, "via_sub", false), all_stages)
+        push!(model_header, "#include \"SimulationRunner.h\"\n")
+    end
     push!(model_header, "#include <cereal/archives/binary.hpp>\n")
     push!(model_header, "#include <cereal/types/variant.hpp>\n")
     push!(model_header, "#include <cereal/types/vector.hpp>\n")
@@ -653,6 +737,11 @@ function ir_models_section_multistage(all_stages, type_namespace, symbol_tables,
 
         stage_rt = stage_rules_tables[stage_ix]
 
+        # A grammar called by a `via` rule: a headless model (no output) plus `via_run_<grammar>`.
+        if get(stage_info, "via_sub", false)
+            push!(model_classes, ir_via_subgrammar_model(stage_info, stage_idx, stage_rt, type_namespace))
+            continue
+        end
         initial_state_file = stage_info["initial_state"]
 
         generator_spec = initial_state_file isa AbstractString ? nothing : initial_state_file
@@ -666,6 +755,33 @@ function ir_models_section_multistage(all_stages, type_namespace, symbol_tables,
         end
 
         model_class_name = "Model_$stage_idx"
+
+        # `Simulation(..., dim = 2|3)`: which expanded cell complex the stage runs on. In 2D the
+        # model uses ExpandedComplex2D (a one-cell-thick slab, z = 0); the default is 3D.
+        stage_dim = get(stage_info, "dim", 3)
+        model_base_ir = stage_dim == 2 ? "DGGML::Model<graph_grammar_t>" : "DGGML::Model3D<graph_grammar_t>"
+        grid_writer_type = stage_dim == 2 ? "DGGML::GridFileWriter" : "DGGML::GridFileWriter3D"
+        geoplex_init_ir = stage_dim == 2 ?
+            "geoplex2D.init(
+                            cell_nx,
+                            cell_ny,
+                            cell_dx,
+                            cell_dy,
+                            false,
+                            geoplex_epsilon
+                    );
+            " :
+            "geoplex2D.init(
+                            cell_nx,
+                            cell_ny,
+                            cell_nz,
+                            cell_dx,
+                            cell_dy,
+                            cell_dz,
+                            false,
+                            geoplex_epsilon
+                    );
+            "
 
         # Create the add_default_type template function (only emitted in the class that needs it)
         model_create_initial_type = 
@@ -840,7 +956,7 @@ function ir_models_section_multistage(all_stages, type_namespace, symbol_tables,
                         // Create the local save directory
                         $dir_setup_ir
 
-                        DGGML::GridFileWriter3D grid_writer;
+                        $grid_writer_type grid_writer;
                         grid_writer.save({geoplex2D.reaction_grid,geoplex2D.dim_label},
                                          results_dir_name+\"/expanded_cell_complex\");
 
@@ -889,7 +1005,7 @@ function ir_models_section_multistage(all_stages, type_namespace, symbol_tables,
 
         # Assemble the class
         class_ir = [
-            "class $model_class_name : public DGGML::Model3D<graph_grammar_t> {\n",
+            "class $model_class_name : public $model_base_ir {\n",
             "\tpublic:\n",
             "\tParameters settings;\n",
             "bool save_system_graph = true;\n",
@@ -915,17 +1031,7 @@ function ir_models_section_multistage(all_stages, type_namespace, symbol_tables,
 
              double geoplex_epsilon = settings.varepsilon;
             ",
-            "geoplex2D.init(
-                            cell_nx,
-                            cell_ny,
-                            cell_nz,
-                            cell_dx,
-                            cell_dy,
-                            cell_dz,
-                            false,
-                            geoplex_epsilon
-                    );
-            "*initial_rules_ir,
+            geoplex_init_ir*initial_rules_ir,
             "",
             "\n\t\t if (load_initial_state == false) {$initial_state_ir} else {load_graph(gamma, this->system_graph, settings, this->gen, 
                         this->initial_state_filename);}\n",

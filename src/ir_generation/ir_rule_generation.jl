@@ -11,7 +11,7 @@ module IRRuleGeneration
     import ..IRTypeInheritance: expand_rule_inheritance
     import ...AstNodes: RuleNode, IdentifierNode, TypeInstanceNode,
             UndirectedTypeEdgeNode, BinaryOpNode, ExpressionNode, ParameterNode,
-            WithClauseNode, EveryClauseNode, SolveClauseNode, UnaryOpNode, FunctionNode, GroupNode,
+            WithClauseNode, EveryClauseNode, ViaClauseNode, SolveClauseNode, UnaryOpNode, FunctionNode, GroupNode,
             CallNode, LiteralNode, DefinitionNode, ODENode, BindingVariableNode, WhereClauseNode, NamedParameterNode,
             IndexAccessNode, ArrayLiteralNode, SliceNode,
             IntegerNode, FloatNode, StringNode,
@@ -86,6 +86,17 @@ module IRRuleGeneration
             "using GT = $type_namespace::graph_type;"
         ])
 
+        # `via` rules call `via_run_<grammar>` (defined in model.h); declare each one here.
+        via_grammars = unique([get_value(r.modify_clause.grammar)
+                               for r in ast.rules_list if r.modify_clause isa ViaClauseNode])
+        if !isempty(via_grammars)
+            insert!(rule_section_header, length(rule_section_header) - 1, FFLOW_VIA_RUNTIME)
+            for g in via_grammars
+                push!(rule_section_header,
+                      "inline void via_run_$g(GT &graph, Parameters &settings, double duration, const double *origin);")
+            end
+        end
+
         rules_ir = IRBuilder([])
 
         map(
@@ -147,6 +158,7 @@ module IRRuleGeneration
     include("rule_generation/propensity.jl")
     include("rule_generation/ode.jl")
     include("rule_generation/every.jl")
+    include("rule_generation/via.jl")
     include("rule_generation/where_clause.jl")
     include("rule_generation/where_assignment.jl")
     include("rule_generation/pde.jl")

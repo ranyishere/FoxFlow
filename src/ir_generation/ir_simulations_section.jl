@@ -118,7 +118,7 @@ end
 
 
 function new_stage(name, initial_state, parameters, rules, types, steps, checkpoint_frequency,
-                   observables, save_name; functions=nothing, grammar=nothing, active=true)
+                   observables, save_name; functions=nothing, grammar=nothing, active=true, dim=3)
     # One simulation stage. `RunSimulation(...)` stages always run (`active`); a `Simulation(...)`
     # stage only runs when a `run(...)` statement names it. `replicates`/`domain_parallel`/`jobs`/
     # `seed` are filled in by that statement; `domain_parallel` stays `nothing` for stages without
@@ -136,6 +136,7 @@ function new_stage(name, initial_state, parameters, rules, types, steps, checkpo
         "functions" => functions,
         "grammar" => grammar,
         "active" => active,
+        "dim" => dim,
         "replicates" => 1,
         "domain_parallel" => nothing,
         "jobs" => nothing,
@@ -183,7 +184,8 @@ end
 
 function ir_simulation_config_node!(ast, sim_table)
     """
-    `s : Simulation := Simulation(["save.bin",] grammar, state, params, time [, checkpoint])`.
+    `s : Simulation := Simulation(["save.bin",] grammar, state, params, time [, checkpoint] [, dim = 2|3])`.
+    `dim` picks the expanded cell complex (default 3).
     """
     node = ast.value
     sname = get_value(ast.name)
@@ -210,7 +212,8 @@ function ir_simulation_config_node!(ast, sim_table)
 
     return new_stage(sname, sim_table[state_name], sim_table[param_name], g["rules"], g["types"],
                      steps_value, checkpoint_frequency_value, g["observables"], save_name_value;
-                     functions=g["functions"], grammar=gname, active=false)
+                     functions=g["functions"], grammar=gname, active=false,
+                     dim=node.dim === nothing ? 3 : node.dim)
 end
 
 function apply_run_statements!(ir_run_sims, ir_runs, sim_table)

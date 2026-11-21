@@ -199,6 +199,28 @@ module AstNodes
         where_clause::WhereClauseNode
     end
 
+    # Sub-grammar call: `with (propensity) via g(t, unpack: <graph> [<<params>>] [where {..}], pack: <graph> [<<params>>] [where {..}])`.
+    # A stochastic rule (fires with `function_node` as its propensity): `unpack` rewrites the rule's
+    # LHS match into the starting graph of grammar `g`; `g` runs for `t` time units; `pack` rewrites
+    # the final graph back onto the rule's RHS.
+    struct ViaClauseNode <: ModifyClauseNode
+        function_node    :: Union{
+                              FunctionNode,
+                              BinaryOpNode,
+                              IdentifierNode,
+                              FloatNode,
+                              IntegerNode, GroupNode
+                             }
+        grammar          :: IdentifierNode
+        duration         :: Node
+        unpack_graph     :: Array
+        unpack_parameter :: ParameterNode
+        unpack_where     :: WhereClauseNode
+        pack_graph       :: Array
+        pack_parameter   :: ParameterNode
+        pack_where       :: WhereClauseNode
+    end
+
     struct TypeInstanceNode <: Node
         name  :: IdentifierNode
         parameter :: ParameterNode
@@ -483,7 +505,7 @@ module AstNodes
         parts :: Vector{IdentifierNode}
     end
 
-    # `s : Simulation := Simulation(["save.bin",] grammar, state, params, time [, checkpoint])`
+    # `s : Simulation := Simulation(["save.bin",] grammar, state, params, time [, checkpoint] [, dim = 2|3])`
     struct SimulationConfigNode <: Node
         saveName :: Union{StringNode, Nothing}
         grammar :: IdentifierNode
@@ -491,6 +513,8 @@ module AstNodes
         parameters :: IdentifierNode
         steps :: Union{IntegerNode, FloatNode, IdentifierNode}
         checkpointFrequency :: Union{IntegerNode, IdentifierNode, Nothing}
+        # Dimension of the expanded cell complex (2 or 3); `nothing` = the default (3)
+        dim :: Union{Int, Nothing}
     end
 
     # `State := grid(...)`: an initial graph produced by a generator call (see ir_mesh_generator)

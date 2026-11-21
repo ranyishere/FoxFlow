@@ -28,6 +28,14 @@ function parse_with_clause!(tokens)
         popfirst!(tokens)
     end
 
+    # `with (propensity) via g(...)`: `via` is a contextual keyword, like `every`.
+    if (length(tokens) > 2
+        && isa(tokens[1], IdentifierToken) && tokens[1].position.value == "via"
+        && isa(tokens[2], IdentifierToken)
+        && isa(tokens[3], LeftParenthesisToken))
+        popfirst!(tokens)
+        return parse_via_clause!(tokens, propensity)
+    end
 
     cur_token = popfirst!(tokens)
 
@@ -121,6 +129,138 @@ function parse_every_clause!(tokens)
     end
 
     EveryClauseNode(n_r, p_r, t_clock, additive, where_clause)
+end
+
+function _is_via_section_head(tokens)
+    # `unpack =` / `pack =` (or `unpack:` / `pack:`) starting a section of a `via` block
+    return length(tokens) > 1 && isa(tokens[1], IdentifierToken) &&
+           tokens[1].position.value in ("unpack", "pack") &&
+           (isa(tokens[2], EqualToken) || isa(tokens[2], SingleColonToken))
+end
+
+function parse_via_graph_items!(tokens)
+    """
+    Parse the graph pattern of a `via` unpack/pack section: `(a : T) (b : U) (c : V) -- (d : W)`.
+    Stops (without consuming) at `<<`, `where`, `,`, the closing `}` of the via block, or the next
+    `unpack` / `pack` section.
+    """
+    items = []
+    while !isempty(tokens)
+        la = lookahead(tokens)
+        if isa(la, EndLineToken)
+            popfirst!(tokens)
+        elseif isa(la, LeftAngleBracketToken) || isa(la, WhereToken) || isa(la, CommaToken) ||
+               isa(la, RightBracketToken)
+            break
+        elseif _is_via_section_head(tokens)
+            break
+        elseif isa(la, EdgeToken)
+            isempty(items) && throw("Expected a node before `--` in via graph pattern")
+            vert_0 = pop!(items)
+            if vert_0 isa UndirectedTypeEdgeNode
+                tmp = vert_0.right_vertex
+                push!(items, vert_0)
+                vert_0 = tmp
+            end
+            popfirst!(tokens)  # `--`
+            has_paren = isa(lookahead(tokens), LeftParenthesisToken)
+            has_paren && popfirst!(tokens)
+            vert_1 = parse_type_assignment!(tokens)
+            if has_paren
+                isa(lookahead(tokens), RightParenthesisToken) || throw("Expected `)` got $(lookahead(tokens))")
+                popfirst!(tokens)
+            end
+            push!(items, UndirectedTypeEdgeNode(vert_0, vert_1))
+        elseif isa(la, LeftParenthesisToken)
+            popfirst!(tokens)
+            push!(items, parse_type_assignment!(tokens))
+            isa(lookahead(tokens), RightParenthesisToken) || throw("Expected `)` got $(lookahead(tokens))")
+            popfirst!(tokens)
+        else
+            push!(items, parse_type_assignment!(tokens))
+        end
+    end
+    return items
+end
+
+function parse_via_where!(tokens)
+    """
+    Optional `where { ... }` of a `via` section.
+    """
+    skip_eol!(tokens)
+    if !isempty(tokens) && isa(lookahead(tokens), WhereToken)
+        popfirst!(tokens)
+        cur_token = popfirst!(tokens)
+        isa(cur_token, LeftBracketToken) || throw("Expected LeftBracketToken got $cur_token")
+        where_clause = parse_where_clause!(tokens)
+        skip_eol!(tokens)
+        cur_token = popfirst!(tokens)
+        isa(cur_token, RightBracketToken) || throw("Expected RightBracketToken got $cur_token")
+        return where_clause
+    end
+    return WhereClauseNode(Node[])
+end
+
+function parse_via_clause!(tokens, propensity)
+    """
+    Parse Via Clause (the `with (propensity)` and the `via` identifier are already consumed):
+
+        with (k) via grammar(t) {
+            unpack = (a : A) -- (b : B) << (x : a::X) >> [where { ... }]
+            pack   = (a : A) -- (b : B) << (y : a::X) >> [where { ... }]
+        }
+    """
+    grammar = parse_symbol_name!(tokens)
+
+    isa(lookahead(tokens), LeftParenthesisToken) ||
+        throw("Expected `(` after `via $(grammar.token.position.value)` got $(lookahead(tokens))")
+    popfirst!(tokens)
+
+    skip_eol!(tokens)
+    duration = parse_expression!(tokens)
+    skip_eol!(tokens)
+    isa(lookahead(tokens), RightParenthesisToken) ||
+        throw("Expected `)` after the duration of `via $(grammar.token.position.value)` got $(lookahead(tokens))")
+    popfirst!(tokens)
+
+    skip_eol!(tokens)
+    isa(lookahead(tokens), LeftBracketToken) ||
+        throw("Expected `{ unpack = ... pack = ... }` after `via $(grammar.token.position.value)(...)` got $(lookahead(tokens))")
+    popfirst!(tokens)
+
+    sections = Dict{String, Any}()
+    while true
+        skip_eol!(tokens)
+        isempty(tokens) && throw("Unterminated `via` block: missing `}`")
+        la = lookahead(tokens)
+        if isa(la, CommaToken) || isa(la, PunctuationToken)
+            popfirst!(tokens)
+        elseif isa(la, RightBracketToken)
+            popfirst!(tokens)
+            break
+        elseif _is_via_section_head(tokens)
+            key = la.position.value
+            haskey(sections, key) && throw("`via`: duplicate `$key` section")
+            popfirst!(tokens)  # `unpack` / `pack`
+            popfirst!(tokens)  # `=` / `:`
+            graph = parse_via_graph_items!(tokens)
+            isempty(graph) && throw("`via`: the `$key` section needs at least one node")
+            params = ParameterNode([])
+            if isa(lookahead(tokens), LeftAngleBracketToken)
+                params = parse_symbol_parameters!(tokens)
+            end
+            where_clause = parse_via_where!(tokens)
+            sections[key] = (graph, params, where_clause)
+        else
+            throw("`via` expects `unpack = ...` / `pack = ...` sections, got $la")
+        end
+    end
+
+    haskey(sections, "unpack") || throw("`via`: missing `unpack` section")
+    haskey(sections, "pack") || throw("`via`: missing `pack` section")
+    (ug, up, uw) = sections["unpack"]
+    (pg, pp, pw) = sections["pack"]
+    ViaClauseNode(propensity, grammar, duration, ug, up, uw, pg, pp, pw)
 end
 
 function parse_solving_content(tokens)
@@ -513,6 +653,12 @@ function parse_rule!(tokens)
         # `every` is a contextual keyword, so it is not reserved by the lexer.
         popfirst!(tokens)
         modify_clause = parse_every_clause!(tokens)
+    elseif (length(tokens) > 2
+            && isa(tokens[1], IdentifierToken) && tokens[1].position.value == "via"
+            && isa(tokens[2], IdentifierToken)
+            && isa(tokens[3], LeftParenthesisToken))
+
+        throw("A `via` rule needs a propensity: `-> ... with (<propensity>) via g(t, unpack: ..., pack: ...)`")
     end
 
 

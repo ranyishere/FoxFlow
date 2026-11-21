@@ -13,7 +13,7 @@ import ..Tokens:
 import ..AstNodes:
     Node, IdentifierNode, ParameterNode, TypeInstanceNode, TypeInstanceUpdateNode, TypeClassNode,
     TypeSectionNode, ParameterSectionNode, RuleSectionNode, RuleNode,
-    WhereClauseNode, WithClauseNode, EveryClauseNode, SolveClauseNode, CallNode,
+    WhereClauseNode, WithClauseNode, EveryClauseNode, ViaClauseNode, SolveClauseNode, CallNode,
     GroupNode, BinaryOpNode, FunctionNode, FloatNode, IntegerNode, UndirectedTypeEdgeNode,
     BindingVariableNode, ODENode, PDEEntryNode, PDE_ENTRY_KINDS, UnaryOpNode, DefinitionNode, FunctionArgNode, FunctionSignatureNode,
     FunctionBodyExpressionNode, FunctionDefinitionExpressionNode, FunctionDefinitionNode,

@@ -351,7 +351,9 @@ boundary_catastrophe := (im0 : Intermediate) -- (pos : Positive)
 
 Every rule has exactly one modify clause: a `with` clause (stochastic /
 propensity-driven rules), a `solving` clause (ODE-based rules) or an `every`
-clause (clocked rules).
+clause (clocked rules). A `with` clause can end in a `via` call instead of a
+`where` block: a stochastic rule whose update runs another grammar as a nested
+simulation.
 
 ```
 <modify-clause> ::= <with-clause>
@@ -386,6 +388,45 @@ friction_relax := (w : Wall) << (fr : w::Friction) >> ->
         frn = fr * 0.9
     }
 ```
+
+### Via Clause (sub-grammar call)
+
+A `via` rule is a `with` rule (stochastic, fires with the given propensity) whose
+update, instead of a `where` block, is a call to another grammar. On each firing it
+
+1. **unpacks** the matched LHS into a fresh graph (the `unpack` pattern, filled in
+   by the same shared-name copies / `where` assignments as any rule),
+2. runs the grammar `g` on that graph for `t` time units (a nested, quiet,
+   serial simulation in a small geoplex of its own), and
+3. **packs** the final graph back: the `pack` pattern is matched in it and its
+   bindings are written to the rule's RHS.
+
+```
+<with-via>     ::= "with" <propensity> "via" <identifier> "(" <expr> ")" "{" { <via-section> } "}"
+<via-section>  ::= ("unpack" | "pack") ("=" | ":") <graph-pattern>
+                   [ "<<" <parameters> ">>" ] [ "where" "{" <where-body> "}" ]
+```
+
+`<identifier>` names a `Grammar` declared in the simulations section; `t` may
+only use numbers and parameters. Both sections are required. The LHS and RHS are
+ordinary `with`-rule graphs: nodes missing from the RHS are destroyed, new RHS
+nodes are created at the position of the first LHS node (unless the pack `where`
+sets it) and nodes sharing an alias persist. Pack matching takes the first match
+(nodes of equal type, pattern edges present, ascending key order); with no match
+the RHS keeps its default values and a warning is printed once. Unpack/pack node
+aliases must differ from the rule's own aliases. Not supported with
+`domain_parallel`. Grammars with PDE rules are not supported as sub-grammars.
+
+```
+cell_signalling := (c : Cell) << (c1 : c::C1, c2 : c::C2) >> ->
+    (c : Cell) << (c1_new : c::C1, c2_new : c::C2) >>
+    with (4.0) via intra_cellular(0.5) {
+        unpack = (pa : ProteinA) (pb : ProteinB) << (c1 : pa::Level, c2 : pb::Level) >>
+        pack   = (qa : ProteinA) (qb : ProteinB) << (c1_new : qa::Level, c2_new : qb::Level) >>
+    }
+```
+
+See `src/tests/via_cell`.
 
 ### With Clause
 
@@ -639,6 +680,7 @@ functions Microtubule {
                         <symbol-name> ","   (* SimulationParameters *)
                         <symbol-or-number>  (* simulation time *)
                         [ "," <integer-or-symbol> ]   (* checkpoint frequency *)
+                        [ "," "dim" "=" ( "2" | "3" ) ]   (* cell complex dimension, default 3 *)
                         ")"
 
 <run-statement> ::= "run" "(" <symbol-name> "," <integer>
@@ -678,6 +720,10 @@ frequency: VTK/CSV output, observables and save-state files are written every N
 steps (and always on the final step). It defaults to 1 (every step). The
 observables argument, when present, always comes last; a single trailing
 identifier bound to an integer is read as the checkpoint frequency.
+
+The optional `dim = 2|3` keyword of `Simulation(...)` selects the expanded cell
+complex the model runs on: `3` (default) uses `ExpandedComplex3D`, `2` uses
+`ExpandedComplex2D`. Each `Simulation` picks its own dimension.
 
 ### Grammars, simulations and replicated runs
 
